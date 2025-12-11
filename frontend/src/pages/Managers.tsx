@@ -1,0 +1,408 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+interface ManagerRecord {
+    id: string;
+    manager_id?: string | null;
+    manager: string | null; // full name from backend (first + last)
+    manager_title: string | null;
+    entry_date: string | null; // ISO date string
+    entry_time: string | null; // time string e.g. '13:45:00'
+    exit_date?: string | null;
+    exit_time?: string | null;
+    status: string | null; // 'inside' | 'exited'
+    notes?: string | null;
+    created_at?: string | null;
+}
+
+interface Personnel {
+    id: string;
+    full_name: string;
+    department?: string | null;
+    phone?: string | null;
+    email?: string | null;
+}
+
+export default function Managers() {
+    const [records, setRecords] = useState<ManagerRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const navigate = useNavigate();
+
+    const [managersList, setManagersList] = useState<Personnel[]>([]);
+    const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
+    const [notes, setNotes] = useState<string>('');
+    const [filterMode, setFilterMode] = useState<'all' | 'inside' | 'exited'>('all');
+
+    useEffect(() => {
+        fetchData();
+        fetchManagers();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/managers/records`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setRecords(res.data || []);
+        } catch (err) {
+            console.error('Müdür verisi yüklenemedi', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchManagers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/vehicles/managers`, { headers: { Authorization: `Bearer ${token}` } });
+            setManagersList(res.data || []);
+        } catch (err) {
+            console.warn('Müdür listesi yüklenemedi', err);
+        }
+    };
+
+    const resetForm = () => {
+        setIsEditing(false);
+        setEditingId(null);
+        setSelectedManagerId(null);
+        setNotes('');
+    };
+
+    const openModalForNew = () => {
+        resetForm();
+        setShowModal(true);
+    };
+
+    const openModalForEdit = (rec: ManagerRecord) => {
+        // try to resolve the manager id by matching first+last from managersList
+        const found = managersList.find(p => {
+            const name = (p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name}` : p.full_name;
+            return name === (rec.manager || '');
+        });
+        setSelectedManagerId(found ? found.id : null);
+        setNotes(rec.notes || '');
+        setIsEditing(true);
+        setEditingId(rec.id);
+        setShowModal(true);
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            if (!selectedManagerId) {
+                alert('Lütfen listeden bir müdür seçin.');
+                return;
+            }
+
+            const payload: any = { manager_id: selectedManagerId, notes: notes || null };
+
+            if (isEditing && editingId) {
+                await axios.put(`${API_URL}/managers/records/${editingId}`, payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            } else {
+                await axios.post(`${API_URL}/managers/records`, payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            }
+
+            setShowModal(false);
+            resetForm();
+            fetchData();
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'İşlem başarısız');
+        }
+    };
+
+    const handleExit = async (id: string) => {
+        if (!confirm('Seçili müdür için çıkış kaydı oluşturulsun mu?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${API_URL}/managers/records/${id}/exit`, null, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            // Refresh data
+            fetchData();
+        } catch (error: any) {
+            alert(error?.response?.data?.message || 'Çıkış işlemi başarısız');
+        }
+    };
+
+    const formatDate = (d: string | null) => {
+        if (!d) return '-';
+        const date = new Date(d);
+        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    };
+
+    const formatTime = (t: string | null) => {
+        if (!t) return '-';
+        // t expected like '13:45:00' or '13:45:00.123'
+        return t.split('.')[0];
+    };
+
+    const insideCount = records.filter(r => r.status === 'inside').length;
+    const exitedCount = records.filter(r => r.status === 'exited').length;
+    // Total managers should reflect DB table of managers (managersList)
+    const totalCount = managersList.length;
+
+    // Filter records according to selected filterMode
+    const filteredRecords = records.filter(r => {
+        if (filterMode === 'all') return true;
+        if (filterMode === 'inside') return r.status === 'inside';
+        if (filterMode === 'exited') return r.status === 'exited';
+        return true;
+    });
+
+    // For the select, exclude managers who currently have an 'inside' record
+    const insideManagerIds = new Set(records.filter(r => r.status === 'inside' && r.manager_id).map(r => r.manager_id));
+    let selectManagers = managersList.filter(m => !insideManagerIds.has(m.id));
+    // If editing, ensure the currently edited record's manager is included in select options
+    if (isEditing && editingId) {
+        const editingRecord = records.find(r => r.id === editingId);
+        if (editingRecord && editingRecord.manager_id) {
+            const exists = selectManagers.find(m => m.id === editingRecord.manager_id);
+            if (!exists) {
+                const mgr = managersList.find(m => m.id === editingRecord.manager_id);
+                if (mgr) selectManagers = [mgr, ...selectManagers];
+            }
+        }
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-50">
+            {/* Header */}
+            <header className="bg-white shadow-md">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
+                            <div>
+                                <h1 className="text-3xl font-bold text-gray-900">Müdür Yönetimi</h1>
+                                <p className="text-gray-600 mt-1">Müdür kayıtlarını görüntüle ve yönet</p>
+                            </div>
+                        </div>
+                        <button onClick={openModalForNew} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Yeni Müdür
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Stats: Toplam, İçeride, Çıkış Yapan */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-purple-600 text-sm font-medium">Toplam Müdür</p>
+                                <p className="text-3xl font-bold text-purple-900">{totalCount}</p>
+                            </div>
+                            <div className="p-3 bg-purple-100 rounded-lg">
+                                <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-green-600 text-sm font-medium">İçerideki Müdür</p>
+                                <p className="text-3xl font-bold text-green-900">{insideCount}</p>
+                            </div>
+                            <div className="p-3 bg-green-100 rounded-lg">
+                                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-red-600 text-sm font-medium">Çıkış Yapan Müdür</p>
+                                <p className="text-3xl font-bold text-red-900">{exitedCount}</p>
+                            </div>
+                            <div className="p-3 bg-red-100 rounded-lg">
+                                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto">
+                    {/* Filter buttons - always visible when not loading */}
+                    <div className="mb-4">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setFilterMode('all')}
+                                className={`px-4 py-2 rounded-lg ${filterMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                Tüm Kayıtlar ({records.length})
+                            </button>
+
+                            <button
+                                onClick={() => setFilterMode('inside')}
+                                className={`px-4 py-2 rounded-lg ${filterMode === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                İçeridekiler ({insideCount})
+                            </button>
+
+                            <button
+                                onClick={() => setFilterMode('exited')}
+                                className={`px-4 py-2 rounded-lg ${filterMode === 'exited' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                Çıkış Yapanlar ({exitedCount})
+                            </button>
+                        </div>
+                    </div>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+                        </div>
+                    ) : filteredRecords.length === 0 ? (
+                        <div className="text-center py-12">
+                            <p className="text-gray-500">Kayıt bulunmuyor</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <div className="max-h-[600px] overflow-y-auto">
+                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                    <thead className="bg-gray-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ad Soyad</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {filteredRecords.map(rec => (
+                                            <tr key={rec.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 align-top">
+                                                    <div className="text-sm font-bold text-gray-900">{rec.manager || '-'}</div>
+                                                    <div className="text-xs text-gray-600 mt-1">{rec.manager_title || '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 align-top">
+                                                    <div className="text-sm text-gray-900">{formatDate(rec.entry_date)}</div>
+                                                    <div className="text-xs text-gray-600 mt-1">{formatTime(rec.entry_time)}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 align-top">
+                                                    <div className="text-sm text-gray-900">{rec.exit_date ? formatDate(rec.exit_date) : '-'}</div>
+                                                    <div className="text-xs text-gray-600 mt-1">{rec.exit_time ? formatTime(rec.exit_time) : '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="inline-flex items-center gap-3">
+                                                        <button
+                                                            onClick={() => openModalForEdit(rec)}
+                                                            className="px-3 py-1.5 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition"
+                                                        >
+                                                            Düzenle
+                                                        </button>
+                                                        {rec.status === 'inside' && (
+                                                            <button
+                                                                onClick={() => handleExit(rec.id)}
+                                                                className="px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition"
+                                                            >
+                                                                Çıkış Yap
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
+
+            {showModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Müdür Düzenle' : 'Yeni Müdür'}</h2>
+                                <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Personel Seç</label>
+                                    <select required value={selectedManagerId || ''} onChange={(e) => {
+                                        const id = e.target.value || null;
+                                        setSelectedManagerId(id);
+                                    }} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                                        <option value="">-- Lütfen bir müdür seçin --</option>
+                                        {selectManagers.map(p => (
+                                            <option key={p.id} value={p.id}>{(p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name} - ${(p as any).title}` : p.full_name}</option>
+                                        ))}
+                                    </select>
+
+                                    {selectedManagerId && (
+                                        (() => {
+                                            const p = managersList.find(x => x.id === selectedManagerId);
+                                            if (!p) return null;
+                                            const name = (p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name}` : p.full_name;
+                                            const title = (p as any).title || p.department || '';
+                                            return (
+                                                <div className="mt-4 p-3 border border-gray-100 rounded bg-gray-50">
+                                                    <div className="text-sm font-medium text-gray-900">{name}</div>
+                                                    <div className="text-xs text-gray-600">{title || '-'} • {p.phone || '-'} • {p.email || '-'}</div>
+                                                </div>
+                                            );
+                                        })()
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama (isteğe bağlı)</label>
+                                    <textarea
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        rows={3}
+                                        placeholder="Not veya açıklama (zorunlu değil)"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
+                                    <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
