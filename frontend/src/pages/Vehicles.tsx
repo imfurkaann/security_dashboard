@@ -1,97 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
+import { formatDate, formatTime, isToday } from '../utils/dateUtils';
+import type { Vehicle, VehicleUsage, Manager, VehicleFormData, VehicleFilterType } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-interface Vehicle {
-    id: string;
-    brand: string;
-    plate: string;
-    status: string;
-    is_active: boolean;
-    created_at: string;
-}
-
-interface VehicleUsage {
-    id: string;
-    vehicle: string;
-    vehicle_brand: string;
-    vehicle_plate: string;
-    manager: string;
-    manager_title: string;
-    personnel: string;
-    given_date: string;
-    given_time: string;
-    return_date: string | null;
-    return_time: string | null;
-    destination: string;
-    status: string;
-    notes: string | null;
-    created_at: string;
-}
-
-interface Manager {
-    id: string;
-    first_name: string;
-    last_name: string;
-    title: string;
-}
+// Initial form state
+const INITIAL_FORM_DATA: VehicleFormData = {
+    vehicle_id: '',
+    manager_id: '',
+    manager_name: '',
+    destination: '',
+    notes: ''
+};
 
 export default function Vehicles() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
     const [managers, setManagers] = useState<Manager[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [showCustomManager, setShowCustomManager] = useState(false);
-    const [filter, setFilter] = useState<'all' | 'in_use' | 'returned'>('all');
+    const [showModal, setShowModal] = useState(false); const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+    const [whatsappMessage, setWhatsappMessage] = useState(''); const [showCustomManager, setShowCustomManager] = useState(false);
+    const [filter, setFilter] = useState<VehicleFilterType>('all');
+    const [formData, setFormData] = useState<VehicleFormData>(INITIAL_FORM_DATA);
     const navigate = useNavigate();
-    const [currentUser, setCurrentUser] = useState<any>(null);
 
-    // Format date to DD/MM/YYYY
-    const formatDate = (dateString: string | null) => {
-        if (!dateString) return '-';
-        const date = new Date(dateString);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-    };
-
-    // Format time to HH:MM
-    const formatTime = (timeString: string | null) => {
-        if (!timeString) return '-';
-        return timeString.substring(0, 5); // Get HH:MM from HH:MM:SS
-    };
-
-    const [formData, setFormData] = useState({
-        vehicle_id: '',
-        manager_id: '',
-        manager_name: '',
-        destination: '',
-        notes: ''
-    });
-
-    useEffect(() => {
-        const user = localStorage.getItem('user');
-        if (user) setCurrentUser(JSON.parse(user));
-        fetchData();
-    }, []);
-
-    const fetchData = async () => {
+    // Fetch all data in parallel
+    const fetchData = useCallback(async () => {
         try {
-            const token = localStorage.getItem('token');
             const [vehiclesRes, recordsRes, managersRes] = await Promise.all([
-                axios.get(`${API_URL}/vehicles`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }),
-                axios.get(`${API_URL}/vehicles/records`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }),
-                axios.get(`${API_URL}/vehicles/managers`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
+                api.get('/vehicles'),
+                api.get('/vehicles/records'),
+                api.get('/vehicles/managers'),
             ]);
             setVehicles(vehiclesRes.data || []);
             setUsages(recordsRes.data || []);
@@ -101,84 +40,79 @@ export default function Vehicles() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+    // Form submission handler
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/vehicles/records`, formData, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.post('/vehicles/records', formData);
             setShowModal(false);
-            resetForm();
+            setFormData(INITIAL_FORM_DATA);
+            setShowCustomManager(false);
             fetchData();
-        } catch (error: any) {
-            alert(error.response?.data?.message || 'İşlem başarısız');
-        }
-    };
 
-    const handleReturn = async (usageId: string) => {
+            // WhatsApp mesajı varsa modal göster
+            if (response.data?.whatsappMessage) {
+                setWhatsappMessage(response.data.whatsappMessage);
+                setShowWhatsAppModal(true);
+            }
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'İşlem başarısız');
+        }
+    }, [formData, fetchData]);
+
+    // Vehicle return handler
+    const handleReturn = useCallback(async (usageId: string) => {
         if (!confirm('Aracın iadesini kaydetmek istediğinize emin misiniz?')) return;
 
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/vehicles/records/${usageId}/return`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.post(`/vehicles/records/${usageId}/return`, {});
             fetchData();
-        } catch (error: any) {
-            alert(error.response?.data?.message || 'İade kaydı başarısız');
+
+            // WhatsApp mesajı varsa modal göster
+            if (response.data?.whatsappMessage) {
+                setWhatsappMessage(response.data.whatsappMessage);
+                setShowWhatsAppModal(true);
+            }
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'İade kaydı başarısız');
         }
-    };
+    }, [fetchData]);
 
-    const resetForm = () => {
-        setFormData({
-            vehicle_id: '',
-            manager_id: '',
-            manager_name: '',
-            destination: '',
-            notes: ''
-        });
+    // Reset form to initial state
+    const resetForm = useCallback(() => {
+        setFormData(INITIAL_FORM_DATA);
         setShowCustomManager(false);
-    };
+    }, []);
 
-    const openModal = () => {
+    // Open modal with reset form
+    const openModal = useCallback(() => {
         resetForm();
         setShowModal(true);
-    };
+    }, [resetForm]);
 
-    // Bugünün kayıtlarını filtrele (bugün alınan VEYA bugün iade edilen)
-    const todayUsages = usages.filter(u => {
-        const today = new Date();
-        const givenDate = new Date(u.given_date);
+    // Memoized calculations for performance
+    const todayUsages = useMemo(() =>
+        usages.filter(u => isToday(u.given_date) || (u.return_date && isToday(u.return_date))),
+        [usages]
+    );
 
-        // Bugün alınan kayıtlar
-        const takenToday = givenDate.getFullYear() === today.getFullYear() &&
-            givenDate.getMonth() === today.getMonth() &&
-            givenDate.getDate() === today.getDate();
+    const filteredUsages = useMemo(() => {
+        if (filter === 'all') return todayUsages; // Bugünün kayıtları
+        if (filter === 'in_use') return usages.filter(u => u.status === 'in_use'); // Kullanımda olan araçlar
+        if (filter === 'returned') return usages.filter(u => u.status === 'returned' && isToday(u.return_date)); // Bugün iade edilenler
+        return usages;
+    }, [usages, filter, todayUsages]);
 
-        // Bugün iade edilen kayıtlar
-        let returnedToday = false;
-        if (u.return_date) {
-            const returnDate = new Date(u.return_date);
-            returnedToday = returnDate.getFullYear() === today.getFullYear() &&
-                returnDate.getMonth() === today.getMonth() &&
-                returnDate.getDate() === today.getDate();
-        }
-
-        return takenToday || returnedToday;
-    });
-
-    const filteredUsages = todayUsages.filter(u => {
-        if (filter === 'in_use') return u.status === 'in_use';
-        if (filter === 'returned') return u.status === 'returned';
-        return true;
-    });
-
-    // Tüm kullanımdaki araçlar (bugün + önceki günlerden kalanlar)
-    const inUseCount = usages.filter(u => u.status === 'in_use').length;
-    const availableVehicles = vehicles.filter(v => v.status === 'available');
+    const inUseCount = useMemo(() => usages.filter(u => u.status === 'in_use').length, [usages]);
+    const availableVehicles = useMemo(() => vehicles.filter(v => v.status === 'available'), [vehicles]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -207,7 +141,7 @@ export default function Vehicles() {
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
-                            Araç Al
+                            Teslim Et
                         </button>
                     </div>
                 </div>
@@ -215,7 +149,7 @@ export default function Vehicles() {
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -225,20 +159,6 @@ export default function Vehicles() {
                             <div className="p-3 bg-blue-100 rounded-lg">
                                 <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-green-600 text-sm font-medium">Müsait Araçlar</p>
-                                <p className="text-3xl font-bold text-green-900">{availableVehicles.length}</p>
-                            </div>
-                            <div className="p-3 bg-green-100 rounded-lg">
-                                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
                         </div>
@@ -261,15 +181,9 @@ export default function Vehicles() {
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-purple-600 text-sm font-medium">Bugün Alınan</p>
+                                <p className="text-purple-600 text-sm font-medium">Teslim Alınan</p>
                                 <p className="text-3xl font-bold text-purple-900">
-                                    {usages.filter(u => {
-                                        const givenDate = new Date(u.given_date);
-                                        const today = new Date();
-                                        return givenDate.getFullYear() === today.getFullYear() &&
-                                            givenDate.getMonth() === today.getMonth() &&
-                                            givenDate.getDate() === today.getDate();
-                                    }).length}
+                                    {usages.filter(u => isToday(u.given_date)).length}
                                 </p>
                             </div>
                             <div className="p-3 bg-purple-100 rounded-lg">
@@ -296,14 +210,14 @@ export default function Vehicles() {
                             className={`px-4 py-2 rounded-lg transition ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
-                            Bugün Kullanıma Verilen ({todayUsages.filter(u => u.status === 'in_use').length})
+                            Kullanımda Olan Araçlar ({inUseCount})
                         </button>
                         <button
                             onClick={() => setFilter('returned')}
                             className={`px-4 py-2 rounded-lg transition ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                         >
-                            Bugün İade Edildi ({todayUsages.filter(u => u.status === 'returned').length})
+                            Bugün İade Edilen Araçlar ({usages.filter(u => u.status === 'returned' && isToday(u.return_date)).length})
                         </button>
                     </div>
                 </div>
@@ -383,7 +297,7 @@ export default function Vehicles() {
                                                         ? 'bg-orange-100 text-orange-800'
                                                         : 'bg-green-100 text-green-800'
                                                         }`}>
-                                                        {usage.status === 'in_use' ? 'Kullanımda' : 'İade Edildi'}
+                                                        {usage.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -391,9 +305,9 @@ export default function Vehicles() {
                                                         <button
                                                             onClick={() => handleReturn(usage.id)}
                                                             className="text-green-600 hover:text-green-900 transition font-medium"
-                                                            title="Aracı İade Et"
+                                                            title="Aracı Teslim Al"
                                                         >
-                                                            İade Et
+                                                            Teslim Al
                                                         </button>
                                                     )}
                                                 </td>
@@ -536,7 +450,7 @@ export default function Vehicles() {
                                         disabled={availableVehicles.length === 0}
                                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:bg-gray-300 disabled:cursor-not-allowed"
                                     >
-                                        Aracı Al
+                                        Teslim Et
                                     </button>
                                     <button
                                         type="button"
@@ -547,6 +461,50 @@ export default function Vehicles() {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* WhatsApp Modal */}
+            {showWhatsAppModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900">WhatsApp ile Paylaş</h3>
+                        </div>
+
+                        <p className="text-gray-600 mb-4">Kayıt başarıyla oluşturuldu. WhatsApp'tan paylaşmak ister misiniz?</p>
+
+                        <div className="bg-gray-50 rounded-lg p-4 mb-4 max-h-48 overflow-y-auto">
+                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <a
+                                href={`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition text-center flex items-center justify-center gap-2"
+                                onClick={() => setShowWhatsAppModal(false)}
+                            >
+                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                                WhatsApp'ta Aç
+                            </a>
+                            <button
+                                type="button"
+                                onClick={() => setShowWhatsAppModal(false)}
+                                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                            >
+                                Kapat
+                            </button>
                         </div>
                     </div>
                 </div>

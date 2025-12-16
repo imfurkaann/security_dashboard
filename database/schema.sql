@@ -82,6 +82,8 @@ CREATE TABLE visitors (
     visitor_phone VARCHAR(20),
     company VARCHAR(100),
     person_to_visit VARCHAR(100),
+    subcontractor_worker BOOLEAN DEFAULT FALSE NOT NULL,
+    for_electric_station BOOLEAN DEFAULT FALSE NOT NULL,
     entry_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     exit_time TIMESTAMP NULL,
     purpose VARCHAR(255),

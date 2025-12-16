@@ -1,19 +1,22 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { logDataChange } from '../utils/auditLog';
+import { isValidUUID, sanitizeInput } from '../utils/validation';
+import { getClientIp } from '../middleware/rateLimiter';
 
 /**
  * Get all manager records with joins
  * GET /api/managers/records
  */
-export const getManagerRecords = async (req: Request, res: Response): Promise<void> => {
+export const getManagerRecords = async (_req: Request, res: Response): Promise<void> => {
     try {
         const query = `
             SELECT
                 mr.id,
                 mr.manager_id,
                 mr.manager_name,
-                    mr.recorded_by_name,
+                mr.recorded_by_name,
                 mr.entry_date,
                 mr.entry_time,
                 mr.exit_date,
@@ -31,6 +34,7 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN personnel p ON mr.recorded_by = p.id
             WHERE mr.deleted_at IS NULL
             ORDER BY mr.entry_date DESC, mr.entry_time DESC
+            LIMIT 1000
         `;
 
         const result = await pool.query(query);
@@ -67,11 +71,14 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
 export const createManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { manager_id, notes } = req.body;
-        const recorded_by = (req as any).user?.userId || null;
+        const recorded_by = req.user?.userId || null;
+        const clientIp = getClientIp(req);
 
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        // GÜVENLİK: Input sanitization
+        const sanitizedNotes = sanitizeInput(notes, 1000);
 
-        if (!manager_id || !uuidRegex.test(manager_id)) {
+        // GÜVENLİK: UUID validasyonu
+        if (!manager_id || !isValidUUID(manager_id)) {
             res.status(400).json({ success: false, message: 'Geçerli bir müdür kimliği gereklidir' });
             return;
         }
@@ -103,14 +110,27 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
             console.warn('Could not fetch recorder name for managers_records:', err);
         }
 
+        const managerName = `${managerCheck.rows[0].first_name} ${managerCheck.rows[0].last_name}`;
+
         await pool.query('BEGIN');
         await pool.query(
             `INSERT INTO managers_records (
                 id, manager_id, manager_name, recorded_by, recorded_by_name, entry_date, entry_time, status, notes
             ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, 'inside', $6)`,
-            [id, manager_id, `${managerCheck.rows[0].first_name} ${managerCheck.rows[0].last_name}`, recorded_by, recordedByName, notes || null]
+            [id, manager_id, managerName, recorded_by, recordedByName, sanitizedNotes]
         );
         await pool.query('COMMIT');
+
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'managers_records',
+            id,
+            'INSERT',
+            null,
+            { manager_id, manager_name: managerName },
+            recorded_by,
+            clientIp
+        );
 
         res.status(201).json({ success: true, message: 'Müdür kaydı oluşturuldu', data: { id } });
     } catch (error) {
@@ -128,8 +148,10 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
 export const exitManager = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(id)) {
+        const clientIp = getClientIp(req);
+
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
             return;
         }
@@ -150,6 +172,17 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
             [id]
         );
 
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'managers_records',
+            id,
+            'UPDATE',
+            { status: 'inside' },
+            { status: 'exited' },
+            req.user?.userId || null,
+            clientIp
+        );
+
         res.status(200).json({ success: true, message: 'Çıkış kaydedildi' });
     } catch (error) {
         console.error('Exit manager error:', error);
@@ -166,9 +199,10 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
     try {
         const { id } = req.params;
         const { notes } = req.body;
+        const clientIp = getClientIp(req);
 
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(id)) {
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
             return;
         }

@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
-import { comparePassword, hashPassword } from '../utils/password';
+import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
+import { recordFailedAttempt, clearAttempts } from '../middleware/auth';
+import { logLoginAttempt, logLogout } from '../utils/auditLog';
+import { sanitizeInput, isValidLength } from '../utils/validation';
+import { getClientIp } from '../middleware/rateLimiter';
 
 /**
  * Login validation rules
@@ -27,13 +31,17 @@ export const loginValidation = [
  * POST /api/auth/login
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
+    const clientIp = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || null;
+
     try {
-        console.log('Login request received:', { body: req.body });
+        // GÜVENLİK: Hassas bilgileri loglama (sadece IP, kullanıcı adı değil)
+        console.log(`Login attempt from IP: ${clientIp}`);
 
         // Validate input
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            console.log('Validation errors:', errors.array());
+            recordFailedAttempt(clientIp);
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz giriş bilgileri',
@@ -44,7 +52,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         const { username, password } = req.body;
 
-        if (!username || !password) {
+        // GÜVENLİK: Input sanitization
+        const sanitizedUsername = sanitizeInput(username, 50);
+
+        if (!sanitizedUsername || !password) {
+            recordFailedAttempt(clientIp);
+            await logLoginAttempt(null, username || 'unknown', false, clientIp, userAgent);
             res.status(400).json({
                 success: false,
                 message: 'Kullanıcı adı ve şifre gereklidir',
@@ -52,15 +65,28 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Find user by username
+        // GÜVENLİK: Kullanıcı adı uzunluk kontrolü
+        if (!isValidLength(sanitizedUsername, 3, 50)) {
+            recordFailedAttempt(clientIp);
+            await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kullanıcı adı formatı',
+            });
+            return;
+        }
+
+        // Find user by username - parameterized query
         const userQuery = `
             SELECT id, username, password, first_name, last_name, role, is_active
             FROM personnel
             WHERE username = $1 AND deleted_at IS NULL
         `;
-        const userResult = await pool.query(userQuery, [username]);
+        const userResult = await pool.query(userQuery, [sanitizedUsername]);
 
         if (userResult.rows.length === 0) {
+            recordFailedAttempt(clientIp);
+            await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
@@ -83,12 +109,18 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const isPasswordValid = await comparePassword(password, user.password);
 
         if (!isPasswordValid) {
+            recordFailedAttempt(clientIp);
+            await logLoginAttempt(user.id, sanitizedUsername, false, clientIp, userAgent);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
             });
             return;
         }
+
+        // Başarılı giriş - rate limit sıfırla ve audit log
+        clearAttempts(clientIp);
+        await logLoginAttempt(user.id, sanitizedUsername, true, clientIp, userAgent);
 
         // Generate JWT token
         const token = generateToken({
@@ -128,18 +160,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
  * POST /api/auth/logout
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
-    try {
-        res.status(200).json({
-            success: true,
-            message: 'Çıkış başarılı',
-        });
-    } catch (error) {
-        console.error('Logout error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Çıkış işlemi sırasında bir hata oluştu',
-        });
+    // Not: JWT stateless olduğu için server-side logout yok
+    // Client token'ı localStorage'dan silmeli
+
+    // GÜVENLİK: Audit log kaydı
+    const userId = req.user?.userId;
+    const clientIp = getClientIp(req);
+
+    if (userId) {
+        await logLogout(userId, clientIp);
     }
+
+    res.status(200).json({
+        success: true,
+        message: 'Çıkış başarılı',
+    });
 };
 
 /**

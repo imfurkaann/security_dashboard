@@ -1,132 +1,188 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
+import type { User, VehicleUsage } from '../types';
+import { STORAGE_KEYS, ROLE_LABELS } from '../constants';
 
-const API_URL = 'http://localhost:5000/api';
-
-interface VehicleUsage {
-    id: string;
-    vehicle_id: string;
-    vehicle_brand: string;
-    vehicle_plate: string;
-    manager_name: string;
-    destination: string;
-    personnel_full_name: string;
-    given_date: string;
-    given_time: string;
-    return_date: string | null;
-    return_time: string | null;
-    status: 'in_use' | 'returned';
-    notes: string | null;
+// Stat Card Component
+interface StatCardProps {
+    title: string;
+    value: number;
+    gradient: string;
+    iconBgColor: string;
+    icon: React.ReactNode;
 }
 
+function StatCard({ title, value, gradient, iconBgColor, icon }: StatCardProps) {
+    return (
+        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow-lg p-6`}>
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-medium opacity-90">{title}</p>
+                    <p className="text-3xl font-bold text-white mt-2">{value}</p>
+                </div>
+                <div className={`${iconBgColor} p-3 rounded-lg`}>
+                    {icon}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Navigation Card Component
+interface NavCardProps {
+    title: string;
+    description: string;
+    gradient: string;
+    hoverGradient: string;
+    icon: React.ReactNode;
+    onClick: () => void;
+}
+
+function NavCard({ title, description, gradient, hoverGradient, icon, onClick }: NavCardProps) {
+    return (
+        <button
+            onClick={onClick}
+            className={`bg-gradient-to-br ${gradient} ${hoverGradient} p-6 rounded-lg shadow-lg transition-all transform hover:scale-105`}
+        >
+            <div className="text-white">
+                {icon}
+                <h3 className="text-xl font-bold mb-2">{title}</h3>
+                <p className="opacity-90">{description}</p>
+            </div>
+        </button>
+    );
+}
+
+// Icons
+const VehicleIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+    </svg>
+);
+
+const VisitorIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+);
+
+const ManagerIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+    </svg>
+);
+
+const IncidentIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+);
+
+const FireAlarmIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+    </svg>
+);
+
 export default function Dashboard() {
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
-    const [openEvents, setOpenEvents] = useState<number>(0);
-    const [stats] = useState({
-        shiftStatus: 'Aktif'
-    });
-    const [visitorsInside, setVisitorsInside] = useState<number>(0);
-    const [managersInside, setManagersInside] = useState<number>(0);
+    const [todayAlarms, setTodayAlarms] = useState(0);
+    const [visitorsInside, setVisitorsInside] = useState(0);
+    const [managersInside, setManagersInside] = useState(0);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        fetchUser();
-        fetchUsages();
-        fetchVisitors();
-        fetchManagersRecords();
-        fetchIncidents();
-    }, []);
-
-    const fetchIncidents = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/incidents/records`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const records = response.data || [];
-            const open = records.filter((r: any) => r.status === 'open').length;
-            setOpenEvents(open);
-        } catch (error) {
-            console.error('Olay verileri yüklenemedi:', error);
+    // Fetch all data in parallel for better performance
+    const fetchAllData = useCallback(async () => {
+        const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+        if (!token) {
+            navigate('/login');
+            return;
         }
-    };
 
-    const fetchManagersRecords = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/managers/records`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const records = response.data || [];
-            const inside = records.filter((r: any) => r.status === 'inside').length;
-            setManagersInside(inside);
-        } catch (error) {
-            console.error('Müdür kayıtları yüklenemedi:', error);
-        }
-    };
+            const [userRes, vehiclesRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
+                api.get('/auth/me'),
+                api.get('/vehicles/records'),
+                api.get('/visitors/records'),
+                api.get('/managers/records'),
+                api.get('/fire-alarms/records'),
+            ]);
 
-    const fetchUser = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setUser(response.data.data);
+            // User
+            if (userRes.data?.data) {
+                setUser(userRes.data.data);
+            }
+
+            // Vehicles
+            setUsages(vehiclesRes.data || []);
+
+            // Visitors inside
+            const visitors = visitorsRes.data || [];
+            setVisitorsInside(visitors.filter((v: { status: string }) => v.status === 'inside').length);
+
+            // Managers inside
+            const managers = managersRes.data || [];
+            setManagersInside(managers.filter((m: { status: string }) => m.status === 'inside').length);
+
+            // Today's fire alarms
+            const fireAlarmsData = fireAlarmsRes.data?.data || fireAlarmsRes.data || [];
+            const fireAlarmsList = Array.isArray(fireAlarmsData) ? fireAlarmsData : [];
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            setTodayAlarms(fireAlarmsList.filter((alarm: { alarm_time: string }) => {
+                const alarmDate = new Date(alarm.alarm_time);
+                alarmDate.setHours(0, 0, 0, 0);
+                return alarmDate.getTime() === today.getTime();
+            }).length);
+
         } catch (error) {
+            console.error('Dashboard veri yükleme hatası:', error);
             navigate('/login');
         } finally {
             setLoading(false);
         }
-    };
+    }, [navigate]);
 
-    const fetchUsages = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/vehicles/records`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setUsages(response.data || []);
-        } catch (error) {
-            console.error('Kullanım verileri yüklenemedi:', error);
-        }
-    };
-
-    const fetchVisitors = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/visitors/records`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const visitors = response.data || [];
-            const inside = visitors.filter((v: any) => v.status === 'inside').length;
-            setVisitorsInside(inside);
-        } catch (error) {
-            console.error('Ziyaretçi verileri yüklenemedi:', error);
-        }
-    };
+    useEffect(() => {
+        fetchAllData();
+    }, [fetchAllData]);
 
     const handleLogout = async () => {
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/auth/logout`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await api.post('/auth/logout', {});
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
+            localStorage.removeItem(STORAGE_KEYS.TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.USER);
             navigate('/login');
         }
+    };
+
+    // Calculate stats
+    const vehiclesInUse = usages.filter(u => u.status === 'in_use').length;
+
+    // Get role badge color
+    const getRoleBadgeClass = (role: string) => {
+        const classes: Record<string, string> = {
+            admin: 'bg-red-500/20 text-red-400',
+            manager: 'bg-blue-500/20 text-blue-400',
+            security: 'bg-green-500/20 text-green-400',
+        };
+        return classes[role] || classes.security;
     };
 
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-                <div className="text-white">Yükleniyor...</div>
+                <div className="flex flex-col items-center gap-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+                    <span className="text-gray-400">Yükleniyor...</span>
+                </div>
             </div>
         );
     }
@@ -142,25 +198,21 @@ export default function Dashboard() {
                             <p className="text-gray-400 mt-1">{user?.fullName}</p>
                         </div>
                         <div className="flex items-center gap-4">
-                            {/* Vardiya pill styled to match dashboard design */}
+                            {/* Shift Status */}
                             <div className="flex flex-col items-end text-right mr-2">
                                 <div className="text-xs text-gray-300 mb-1">Vardiya</div>
                                 <div className="inline-flex items-center gap-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
-                                    <svg className="w-2 h-2 text-white opacity-90" viewBox="0 0 8 8" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="4" cy="4" r="4" />
-                                    </svg>
+                                    <span className="w-2 h-2 bg-white rounded-full opacity-90" />
                                     <span>Aktif</span>
                                 </div>
                             </div>
 
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${user?.role === 'admin' ? 'bg-red-500/20 text-red-400' :
-                                user?.role === 'manager' ? 'bg-blue-500/20 text-blue-400' :
-                                    'bg-green-500/20 text-green-400'
-                                }`}>
-                                {user?.role === 'admin' ? 'YÖNETİCİ' :
-                                    user?.role === 'manager' ? 'MÜDÜR' : 'GÜVENLİK'}
+                            {/* Role Badge */}
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeClass(user?.role || '')}`}>
+                                {ROLE_LABELS[user?.role || ''] || 'GÜVENLİK'}
                             </span>
 
+                            {/* Logout Button */}
                             <button
                                 onClick={handleLogout}
                                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
@@ -173,125 +225,78 @@ export default function Dashboard() {
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-4 gap-4 mb-6">
-                    {/* Kullanımdaki Araçlar */}
-                    <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-blue-100 text-sm font-medium">Kullanımdaki Araçlar</p>
-                                <p className="text-3xl font-bold text-white mt-2">
-                                    {usages.filter(u => u.status === 'in_use').length}
-                                </p>
-                            </div>
-                            <div className="bg-blue-500/30 p-3 rounded-lg">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* İçerideki Ziyaretçiler */}
-                    <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-green-100 text-sm font-medium">İçerideki Ziyaretçiler</p>
-                                <p className="text-3xl font-bold text-white mt-2">{visitorsInside}</p>
-                            </div>
-                            <div className="bg-green-500/30 p-3 rounded-lg">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Açık Olaylar */}
-                    <div className="bg-gradient-to-br from-yellow-600 to-yellow-700 rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-yellow-100 text-sm font-medium">Açık Olaylar</p>
-                                <p className="text-3xl font-bold text-white mt-2">{openEvents}</p>
-                            </div>
-                            <div className="bg-yellow-500/30 p-3 rounded-lg">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Vardiya Durumu */}
-                    <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-purple-100 text-sm font-medium">İçerideki Müdürler</p>
-                                <p className="text-3xl font-bold text-white mt-2">{managersInside}</p>
-                            </div>
-                            <div className="bg-purple-500/30 p-3 rounded-lg">
-                                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
+                    <StatCard
+                        title="Kullanımdaki Araçlar"
+                        value={vehiclesInUse}
+                        gradient="from-blue-600 to-blue-700"
+                        iconBgColor="bg-blue-500/30"
+                        icon={<VehicleIcon size={8} />}
+                    />
+                    <StatCard
+                        title="İçerideki Ziyaretçiler"
+                        value={visitorsInside}
+                        gradient="from-green-600 to-green-700"
+                        iconBgColor="bg-green-500/30"
+                        icon={<VisitorIcon size={8} />}
+                    />
+                    <StatCard
+                        title="Bugün Çalınan Alarmlar"
+                        value={todayAlarms}
+                        gradient="from-red-600 to-red-700"
+                        iconBgColor="bg-red-500/30"
+                        icon={<FireAlarmIcon size={8} />}
+                    />
+                    <StatCard
+                        title="İçerideki Müdürler"
+                        value={managersInside}
+                        gradient="from-purple-600 to-purple-700"
+                        iconBgColor="bg-purple-500/30"
+                        icon={<ManagerIcon size={8} />}
+                    />
                 </div>
 
                 {/* Navigation Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <button
+                    <NavCard
+                        title="Araç Yönetimi"
+                        description="Araç kayıtlarını görüntüle ve yönet"
+                        gradient="from-blue-600 to-blue-700"
+                        hoverGradient="hover:from-blue-700 hover:to-blue-800"
+                        icon={<VehicleIcon />}
                         onClick={() => navigate('/vehicles')}
-                        className="bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 p-6 rounded-lg shadow-lg transition-all transform hover:scale-105"
-                    >
-                        <div className="text-white">
-                            <svg className="w-12 h-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                            </svg>
-                            <h3 className="text-xl font-bold mb-2">Araç Yönetimi</h3>
-                            <p className="text-blue-100">Araç kayıtlarını görüntüle ve yönet</p>
-                        </div>
-                    </button>
-
-                    <button
+                    />
+                    <NavCard
+                        title="Ziyaretçi Yönetimi"
+                        description="Ziyaretçi kayıtlarını görüntüle ve yönet"
+                        gradient="from-green-600 to-green-700"
+                        hoverGradient="hover:from-green-700 hover:to-green-800"
+                        icon={<VisitorIcon />}
                         onClick={() => navigate('/visitors')}
-                        className="bg-gradient-to-br from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 p-6 rounded-lg shadow-lg transition-all transform hover:scale-105"
-                    >
-                        <div className="text-white">
-                            <svg className="w-12 h-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <h3 className="text-xl font-bold mb-2">Ziyaretçi Yönetimi</h3>
-                            <p className="text-green-100">Ziyaretçi kayıtlarını görüntüle ve yönet</p>
-
-                        </div>
-                    </button>
-
-                    <button
+                    />
+                    <NavCard
+                        title="Müdür Yönetimi"
+                        description="Müdürleri görüntüle ve yönet"
+                        gradient="from-indigo-600 to-indigo-700"
+                        hoverGradient="hover:from-indigo-700 hover:to-indigo-800"
+                        icon={<ManagerIcon />}
                         onClick={() => navigate('/managers')}
-                        className="bg-gradient-to-br from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 p-6 rounded-lg shadow-lg transition-all transform hover:scale-105"
-                    >
-                        <div className="text-white">
-                            <svg className="w-12 h-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            <h3 className="text-xl font-bold mb-2">Müdür Yönetimi</h3>
-                            <p className="text-indigo-100">Müdürleri görüntüle ve yönet</p>
-
-                        </div>
-                    </button>
-
-                    <button
+                    />
+                    <NavCard
+                        title="Olay Kayıtları"
+                        description="Olayları görüntüle ve yönet"
+                        gradient="from-yellow-600 to-yellow-700"
+                        hoverGradient="hover:from-yellow-700 hover:to-yellow-800"
+                        icon={<IncidentIcon />}
                         onClick={() => navigate('/incidents')}
-                        className="bg-gradient-to-br from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 p-6 rounded-lg shadow-lg transition-all transform hover:scale-105"
-                    >
-                        <div className="text-white">
-                            <svg className="w-12 h-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            <h3 className="text-xl font-bold mb-2">Olay Kayıtları</h3>
-                            <p className="text-yellow-100">Olayları görüntüle ve yönet</p>
-
-                        </div>
-                    </button>
+                    />
+                    <NavCard
+                        title="Yangın Alarmları"
+                        description="Yangın alarm kayıtlarını görüntüle ve yönet"
+                        gradient="from-red-600 to-red-700"
+                        hoverGradient="hover:from-red-700 hover:to-red-800"
+                        icon={<FireAlarmIcon />}
+                        onClick={() => navigate('/fire-alarms')}
+                    />
                 </div>
             </div>
         </div>

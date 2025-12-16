@@ -95,6 +95,8 @@ CREATE TABLE visitors (
     company_name VARCHAR(100), -- SQLite: company_name
     visiting_person VARCHAR(100), -- Kimi ziyaret ediyor (SQLite: visiting_person)
     person_count INTEGER DEFAULT 1, -- Ziyaretçi sayısı (SQLite: person_count)
+    subcontractor_worker BOOLEAN DEFAULT FALSE NOT NULL,
+    for_electric_station BOOLEAN DEFAULT FALSE NOT NULL,
     phone_number VARCHAR(20), -- SQLite: phone_number
     vehicle_plate VARCHAR(20), -- Araç plakası (SQLite: vehicle_plate)
     id_number VARCHAR(20), -- TC Kimlik No

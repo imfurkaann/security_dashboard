@@ -1,12 +1,16 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { logDataChange } from '../utils/auditLog';
+import { isValidUUID, sanitizeInput, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
+import { getClientIp } from '../middleware/rateLimiter';
+import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
 
 /**
  * Get all visitor records with joins
  * GET /api/visitors/records
  */
-export const getVisitorRecords = async (req: Request, res: Response): Promise<void> => {
+export const getVisitorRecords = async (_req: Request, res: Response): Promise<void> => {
     try {
         const query = `
             SELECT 
@@ -18,6 +22,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.person_count,
                 vr.phone,
                 vr.notes,
+                vr.subcontractor_worker,
+                vr.for_electric_station,
                 vr.entry_date,
                 vr.entry_time,
                 vr.exit_date,
@@ -30,6 +36,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN personnel p ON vr.personnel_id = p.id
             WHERE vr.deleted_at IS NULL
             ORDER BY vr.entry_date DESC, vr.entry_time DESC
+            LIMIT 1000
         `;
         const result = await pool.query(query);
 
@@ -42,6 +49,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             person_count: row.person_count,
             phone: row.phone,
             notes: row.notes,
+            subcontractor_worker: row.subcontractor_worker,
+            for_electric_station: row.for_electric_station,
             entry_date: row.entry_date,
             entry_time: row.entry_time,
             exit_date: row.exit_date,
@@ -65,11 +74,20 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes } = req.body;
-        const personnel_id = (req as any).user?.userId || null;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station } = req.body;
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        // GÜVENLİK: Input sanitization
+        const sanitizedFullName = sanitizeInput(full_name, 100);
+        const sanitizedCompanyName = sanitizeInput(company_name, 100);
+        const sanitizedVisitingPerson = sanitizeInput(visiting_person, 100);
+        const sanitizedNotes = sanitizeInput(notes, 1000);
+        const normalizedPlate = normalizePlate(vehicle_plate);
+        const normalizedPhone = phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null;
 
         // Tüm alanlar opsiyonel. Sadece girilen alanlar için uzunluk/format kontrolleri yapılır.
-        if (vehicle_plate && vehicle_plate.length > 20) {
+        if (normalizedPlate && normalizedPlate.length > 20) {
             res.status(400).json({ success: false, message: 'Araç plakası 20 karakterden uzun olamaz' });
             return;
         }
@@ -111,97 +129,91 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 
         const id = uuidv4();
 
-        // Query schema to find required NOT NULL columns without defaults
-        const infoRes = await pool.query(
-            `SELECT column_name, is_nullable, column_default, data_type
-             FROM information_schema.columns
-             WHERE table_name = 'visitor_records'`
-        );
-
-        const cols: string[] = ['id', 'entry_date', 'entry_time', 'status'];
-        const placeholders: string[] = ['$1', 'CURRENT_DATE', 'CURRENT_TIME', "'inside'"];
-        const values: any[] = [id];
-
-        // person_count: default to 1 when not provided
-        const personCountToInsert = personCountValue ?? 1;
-
-        let idx = values.length + 1; // next parameter index
-
-        // Helper to push a column and its value
-        const pushCol = (colName: string, val: any) => {
-            cols.push(colName);
-            placeholders.push(`$${idx++}`);
-            values.push(val);
-        };
-
-        // If personnel_id (the recorder) isn't present, require authentication because DB demands personnel_id NOT NULL
+        // Kullanıcı doğrulama
         if (!personnel_id) {
             res.status(401).json({ success: false, message: 'Kullanıcı doğrulanmadı. Lütfen giriş yapın.' });
             return;
         }
 
-        // Build values for known fields; for fields that are NOT NULL in DB and missing from payload,
-        // supply safe defaults based on data_type.
-        const colsInfo: any = {};
-        infoRes.rows.forEach((r: any) => { colsInfo[r.column_name] = r; });
+        // Varsayılan değerler
+        const personCountToInsert = personCountValue ?? 1;
 
-        // vehicle_plate
-        if (vehicle_plate !== undefined && vehicle_plate !== null) {
-            pushCol('vehicle_plate', String(vehicle_plate).toUpperCase());
-        } else if (colsInfo['vehicle_plate'] && colsInfo['vehicle_plate'].is_nullable === 'NO' && !colsInfo['vehicle_plate'].column_default) {
-            pushCol('vehicle_plate', '');
-        }
+        // Basitleştirilmiş INSERT sorgusu
+        const insertQuery = `
+            INSERT INTO visitor_records (
+                id, vehicle_plate, full_name, company_name, visiting_person,
+                person_count, phone, notes, subcontractor_worker, for_electric_station,
+                personnel_id, entry_date, entry_time, status, send_whatsapp
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                CURRENT_DATE, CURRENT_TIME, 'inside', $12
+            )
+            RETURNING entry_date, entry_time
+        `;
 
-        // full_name
-        if (full_name !== undefined && full_name !== null) {
-            pushCol('full_name', full_name);
-        } else if (colsInfo['full_name'] && colsInfo['full_name'].is_nullable === 'NO' && !colsInfo['full_name'].column_default) {
-            pushCol('full_name', '');
-        }
-
-        // company_name
-        if (company_name !== undefined && company_name !== null) {
-            pushCol('company_name', company_name);
-        } else if (colsInfo['company_name'] && colsInfo['company_name'].is_nullable === 'NO' && !colsInfo['company_name'].column_default) {
-            pushCol('company_name', '');
-        }
-
-        // visiting_person (destination)
-        if (visiting_person !== undefined && visiting_person !== null) {
-            pushCol('visiting_person', visiting_person);
-        } else if (colsInfo['visiting_person'] && colsInfo['visiting_person'].is_nullable === 'NO' && !colsInfo['visiting_person'].column_default) {
-            pushCol('visiting_person', '');
-        }
-
-        // person_count (always include with safe default)
-        pushCol('person_count', personCountToInsert);
-
-        // phone
-        if (phone !== undefined && phone !== null) {
-            pushCol('phone', phone);
-        } else if (colsInfo['phone'] && colsInfo['phone'].is_nullable === 'NO' && !colsInfo['phone'].column_default) {
-            pushCol('phone', '');
-        }
-
-        // notes (nullable) include if provided
-        if (notes !== undefined) {
-            pushCol('notes', notes || null);
-        }
-
-        // personnel_id: include authenticated user id
-        pushCol('personnel_id', personnel_id);
-
-        const insertQuery = `INSERT INTO visitor_records (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`;
+        const sendWhatsApp = Boolean(req.body.send_whatsapp);
+        const values = [
+            id,
+            normalizedPlate,
+            sanitizedFullName,
+            sanitizedCompanyName,
+            sanitizedVisitingPerson,
+            personCountToInsert,
+            normalizedPhone,
+            sanitizedNotes,
+            Boolean(subcontractor_worker),
+            Boolean(for_electric_station),
+            personnel_id,
+            sendWhatsApp
+        ];
 
         await pool.query('BEGIN');
-        await pool.query(insertQuery, values);
+        const insertResult = await pool.query(insertQuery, values);
         await pool.query('COMMIT');
 
-        res.status(201).json({ success: true, message: 'Ziyaretçi girişi kaydedildi', data: { id } });
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'visitor_records',
+            id,
+            'INSERT',
+            null,
+            { vehicle_plate: normalizedPlate, full_name: sanitizedFullName, company_name: sanitizedCompanyName },
+            personnel_id,
+            clientIp
+        );
+
+        // WhatsApp mesaj şablonu oluştur (sadece send_whatsapp = true ise)
+        let whatsappMessage = '';
+        if (sendWhatsApp) {
+            try {
+                const entryDate = insertResult.rows[0]?.entry_date || new Date().toISOString().split('T')[0];
+                const timeString = insertResult.rows[0]?.entry_time || new Date().toLocaleTimeString('tr-TR');
+                // Sadece saat:dakika formatına çevir (HH:MM)
+                const entryTime = timeString.substring(0, 5);
+
+                whatsappMessage = createVisitorRecordMessage({
+                    fullName: sanitizedFullName || undefined,
+                    companyName: sanitizedCompanyName || undefined,
+                    visitingPerson: sanitizedVisitingPerson || undefined,
+                    entryDate,
+                    entryTime,
+                    vehiclePlate: normalizedPlate || undefined,
+                    personCount: personCountValue || undefined,
+                    phone: normalizedPhone || undefined,
+                    subcontractorWorker: Boolean(subcontractor_worker),
+                    forElectricStation: Boolean(for_electric_station),
+                    notes: sanitizedNotes || undefined
+                });
+            } catch (error) {
+                console.error('WhatsApp mesaj oluşturma hatası:', error);
+            }
+        }
+
+        res.status(201).json({ success: true, message: 'Ziyaretçi girişi kaydedildi', data: { id }, whatsappMessage });
     } catch (error) {
         await pool.query('ROLLBACK');
         console.error('Create visitor record error:', error instanceof Error ? error.message : error);
-        res.status(500).json({ success: false, message: 'Ziyaretçi girişi kaydedilirken hata oluştu', error: error instanceof Error ? error.message : String(error) });
+        res.status(500).json({ success: false, message: 'Ziyaretçi girişi kaydedilirken hata oluştu' });
     }
 };
 
@@ -213,10 +225,11 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station } = req.body;
+        const clientIp = getClientIp(req);
 
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(id)) {
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
             return;
         }
@@ -232,7 +245,10 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         const params: any[] = [];
         let idx = 1;
 
-        if (vehicle_plate !== undefined) { updates.push(`vehicle_plate = $${idx++}`); params.push(vehicle_plate ? String(vehicle_plate).toUpperCase() : null); }
+        if (vehicle_plate !== undefined) {
+            updates.push(`vehicle_plate = $${idx++}`);
+            params.push(vehicle_plate ? String(vehicle_plate).replace(/\s/g, '').toUpperCase() : null);
+        }
         if (full_name !== undefined) { updates.push(`full_name = $${idx++}`); params.push(full_name || null); }
         if (company_name !== undefined) { updates.push(`company_name = $${idx++}`); params.push(company_name || null); }
         if (visiting_person !== undefined) { updates.push(`visiting_person = $${idx++}`); params.push(visiting_person || null); }
@@ -242,7 +258,12 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             params.push(pc);
             updates.push(`person_count = $${idx++}`);
         }
-        if (phone !== undefined) { updates.push(`phone = $${idx++}`); params.push(phone || null); }
+        if (subcontractor_worker !== undefined) { updates.push(`subcontractor_worker = $${idx++}`); params.push(Boolean(subcontractor_worker)); }
+        if (for_electric_station !== undefined) { updates.push(`for_electric_station = $${idx++}`); params.push(Boolean(for_electric_station)); }
+        if (phone !== undefined) {
+            updates.push(`phone = $${idx++}`);
+            params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
+        }
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
 
         if (updates.length === 0) {
@@ -254,6 +275,17 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         params.push(id);
 
         await pool.query(query, params);
+
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'visitor_records',
+            id,
+            'UPDATE',
+            null,
+            { updated_fields: updates },
+            req.user?.userId || null,
+            clientIp
+        );
 
         res.status(200).json({ success: true, message: 'Kayıt güncellendi' });
     } catch (error) {
@@ -270,9 +302,10 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
 export const exitVisitor = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const clientIp = getClientIp(req);
 
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(id)) {
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
             return;
         }
@@ -294,7 +327,51 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
             [id]
         );
 
-        res.status(200).json({ success: true, message: 'Çıkış kaydedildi' });
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'visitor_records',
+            id,
+            'UPDATE',
+            { status: 'inside' },
+            { status: 'exited' },
+            req.user?.userId || null,
+            clientIp
+        );
+
+        // WhatsApp mesaj şablonu oluştur (sadece send_whatsapp = true olanlar için)
+        let whatsappMessage = '';
+        try {
+            const visitorInfo = await pool.query(
+                `SELECT full_name, company_name, visiting_person, vehicle_plate, 
+                        person_count, phone, subcontractor_worker, for_electric_station, 
+                        notes, exit_time, send_whatsapp 
+                 FROM visitor_records WHERE id = $1`,
+                [id]
+            );
+
+            if (visitorInfo.rows.length > 0 && visitorInfo.rows[0].send_whatsapp) {
+                const record = visitorInfo.rows[0];
+                const timeString = record.exit_time || new Date().toLocaleTimeString('tr-TR');
+                const exitTime = timeString.substring(0, 5);
+
+                whatsappMessage = createVisitorExitMessage({
+                    fullName: record.full_name || undefined,
+                    companyName: record.company_name || undefined,
+                    visitingPerson: record.visiting_person || undefined,
+                    vehiclePlate: record.vehicle_plate || undefined,
+                    personCount: record.person_count || undefined,
+                    phone: record.phone || undefined,
+                    subcontractorWorker: Boolean(record.subcontractor_worker),
+                    forElectricStation: Boolean(record.for_electric_station),
+                    notes: record.notes || undefined,
+                    exitTime
+                });
+            }
+        } catch (error) {
+            console.error('WhatsApp mesaj oluşturma hatası:', error);
+        }
+
+        res.status(200).json({ success: true, message: 'Çıkış kaydedildi', whatsappMessage });
     } catch (error) {
         console.error('Exit visitor error:', error);
         res.status(500).json({ success: false, message: 'Çıkış kaydedilirken hata oluştu' });

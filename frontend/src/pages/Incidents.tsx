@@ -1,162 +1,340 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import api from '../utils/api';
+import { isValidLength } from '../utils/validation';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Vardiya tanımları
+const SHIFTS = [
+    { id: '1', label: '00:00-08:00', start: 0, end: 8 },
+    { id: '2', label: '08:00-16:00', start: 8, end: 16 },
+    { id: '3', label: '16:00-00:00', start: 16, end: 24 },
+];
 
-interface IncidentRecord {
-    id: string;
-    description: string | null;
-    reported_by: string | null;
-    entry_date: string | null;
-    entry_time: string | null;
-    status: string | null;
-    created_at?: string | null;
-}
+// Vardiya için buton erişilebilirliğini kontrol et
+const getShiftAccess = (startHour: number, endHour: number): {
+    accessible: boolean;
+    message: string;
+    hoursUntil: number;
+} => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTotalMinutes = currentHour * 60 + currentMinute;
+
+    // Vardiya başlangıç ve bitiş saatlerini dakikaya çevir
+    let shiftStartMinutes = startHour * 60 - 20; // 20 dk önce
+    let shiftEndMinutes = (endHour === 24 ? 0 : endHour) * 60 + 30; // 30 dk sonra
+
+    // Gece vardiyası için özel durum (16:00-00:00)
+    if (startHour > endHour || endHour === 24) {
+        // Akşam 15:40'tan gece 00:30'a kadar
+        if (currentTotalMinutes >= shiftStartMinutes || currentTotalMinutes <= 30) {
+            return { accessible: true, message: 'Rapor yazabilirsiniz', hoursUntil: 0 };
+        }
+        // Vardiyaya ne kadar kaldı?
+        const minutesUntil = shiftStartMinutes - currentTotalMinutes;
+        const hoursUntil = Math.ceil(minutesUntil / 60);
+        return {
+            accessible: false,
+            message: `${hoursUntil} saat sonra vardiyanız başlayacaktır`,
+            hoursUntil
+        };
+    }
+
+    // Normal vardiyalar (00:00-08:00, 08:00-16:00)
+    if (currentTotalMinutes >= shiftStartMinutes && currentTotalMinutes <= shiftEndMinutes) {
+        return { accessible: true, message: 'Rapor yazabilirsiniz', hoursUntil: 0 };
+    }
+
+    // Vardiyaya ne kadar kaldı?
+    let minutesUntil = shiftStartMinutes - currentTotalMinutes;
+    if (minutesUntil < 0) {
+        minutesUntil += 24 * 60; // Bir sonraki gün
+    }
+    const hoursUntil = Math.ceil(minutesUntil / 60);
+
+    return {
+        accessible: false,
+        message: `${hoursUntil} saat sonra vardiyanız başlayacaktır`,
+        hoursUntil
+    };
+};
 
 export default function Incidents() {
-    const [records, setRecords] = useState<IncidentRecord[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [description, setDescription] = useState('');
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [selectedShift, setSelectedShift] = useState<string | null>(null);
+    const [existingReportId, setExistingReportId] = useState<string | null>(null);
+    const [shiftReports, setShiftReports] = useState<Record<string, any>>({});
     const navigate = useNavigate();
 
-    useEffect(() => {
-        fetchData();
+    // TipTap Editor
+    const editor = useEditor({
+        extensions: [StarterKit],
+        content: '<p>Rapor içeriğini buraya yazın...</p>',
+        editorProps: {
+            attributes: {
+                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[400px] p-4',
+            },
+        },
+    });
+
+    // Bugünkü vardiya raporlarını yükle
+    const loadShiftReports = useCallback(async () => {
+        const reports: Record<string, any> = {};
+        for (const shift of SHIFTS) {
+            try {
+                const res = await api.get(`/incidents/reports/${shift.label}`);
+                if (res.data?.success && res.data?.data) {
+                    reports[shift.label] = res.data.data;
+                }
+            } catch (err) {
+                // Rapor yoksa 404 dönecek, sorun değil
+            }
+        }
+        setShiftReports(reports);
     }, []);
 
-    const fetchData = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/incidents/records`, { headers: { Authorization: `Bearer ${token}` } });
-            setRecords(res.data || []);
-        } catch (err) {
-            console.warn('Olay verisi yüklenemedi', err);
-        } finally {
-            setLoading(false);
+    useEffect(() => {
+        loadShiftReports();
+    }, [loadShiftReports]);
+
+    // Vardiya raporunu kaydet veya güncelle
+    const handleReportSubmit = useCallback(async () => {
+        if (!editor || !selectedShift) return;
+
+        const htmlContent = editor.getHTML();
+
+        // HTML content uzunluk kontrolü (maksimum 50000 karakter)
+        if (!isValidLength(htmlContent, 1, 50000)) {
+            alert('Rapor içeriği en az 1, en fazla 50000 karakter olabilir');
+            return;
         }
-    };
 
-    const openModal = () => {
-        setDescription('');
-        setShowModal(true);
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/incidents/records`, { description: description || null }, { headers: { Authorization: `Bearer ${token}` } });
-            setShowModal(false);
-            fetchData();
-        } catch (err: any) {
-            alert(err?.response?.data?.message || 'Kayıt başarısız');
+            // Eğer bu vardiya için bugün bir rapor varsa, onu güncelle
+            const reportId = existingReportId || shiftReports[selectedShift]?.id;
+
+            if (reportId) {
+                // Güncelleme
+                await api.put(`/incidents/reports/${reportId}`, {
+                    report_content: htmlContent,
+                });
+                alert('Rapor başarıyla güncellendi ve yeni Word dosyası oluşturuldu');
+            } else {
+                // Yeni kayıt
+                await api.post('/incidents/reports', {
+                    shift_label: selectedShift,
+                    report_content: htmlContent,
+                });
+                alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
+            }
+
+            setShowReportModal(false);
+            setExistingReportId(null);
+            loadShiftReports(); // Raporları yeniden yükle
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Rapor kaydı başarısız');
         }
-    };
+    }, [editor, selectedShift, existingReportId, shiftReports, loadShiftReports]);
 
-    const formatDate = (d: string | null) => {
-        if (!d) return '-';
-        const date = new Date(d);
-        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
-    };
+    // Rapor modal aç (yeni veya düzenle)
+    const openReportModal = useCallback((shiftLabel: string, isEdit: boolean = false) => {
+        setSelectedShift(shiftLabel);
 
-    const formatTime = (t: string | null) => {
-        if (!t) return '-';
-        return t.substring(0, 5);
-    };
+        // Her zaman mevcut rapor varsa onun ID'sini set et
+        if (shiftReports[shiftLabel]) {
+            const report = shiftReports[shiftLabel];
+            setExistingReportId(report.id);
+            if (editor) {
+                editor.commands.setContent(report.report_content || '<p>Rapor içeriğini buraya yazın...</p>');
+            }
+        } else {
+            // Yeni rapor
+            setExistingReportId(null);
+            if (editor) {
+                editor.commands.setContent('<p>Rapor içeriğini buraya yazın...</p>');
+            }
+        }
+
+        setShowReportModal(true);
+    }, [editor, shiftReports]);
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {/* Header */}
             <header className="bg-white shadow-md">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-4">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                            >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Olay Kayıtları</h1>
-                                <p className="text-gray-600 mt-1">Olayları kaydedin ve yönetin (sözel anlatım - A4)</p>
+                                <h1 className="text-3xl font-bold text-gray-900">Vardiya Rapor Sistemi</h1>
+                                <p className="text-gray-600 mt-1">Günlük güvenlik vardiya raporlarını kaydedin</p>
                             </div>
                         </div>
-                        <button onClick={openModal} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Yeni Olay
-                        </button>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                        </div>
-                    ) : records.length === 0 ? (
-                        <div className="text-center py-12">
-                            <p className="text-gray-500">Kayıt bulunmuyor</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
-                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Olay Özeti</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {records.map(r => (
-                                            <tr key={r.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 max-w-[420px]"><div className="text-sm text-gray-500 truncate">{r.description || '-'}</div></td>
-                                                <td className="px-6 py-4"><div className="text-sm text-gray-900">{r.reported_by || '-'}</div></td>
-                                                <td className="px-6 py-4"><div className="text-sm text-gray-900">{formatDate(r.entry_date)}</div><div className="text-xs text-gray-500">{formatTime(r.entry_time)}</div></td>
-                                                <td className="px-6 py-4"><span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${r.status === 'open' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>{r.status === 'open' ? 'Açık' : 'Kapatıldı'}</span></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Vardiya Kartları */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {SHIFTS.map((shift) => {
+                        const access = getShiftAccess(shift.start, shift.end);
+
+                        return (
+                            <div
+                                key={shift.id}
+                                className={`bg-white rounded-lg shadow-md border-2 p-6 transition-all ${access.accessible
+                                    ? 'border-blue-500 ring-2 ring-blue-200'
+                                    : 'border-gray-200'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-blue-100 rounded-lg">
+                                            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-bold text-gray-900">{shift.label}</h3>
+                                            <span className={`text-sm font-medium ${access.accessible ? 'text-green-600' : 'text-gray-500'}`}>
+                                                {access.message}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p className="text-sm text-gray-600 mb-6">
+                                    Günlük güvenlik olaylarını ve vardiya notlarını kaydedin. Rapor otomatik olarak Word dosyasına dönüştürülecektir.
+                                </p>
+
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => openReportModal(shift.label, false)}
+                                        disabled={!access.accessible}
+                                        className={`flex-1 py-3 px-4 rounded-lg font-medium transition ${access.accessible
+                                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        {access.accessible ? 'Rapor Yaz' : `${access.hoursUntil} saat kaldı`}
+                                    </button>
+
+                                    {shiftReports[shift.label] && (
+                                        <button
+                                            onClick={() => openReportModal(shift.label, true)}
+                                            className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition shadow-lg hover:shadow-xl"
+                                            title="Raporu Düzenle"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })}
                 </div>
             </main>
 
-            {showModal && (
+            {/* Rapor Modal */}
+            {showReportModal && editor && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-[840px] w-full max-h-[95vh] overflow-y-auto">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">Yeni Olay Kaydı</h2>
-                                <button onClick={() => { setShowModal(false); }} className="text-gray-400 hover:text-gray-600">
+                                <h2 className="text-2xl font-bold text-gray-900">
+                                    {existingReportId ? 'Raporu Düzenle' : 'Yeni Rapor'} - {selectedShift}
+                                </h2>
+                                <button
+                                    onClick={() => {
+                                        setShowReportModal(false);
+                                        setExistingReportId(null);
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="flex justify-center">
-                                    <div className="w-full bg-gray-50 p-6 border border-gray-200 shadow-sm" style={{ maxWidth: 794 }}>
-                                        <div className="bg-white p-6" style={{ height: 1123 }}>
-                                            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full h-full resize-none p-4 text-sm leading-relaxed" placeholder="Olayın ayrıntılarını buraya A4 formatında yazın..."></textarea>
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* Editor Toolbar */}
+                            <div className="mb-4 flex flex-wrap gap-2 p-2 bg-gray-100 rounded-lg">
+                                <button
+                                    onClick={() => editor.chain().focus().toggleBold().run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    <strong>B</strong>
+                                </button>
+                                <button
+                                    onClick={() => editor.chain().focus().toggleItalic().run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    <em>I</em>
+                                </button>
+                                <button
+                                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    H1
+                                </button>
+                                <button
+                                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    H2
+                                </button>
+                                <button
+                                    onClick={() => editor.chain().focus().toggleBulletList().run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    • Liste
+                                </button>
+                                <button
+                                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                                    className={`px-3 py-1 rounded ${editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
+                                >
+                                    1. Liste
+                                </button>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">Kaydet</button>
-                                    <button type="button" onClick={() => { setShowModal(false); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
-                                </div>
-                            </form>
+                            {/* Editor */}
+                            <div className="border border-gray-300 rounded-lg bg-white mb-4 min-h-[400px]">
+                                <EditorContent editor={editor} />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={handleReportSubmit}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
+                                >
+                                    {existingReportId ? 'Güncelle ve Yeni Word Oluştur' : 'Raporu Kaydet ve Word\'e Çevir'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowReportModal(false);
+                                        setExistingReportId(null);
+                                    }}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                >
+                                    İptal
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
