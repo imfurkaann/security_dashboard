@@ -1,12 +1,16 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { logDataChange } from '../utils/auditLog';
+import { isValidUUID, sanitizeInput, isValidLength, normalizePlate } from '../utils/validation';
+import { getClientIp } from '../middleware/rateLimiter';
+import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
 
 /**
  * Get all vehicles
  * GET /api/vehicles
  */
-export const getVehicles = async (req: Request, res: Response): Promise<void> => {
+export const getVehicles = async (_req: Request, res: Response): Promise<void> => {
     try {
         const query = `
             SELECT id, brand, plate, status, is_active, created_at
@@ -29,7 +33,7 @@ export const getVehicles = async (req: Request, res: Response): Promise<void> =>
  * Get all managers
  * GET /api/vehicles/managers
  */
-export const getManagers = async (req: Request, res: Response): Promise<void> => {
+export const getManagers = async (_req: Request, res: Response): Promise<void> => {
     try {
         const query = `
             SELECT id, first_name, last_name, title
@@ -52,7 +56,7 @@ export const getManagers = async (req: Request, res: Response): Promise<void> =>
  * Get all vehicle records with joins
  * GET /api/vehicles/records
  */
-export const getVehicleRecords = async (req: Request, res: Response): Promise<void> => {
+export const getVehicleRecords = async (_req: Request, res: Response): Promise<void> => {
     try {
         const query = `
             SELECT 
@@ -79,6 +83,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             INNER JOIN personnel p ON vr.personnel_id = p.id
             WHERE vr.deleted_at IS NULL
             ORDER BY vr.given_date DESC, vr.given_time DESC
+            LIMIT 1000
         `;
         const result = await pool.query(query);
 
@@ -138,9 +143,8 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Validate UUID format for vehicle_id
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!uuidRegex.test(vehicle_id)) {
+        // GÜVENLİK: Validate UUID format for vehicle_id
+        if (!isValidUUID(vehicle_id)) {
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz araç kimliği'
@@ -148,8 +152,8 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // If manager_id is provided, validate UUID format
-        if (manager_id && !uuidRegex.test(manager_id)) {
+        // GÜVENLİK: If manager_id is provided, validate UUID format
+        if (manager_id && !isValidUUID(manager_id)) {
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz müdür kimliği'
@@ -265,9 +269,51 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
 
         await pool.query('COMMIT');
 
+        // GÜVENLİK: Audit log kaydı
+        const clientIp = getClientIp(req);
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'INSERT',
+            null,
+            { vehicle_id, manager_id, destination, personnel_id },
+            personnel_id || null,
+            clientIp
+        );
+
+        // WhatsApp mesaj şablonu oluştur
+        let whatsappMessage = '';
+        try {
+            const vehicleInfo = await pool.query(
+                'SELECT plate FROM vehicles WHERE id = $1',
+                [vehicle_id]
+            );
+            const vehiclePlate = vehicleInfo.rows[0]?.plate || 'Bilinmeyen';
+
+            const recordInfo = await pool.query(
+                'SELECT given_date, given_time FROM vehicle_records WHERE id = $1',
+                [id]
+            );
+            const givenDate = recordInfo.rows[0]?.given_date || new Date().toISOString().split('T')[0];
+            const timeString = recordInfo.rows[0]?.given_time || new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
+            // Sadece saat:dakika formatına çevir (HH:MM)
+            const givenTime = timeString.substring(0, 5);
+
+            whatsappMessage = createVehicleRecordMessage({
+                vehiclePlate,
+                managerName: resolvedManagerName,
+                givenDate,
+                givenTime,
+                destination
+            });
+        } catch (error) {
+            console.error('WhatsApp mesaj oluşturma hatası:', error);
+        }
+
         res.status(201).json({
             success: true,
-            message: 'Araç kaydı oluşturuldu'
+            message: 'Araç kaydı oluşturuldu',
+            whatsappMessage
         });
     } catch (error) {
         await pool.query('ROLLBACK');
@@ -286,6 +332,15 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
 export const returnVehicle = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kayıt ID formatı'
+            });
+            return;
+        }
 
         // Get record and vehicle info
         const recordCheck = await pool.query(
@@ -332,9 +387,50 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
 
         await pool.query('COMMIT');
 
+        // GÜVENLİK: Audit log kaydı
+        const clientIp = getClientIp(req);
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'UPDATE',
+            { status: 'in_use' },
+            { status: 'returned', return_date: 'CURRENT_DATE' },
+            req.user?.userId || null,
+            clientIp
+        );
+
+        // WhatsApp mesaj şablonu oluştur
+        let whatsappMessage = '';
+        try {
+            // Araç ve müdür bilgilerini al
+            const recordInfo = await pool.query(
+                `SELECT vr.manager_name, vr.return_time, v.plate
+                 FROM vehicle_records vr
+                 INNER JOIN vehicles v ON vr.vehicle_id = v.id
+                 WHERE vr.id = $1`,
+                [id]
+            );
+
+            if (recordInfo.rows.length > 0) {
+                const vehiclePlate = recordInfo.rows[0].plate || 'Bilinmeyen';
+                const managerName = recordInfo.rows[0].manager_name || 'Bilinmeyen';
+                const timeString = recordInfo.rows[0].return_time || new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
+                const returnTime = timeString.substring(0, 5);
+
+                whatsappMessage = createVehicleReturnMessage({
+                    vehiclePlate,
+                    managerName,
+                    returnTime
+                });
+            }
+        } catch (error) {
+            console.error('WhatsApp mesaj oluşturma hatası:', error);
+        }
+
         res.status(200).json({
             success: true,
-            message: 'Araç iadesi kaydedildi'
+            message: 'Araç iadesi kaydedildi',
+            whatsappMessage
         });
     } catch (error) {
         await pool.query('ROLLBACK');

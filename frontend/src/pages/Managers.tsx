@@ -1,26 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
+import { formatDate, formatTime } from '../utils/dateUtils';
+import { isValidLength } from '../utils/validation';
+import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
-interface ManagerRecord {
-    id: string;
-    manager_id?: string | null;
-    manager: string | null; // full name from backend (first + last)
-    manager_title: string | null;
-    entry_date: string | null; // ISO date string
-    entry_time: string | null; // time string e.g. '13:45:00'
-    exit_date?: string | null;
-    exit_time?: string | null;
-    status: string | null; // 'inside' | 'exited'
-    notes?: string | null;
-    created_at?: string | null;
-}
-
+// Personnel type for manager list
 interface Personnel {
     id: string;
     full_name: string;
+    first_name?: string;
+    last_name?: string;
+    title?: string;
     department?: string | null;
     phone?: string | null;
     email?: string | null;
@@ -32,58 +23,57 @@ export default function Managers() {
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const navigate = useNavigate();
-
     const [managersList, setManagersList] = useState<Personnel[]>([]);
     const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
-    const [notes, setNotes] = useState<string>('');
-    const [filterMode, setFilterMode] = useState<'all' | 'inside' | 'exited'>('all');
+    const [notes, setNotes] = useState('');
+    const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
+    const navigate = useNavigate();
 
-    useEffect(() => {
-        fetchData();
-        fetchManagers();
-    }, []);
-
-    const fetchData = async () => {
+    // Fetch manager records
+    const fetchData = useCallback(async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/managers/records`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get('/managers/records');
             setRecords(res.data || []);
         } catch (err) {
             console.error('Müdür verisi yüklenemedi', err);
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    const fetchManagers = async () => {
+    // Fetch managers list
+    const fetchManagers = useCallback(async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/vehicles/managers`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get('/vehicles/managers');
             setManagersList(res.data || []);
         } catch (err) {
             console.warn('Müdür listesi yüklenemedi', err);
         }
-    };
+    }, []);
 
-    const resetForm = () => {
+    useEffect(() => {
+        fetchData();
+        fetchManagers();
+    }, [fetchData, fetchManagers]);
+
+    // Reset form to initial state
+    const resetForm = useCallback(() => {
         setIsEditing(false);
         setEditingId(null);
         setSelectedManagerId(null);
         setNotes('');
-    };
+    }, []);
 
-    const openModalForNew = () => {
+    // Open modal for new record
+    const openModalForNew = useCallback(() => {
         resetForm();
         setShowModal(true);
-    };
+    }, [resetForm]);
 
-    const openModalForEdit = (rec: ManagerRecord) => {
-        // try to resolve the manager id by matching first+last from managersList
+    // Open modal for editing
+    const openModalForEdit = useCallback((rec: ManagerRecord) => {
         const found = managersList.find(p => {
-            const name = (p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name}` : p.full_name;
+            const name = p.first_name ? `${p.first_name} ${p.last_name}` : p.full_name;
             return name === (rec.manager || '');
         });
         setSelectedManagerId(found ? found.id : null);
@@ -91,90 +81,141 @@ export default function Managers() {
         setIsEditing(true);
         setEditingId(rec.id);
         setShowModal(true);
-    };
+    }, [managersList]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Form submission handler
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-        try {
-            const token = localStorage.getItem('token');
-            if (!selectedManagerId) {
-                alert('Lütfen listeden bir müdür seçin.');
-                return;
-            }
 
-            const payload: any = { manager_id: selectedManagerId, notes: notes || null };
+        if (!selectedManagerId) {
+            alert('Lütfen listeden bir müdür seçin.');
+            return;
+        }
+
+        // Frontend validasyon
+        if (!isValidLength(notes, 0, 1000)) {
+            alert('Açıklama en fazla 1000 karakter olabilir');
+            return;
+        }
+
+        try {
+            const payload = {
+                manager_id: selectedManagerId,
+                notes: notes?.trim() || null
+            };
 
             if (isEditing && editingId) {
-                await axios.put(`${API_URL}/managers/records/${editingId}`, payload, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                await api.put(`/managers/records/${editingId}`, payload);
             } else {
-                await axios.post(`${API_URL}/managers/records`, payload, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                await api.post('/managers/records', payload);
             }
 
             setShowModal(false);
             resetForm();
             fetchData();
-        } catch (error: any) {
-            alert(error?.response?.data?.message || 'İşlem başarısız');
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'İşlem başarısız');
         }
-    };
+    }, [selectedManagerId, notes, isEditing, editingId, resetForm, fetchData]);
 
-    const handleExit = async (id: string) => {
+    // Handle manager exit
+    const handleExit = useCallback(async (id: string) => {
         if (!confirm('Seçili müdür için çıkış kaydı oluşturulsun mu?')) return;
+
         try {
-            const token = localStorage.getItem('token');
-            await axios.post(`${API_URL}/managers/records/${id}/exit`, null, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            // Refresh data
+            await api.post(`/managers/records/${id}/exit`, {});
             fetchData();
-        } catch (error: any) {
-            alert(error?.response?.data?.message || 'Çıkış işlemi başarısız');
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Çıkış işlemi başarısız');
         }
-    };
+    }, [fetchData]);
 
-    const formatDate = (d: string | null) => {
-        if (!d) return '-';
-        const date = new Date(d);
-        return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
-    };
+    // Memoized statistics
+    const stats = useMemo(() => {
+        const today = new Date();
+        const todayRecords = records.filter(r => {
+            const entryDate = r.entry_date ? new Date(r.entry_date) : null;
+            const exitDate = r.exit_date ? new Date(r.exit_date) : null;
+            const isEntryToday = entryDate &&
+                entryDate.getDate() === today.getDate() &&
+                entryDate.getMonth() === today.getMonth() &&
+                entryDate.getFullYear() === today.getFullYear();
+            const isExitToday = exitDate &&
+                exitDate.getDate() === today.getDate() &&
+                exitDate.getMonth() === today.getMonth() &&
+                exitDate.getFullYear() === today.getFullYear();
+            return isEntryToday || isExitToday;
+        });
+        const todayExits = records.filter(r => {
+            const exitDate = r.exit_date ? new Date(r.exit_date) : null;
+            return exitDate &&
+                exitDate.getDate() === today.getDate() &&
+                exitDate.getMonth() === today.getMonth() &&
+                exitDate.getFullYear() === today.getFullYear();
+        });
+        return {
+            totalManagers: managersList.length,
+            insideCount: records.filter(r => r.status === 'inside').length,
+            todayExitCount: todayExits.length,
+            todayCount: todayRecords.length,
+        };
+    }, [records, managersList]);
 
-    const formatTime = (t: string | null) => {
-        if (!t) return '-';
-        // t expected like '13:45:00' or '13:45:00.123'
-        return t.split('.')[0];
-    };
+    // Memoized filtered records
+    const filteredRecords = useMemo(() => {
+        return records.filter(r => {
+            if (filterMode === 'all') {
+                // Bugünün kayıtları: bugün giriş yapan veya bugün çıkış yapan
+                const entryDate = r.entry_date ? new Date(r.entry_date) : null;
+                const exitDate = r.exit_date ? new Date(r.exit_date) : null;
+                const today = new Date();
+                const isEntryToday = entryDate &&
+                    entryDate.getDate() === today.getDate() &&
+                    entryDate.getMonth() === today.getMonth() &&
+                    entryDate.getFullYear() === today.getFullYear();
+                const isExitToday = exitDate &&
+                    exitDate.getDate() === today.getDate() &&
+                    exitDate.getMonth() === today.getMonth() &&
+                    exitDate.getFullYear() === today.getFullYear();
+                return isEntryToday || isExitToday;
+            }
+            if (filterMode === 'inside') return r.status === 'inside'; // Aktif içeridekiler
+            if (filterMode === 'exited') {
+                // Bugün çıkış yapanlar
+                const exitDate = r.exit_date ? new Date(r.exit_date) : null;
+                const today = new Date();
+                return exitDate &&
+                    exitDate.getDate() === today.getDate() &&
+                    exitDate.getMonth() === today.getMonth() &&
+                    exitDate.getFullYear() === today.getFullYear();
+            }
+            return true;
+        });
+    }, [records, filterMode]);
 
-    const insideCount = records.filter(r => r.status === 'inside').length;
-    const exitedCount = records.filter(r => r.status === 'exited').length;
-    // Total managers should reflect DB table of managers (managersList)
-    const totalCount = managersList.length;
+    // Memoized available managers for select
+    const selectManagers = useMemo(() => {
+        const insideManagerIds = new Set(
+            records.filter(r => r.status === 'inside' && r.manager_id).map(r => r.manager_id)
+        );
+        let available = managersList.filter(m => !insideManagerIds.has(m.id));
 
-    // Filter records according to selected filterMode
-    const filteredRecords = records.filter(r => {
-        if (filterMode === 'all') return true;
-        if (filterMode === 'inside') return r.status === 'inside';
-        if (filterMode === 'exited') return r.status === 'exited';
-        return true;
-    });
-
-    // For the select, exclude managers who currently have an 'inside' record
-    const insideManagerIds = new Set(records.filter(r => r.status === 'inside' && r.manager_id).map(r => r.manager_id));
-    let selectManagers = managersList.filter(m => !insideManagerIds.has(m.id));
-    // If editing, ensure the currently edited record's manager is included in select options
-    if (isEditing && editingId) {
-        const editingRecord = records.find(r => r.id === editingId);
-        if (editingRecord && editingRecord.manager_id) {
-            const exists = selectManagers.find(m => m.id === editingRecord.manager_id);
-            if (!exists) {
-                const mgr = managersList.find(m => m.id === editingRecord.manager_id);
-                if (mgr) selectManagers = [mgr, ...selectManagers];
+        // If editing, include the current record's manager
+        if (isEditing && editingId) {
+            const editingRecord = records.find(r => r.id === editingId);
+            if (editingRecord?.manager_id) {
+                const exists = available.find(m => m.id === editingRecord.manager_id);
+                if (!exists) {
+                    const mgr = managersList.find(m => m.id === editingRecord.manager_id);
+                    if (mgr) available = [mgr, ...available];
+                }
             }
         }
-    }
+
+        return available;
+    }, [managersList, records, isEditing, editingId]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -209,12 +250,12 @@ export default function Managers() {
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-purple-600 text-sm font-medium">Toplam Müdür</p>
-                                <p className="text-3xl font-bold text-purple-900">{totalCount}</p>
+                                <p className="text-purple-600 text-sm font-medium">Toplam Müdür Sayısı</p>
+                                <p className="text-3xl font-bold text-purple-900">{stats.totalManagers}</p>
                             </div>
                             <div className="p-3 bg-purple-100 rounded-lg">
                                 <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
                             </div>
                         </div>
@@ -223,8 +264,8 @@ export default function Managers() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-green-600 text-sm font-medium">İçerideki Müdür</p>
-                                <p className="text-3xl font-bold text-green-900">{insideCount}</p>
+                                <p className="text-green-600 text-sm font-medium">Aktif İçerideki Müdür Sayısı</p>
+                                <p className="text-3xl font-bold text-green-900">{stats.insideCount}</p>
                             </div>
                             <div className="p-3 bg-green-100 rounded-lg">
                                 <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,8 +278,8 @@ export default function Managers() {
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-red-600 text-sm font-medium">Çıkış Yapan Müdür</p>
-                                <p className="text-3xl font-bold text-red-900">{exitedCount}</p>
+                                <p className="text-red-600 text-sm font-medium">Bugün Çıkış Yapan Müdür Sayısı</p>
+                                <p className="text-3xl font-bold text-red-900">{stats.todayExitCount}</p>
                             </div>
                             <div className="p-3 bg-red-100 rounded-lg">
                                 <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -257,21 +298,21 @@ export default function Managers() {
                                 onClick={() => setFilterMode('all')}
                                 className={`px-4 py-2 rounded-lg ${filterMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
-                                Tüm Kayıtlar ({records.length})
+                                Bugünün Kayıtları ({stats.todayCount})
                             </button>
 
                             <button
                                 onClick={() => setFilterMode('inside')}
                                 className={`px-4 py-2 rounded-lg ${filterMode === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
-                                İçeridekiler ({insideCount})
+                                Aktif İçeridekiler ({stats.insideCount})
                             </button>
 
                             <button
                                 onClick={() => setFilterMode('exited')}
                                 className={`px-4 py-2 rounded-lg ${filterMode === 'exited' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
-                                Çıkış Yapanlar ({exitedCount})
+                                Bugün Çıkış Yapanlar ({stats.todayExitCount})
                             </button>
                         </div>
                     </div>
@@ -363,24 +404,22 @@ export default function Managers() {
                                     }} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                                         <option value="">-- Lütfen bir müdür seçin --</option>
                                         {selectManagers.map(p => (
-                                            <option key={p.id} value={p.id}>{(p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name} - ${(p as any).title}` : p.full_name}</option>
+                                            <option key={p.id} value={p.id}>{p.first_name ? `${p.first_name} ${p.last_name} - ${p.title}` : p.full_name}</option>
                                         ))}
                                     </select>
 
-                                    {selectedManagerId && (
-                                        (() => {
-                                            const p = managersList.find(x => x.id === selectedManagerId);
-                                            if (!p) return null;
-                                            const name = (p as any).first_name ? `${(p as any).first_name} ${(p as any).last_name}` : p.full_name;
-                                            const title = (p as any).title || p.department || '';
-                                            return (
-                                                <div className="mt-4 p-3 border border-gray-100 rounded bg-gray-50">
-                                                    <div className="text-sm font-medium text-gray-900">{name}</div>
-                                                    <div className="text-xs text-gray-600">{title || '-'} • {p.phone || '-'} • {p.email || '-'}</div>
-                                                </div>
-                                            );
-                                        })()
-                                    )}
+                                    {selectedManagerId && (() => {
+                                        const p = managersList.find(x => x.id === selectedManagerId);
+                                        if (!p) return null;
+                                        const name = p.first_name ? `${p.first_name} ${p.last_name}` : p.full_name;
+                                        const title = p.title || p.department || '';
+                                        return (
+                                            <div className="mt-4 p-3 border border-gray-100 rounded bg-gray-50">
+                                                <div className="text-sm font-medium text-gray-900">{name}</div>
+                                                <div className="text-xs text-gray-600">{title || '-'} • {p.phone || '-'} • {p.email || '-'}</div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div>

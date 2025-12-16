@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { useState, useCallback, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import api from '../utils/api';
+import { STORAGE_KEYS } from '../constants';
+import type { AxiosError } from 'axios';
+
+// Error messages
+const ERROR_MESSAGES = {
+    DEFAULT: 'Giriş başarısız. Lütfen tekrar deneyin.',
+    VALIDATION: 'Kullanıcı adı ve şifre gereklidir.',
+    RATE_LIMIT: 'Çok fazla deneme yaptınız. Lütfen bekleyin.',
+} as const;
 
 export default function Login() {
     const [username, setUsername] = useState('');
@@ -12,23 +21,46 @@ export default function Login() {
     const navigate = useNavigate();
     const { theme, toggleTheme } = useTheme();
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Form validation
+    const validateForm = useCallback((): boolean => {
+        if (!username.trim() || !password.trim()) {
+            setError(ERROR_MESSAGES.VALIDATION);
+            return false;
+        }
+        return true;
+    }, [username, password]);
+
+    // Handle form submission
+    const handleSubmit = useCallback(async (e: FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (!validateForm()) return;
+
         setLoading(true);
 
         try {
-            const response = await api.post('/auth/login', { username, password });
+            const response = await api.post('/auth/login', {
+                username: username.trim(),
+                password
+            });
+
             const { token, user } = response.data.data;
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
             navigate('/dashboard');
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Giriş başarısız. Lütfen tekrar deneyin.');
+        } catch (err) {
+            const axiosError = err as AxiosError<{ message?: string }>;
+
+            if (axiosError.response?.status === 429) {
+                setError(ERROR_MESSAGES.RATE_LIMIT);
+            } else {
+                setError(axiosError.response?.data?.message || ERROR_MESSAGES.DEFAULT);
+            }
         } finally {
             setLoading(false);
         }
-    };
+    }, [username, password, validateForm, navigate]);
 
     return (
         <div className="min-h-screen bg-gray-900 dark:bg-gray-950 flex items-center justify-center p-4 transition-colors duration-300 relative overflow-hidden">
