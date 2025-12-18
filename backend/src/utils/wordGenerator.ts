@@ -3,36 +3,36 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * HTML içeriğini Word dosyasına çevirir
- * @param htmlContent - HTML formatında rapor içeriği
- * @param shiftLabel - Vardiya etiketi (00:00-08:00 vb.)
- * @param reporterName - Raporu kaydeden kişinin adı
- * @returns Word dosyasının tam yolu
+ * HTML içeriğini Word dosyasına çevirir ve hiyerarşik klasör yapısına kaydeder.
+ * Yapı: reports/Yil-Ay/Gun/rapor_vardiya.docx
  */
 export async function createWordFromHtml(htmlContent: string, shiftLabel: string, reporterName?: string): Promise<string> {
     try {
-        // HTML'i basit metin formatına çevir
         const plainText = htmlToPlainText(htmlContent);
-
-        // Debug için
-        console.log('📝 HTML İçerik:', htmlContent);
-        console.log('📄 Plain Text:', plainText);
-
-        // Dosya adı oluştur (tarih_vardiya.docx) - Her vardiya için günlük tek dosya
         const now = new Date();
-        const dateStr = now.toISOString().split('T')[0]; // 2025-12-16
-        const safeShiftLabel = shiftLabel.replace(/:/g, '-'); // 00-00-08-00
-        const fileName = `rapor_${dateStr}_${safeShiftLabel}.docx`;
 
-        // Raporlar klasörünü oluştur
-        const reportsDir = path.join(process.cwd(), 'reports');
-        if (!fs.existsSync(reportsDir)) {
-            fs.mkdirSync(reportsDir, { recursive: true });
+        // 1. Klasör yapısı değişkenlerini hazırla
+        const year = now.getFullYear();
+        const monthNames = ["Ocak", "Subat", "Mart", "Nisan", "Mayis", "Haziran", "Temmuz", "Agustos", "Eylul", "Ekim", "Kasim", "Aralik"];
+        const monthName = monthNames[now.getMonth()];
+        const monthFolderName = `${year}-${monthName}`;
+        const dayFolderName = String(now.getDate()).padStart(2, '0');
+
+        // 2. Klasör yolunu oluştur
+        const reportsBaseDir = path.join(process.cwd(), 'reports');
+        const targetDir = path.join(reportsBaseDir, monthFolderName, dayFolderName);
+
+        // 3. Klasörleri oluştur (İzin hatasını önlemek için recursive: true)
+        if (!fs.existsSync(targetDir)) {
+            fs.mkdirSync(targetDir, { recursive: true, mode: 0o777 });
         }
 
-        const filePath = path.join(reportsDir, fileName);
+        // 4. Güvenli dosya adı oluştur (Saatlerdeki ":" karakterini "-" ile değiştirir)
+        const safeShiftLabel = shiftLabel.replace(/:/g, '-');
+        const fileName = `rapor_${safeShiftLabel}.docx`;
+        const filePath = path.join(targetDir, fileName);
 
-        // Word belgesi oluştur
+        // 5. Word Belgesi Tasarımı
         const doc = new Document({
             sections: [{
                 properties: {},
@@ -77,15 +77,22 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
             }],
         });
 
-        // Dosyayı kaydet
+        // 6. Dosyayı tampon belleğe al ve kaydet
         const buffer = await Packer.toBuffer(doc);
         fs.writeFileSync(filePath, buffer);
 
-        console.log(`✅ Word dosyası oluşturuldu: ${filePath}`);
+        console.log(`✅ Word dosyası başarıyla kaydedildi: ${filePath}`);
+
         return filePath;
-    } catch (error) {
-        console.error('Word dosyası oluşturma hatası:', error);
-        throw new Error('Word dosyası oluşturulamadı');
+    } catch (error: unknown) {
+        // TypeScript unknown tip hatası çözümü
+        if (error instanceof Error) {
+            console.error('❌ Word dosyası oluşturma hatası:', error.message);
+            throw new Error(`Word dosyası oluşturulamadı: ${error.message}`);
+        } else {
+            console.error('❌ Bilinmeyen bir hata oluştu');
+            throw new Error('Word dosyası oluşturulurken beklenmedik bir hata oluştu.');
+        }
     }
 }
 
@@ -94,48 +101,28 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
  */
 function htmlToPlainText(html: string): string {
     let text = html;
-
-    // Birden fazla kez encode edilmiş olabilir, 3 kere decode et
+    // HTML entity'lerini temizle
     for (let i = 0; i < 3; i++) {
         text = text
-            // HTML entity'lerini çevir
             .replace(/&amp;/gi, '&')
             .replace(/&lt;/gi, '<')
             .replace(/&gt;/gi, '>')
             .replace(/&quot;/gi, '"')
             .replace(/&#39;/gi, "'")
-            .replace(/&#x2F;/gi, '/')
             .replace(/&nbsp;/gi, ' ')
-            .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec))
-            .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+            .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
     }
 
-    // HTML etiketlerini kaldır (satır sonları ekleyerek)
+    // HTML etiketlerini temizle
     text = text
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<\/p>/gi, '\n\n')
         .replace(/<p[^>]*>/gi, '')
-        .replace(/<\/h[1-6]>/gi, '\n\n')
-        .replace(/<h[1-6][^>]*>/gi, '')
         .replace(/<\/li>/gi, '\n')
         .replace(/<li[^>]*>/gi, '• ')
-        .replace(/<\/ul>/gi, '\n')
-        .replace(/<ul[^>]*>/gi, '')
-        .replace(/<\/ol>/gi, '\n')
-        .replace(/<ol[^>]*>/gi, '')
-        .replace(/<\/div>/gi, '\n')
-        .replace(/<div[^>]*>/gi, '')
-        .replace(/<strong[^>]*>/gi, '')
-        .replace(/<\/strong>/gi, '')
-        .replace(/<em[^>]*>/gi, '')
-        .replace(/<\/em>/gi, '')
-        .replace(/<[^>]+>/g, ''); // Tüm kalan HTML etiketlerini kaldır
-
-    // Fazla boşlukları temizle
-    text = text
-        .replace(/[ \t]+/g, ' ') // Birden fazla boşluğu tek boşluğa çevir
-        .replace(/\n\s*\n\s*\n+/g, '\n\n') // 3+ satır sonu -> 2 satır sonu
-        .replace(/^\s+/gm, '') // Satır başı boşlukları temizle
+        .replace(/<[^>]+>/g, '') // Kalan tüm etiketleri sil
+        .replace(/[ \t]+/g, ' ')  // Fazla boşlukları temizle
+        .replace(/\n\s*\n\s*\n+/g, '\n\n')
         .trim();
 
     return text;
@@ -146,18 +133,11 @@ function htmlToPlainText(html: string): string {
  */
 function parseHtmlToParagraphs(text: string): Paragraph[] {
     const lines = text.split('\n');
-    const paragraphs: Paragraph[] = [];
-
-    for (const line of lines) {
-        if (line.trim()) {
-            paragraphs.push(new Paragraph({
+    return lines
+        .filter(line => line.trim().length > 0) // Boş satırları filtrele
+        .map(line => {
+            return new Paragraph({
                 children: [new TextRun(line.trim())],
-            }));
-        } else {
-            // Boş satır
-            paragraphs.push(new Paragraph({ text: '' }));
-        }
-    }
-
-    return paragraphs;
+            });
+        });
 }
