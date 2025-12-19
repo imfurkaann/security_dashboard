@@ -86,6 +86,12 @@ const FireAlarmIcon = ({ size = 12 }: { size?: number }) => (
     </svg>
 );
 
+const SgkIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
 export default function Dashboard() {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
@@ -224,7 +230,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-3 gap-4 mb-6">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
@@ -246,13 +252,6 @@ export default function Dashboard() {
                         iconBgColor="bg-red-500/30"
                         icon={<FireAlarmIcon size={8} />}
                     />
-                    <StatCard
-                        title="İçerideki Müdürler"
-                        value={managersInside}
-                        gradient="from-purple-600 to-purple-700"
-                        iconBgColor="bg-purple-500/30"
-                        icon={<ManagerIcon size={8} />}
-                    />
                 </div>
 
                 {/* Navigation Cards */}
@@ -272,6 +271,14 @@ export default function Dashboard() {
                         hoverGradient="hover:from-green-700 hover:to-green-800"
                         icon={<VisitorIcon />}
                         onClick={() => navigate('/visitors')}
+                    />
+                    <NavCard
+                        title="SGK Kayıtları"
+                        description="SGK kayıtlarını görüntüle ve yönet"
+                        gradient="from-cyan-600 to-cyan-700"
+                        hoverGradient="hover:from-cyan-700 hover:to-cyan-800"
+                        icon={<SgkIcon />}
+                        onClick={() => navigate('/sgk')}
                     />
                     <NavCard
                         title="Müdür Yönetimi"

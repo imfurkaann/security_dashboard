@@ -8,6 +8,7 @@ import Visitors from './pages/Visitors';
 import Managers from './pages/Managers';
 import Incidents from './pages/Incidents';
 import FireAlarms from './pages/FireAlarms';
+import Sgk from './pages/Sgk';
 
 function App() {
   return (
@@ -46,6 +47,11 @@ function App() {
           <Route path="/fire-alarms" element={
             <ProtectedRoute>
               <FireAlarms />
+            </ProtectedRoute>
+          } />
+          <Route path="/sgk" element={
+            <ProtectedRoute>
+              <Sgk />
             </ProtectedRoute>
           } />
 
