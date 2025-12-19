@@ -330,6 +330,143 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
+ * Update SGK record
+ * PUT /api/sgk/records/:id
+ */
+export const updateSgkRecord = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { tc_no, full_name, company_name, notes } = req.body;
+        const file = req.file;
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID' });
+            return;
+        }
+
+        // Mevcut kaydı al
+        const existingQuery = 'SELECT * FROM sgk_records WHERE id = $1 AND deleted_at IS NULL';
+        const existingResult = await pool.query(existingQuery, [id]);
+
+        if (existingResult.rows.length === 0) {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        const oldData = existingResult.rows[0];
+
+        // TC validation
+        if (!tc_no || typeof tc_no !== 'string') {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(400).json({ success: false, message: 'TC Kimlik No zorunludur' });
+            return;
+        }
+
+        const cleanTC = tc_no.replace(/\D/g, '');
+        if (cleanTC.length !== 11) {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
+            return;
+        }
+
+        // Sanitization
+        const sanitizedFullName = sanitizeInput(full_name?.trim() || '');
+        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '');
+        const sanitizedNotes = sanitizeInput(notes?.trim() || '');
+
+        if (!sanitizedFullName) {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
+            return;
+        }
+
+        // TC'yi hash'le (KVKK uyumu)
+        const hashedTC = hashTC(cleanTC);
+
+        // Aynı TC ile başka kayıt var mı kontrol et (kendi ID'si hariç)
+        const tcCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND id != $2 AND deleted_at IS NULL';
+        const tcCheckResult = await pool.query(tcCheckQuery, [hashedTC, id]);
+
+        if (tcCheckResult.rows.length > 0) {
+            if (file?.filename) deleteFile(file.filename);
+            res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait başka bir kayıt zaten mevcut' });
+            return;
+        }
+
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
+        let paramCounter = 1;
+
+        // TC güncellenebilir
+        updateFields.push(`hashed_tc = $${paramCounter++}`);
+        updateValues.push(hashedTC);
+
+        // Ad Soyad güncellenebilir
+        updateFields.push(`full_name = $${paramCounter++}`);
+        updateValues.push(sanitizedFullName);
+
+        // Firma adı güncellenebilir
+        updateFields.push(`company_name = $${paramCounter++}`);
+        updateValues.push(sanitizedCompanyName);
+
+        // Notlar güncellenebilir
+        updateFields.push(`notes = $${paramCounter++}`);
+        updateValues.push(sanitizedNotes);
+
+        // Dosya güncellenirse eski dosyayı sil
+        if (file?.filename) {
+            updateFields.push(`file_path = $${paramCounter++}`);
+            updateValues.push(file.filename);
+
+            // Eski dosyayı sil
+            try {
+                deleteFile(oldData.file_path);
+            } catch (fileError) {
+                console.error('Old file deletion error:', fileError);
+            }
+        }
+
+        updateFields.push(`updated_at = $${paramCounter++}`);
+        updateValues.push(new Date());
+
+        updateValues.push(id);
+
+        const updateQuery = `
+            UPDATE sgk_records 
+            SET ${updateFields.join(', ')}
+            WHERE id = $${paramCounter} AND deleted_at IS NULL
+            RETURNING *
+        `;
+
+        const result = await pool.query(updateQuery, updateValues);
+
+        // Audit log
+        await logDataChange(
+            'sgk_records',
+            id,
+            'UPDATE',
+            oldData,
+            result.rows[0],
+            personnel_id,
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'SGK kaydı başarıyla güncellendi',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Update SGK record error:', error);
+        res.status(500).json({ success: false, message: 'SGK kaydı güncellenirken hata oluştu' });
+    }
+};
+
+/**
  * Delete SGK record and file
  * DELETE /api/sgk/records/:id
  */

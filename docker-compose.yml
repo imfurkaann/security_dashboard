@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: security_db
     restart: unless-stopped
     environment:
@@ -14,6 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/local_backup.sql:/docker-entrypoint-initdb.d/01-backup.sql:ro
+      - ./database/migrations/012_create_sgk_records.sql:/docker-entrypoint-initdb.d/02-sgk.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -45,6 +46,7 @@ services:
       TZ: Europe/Istanbul
     volumes:
       - ./backend/reports:/app/reports # Raporların silinmemesi için local klasöre bağladık
+      - ./backend/sgk_kayitlari:/app/sgk_kayitlari # SGK dosyalarının silinmemesi için local klasöre bağladık
     ports:
       - "5000:5000"
     depends_on:

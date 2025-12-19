@@ -9,7 +9,7 @@ interface JWTPayload {
 
 // GÜVENLİK: JWT_SECRET .env dosyasından alınmalı, yoksa uygulama çalışmamalı
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRE = process.env.JWT_EXPIRE || '8h'; // 7 gün çok uzun, 8 saat daha güvenli
+const JWT_EXPIRE = process.env.JWT_EXPIRE || '30d'; // Kullanıcı isteği: Otomatik çıkış devre dışı
 
 if (!JWT_SECRET) {
     console.error('❌ KRİTİK GÜVENLİK HATASI: JWT_SECRET ortam değişkeni tanımlanmamış!');

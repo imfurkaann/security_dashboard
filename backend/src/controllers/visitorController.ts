@@ -30,10 +30,13 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
                 vr.exit_time,
                 vr.status,
                 vr.created_at,
-                p.first_name as personnel_first_name,
-                p.last_name as personnel_last_name
+                pe.first_name as entry_by_first_name,
+                pe.last_name as entry_by_last_name,
+                px.first_name as exit_by_first_name,
+                px.last_name as exit_by_last_name
             FROM visitor_records vr
-            LEFT JOIN personnel p ON vr.personnel_id = p.id
+            LEFT JOIN personnel pe ON vr.entry_by = pe.id
+            LEFT JOIN personnel px ON vr.exit_by = px.id
             WHERE vr.deleted_at IS NULL
             ORDER BY vr.entry_date DESC, vr.entry_time DESC
             LIMIT 1000
@@ -56,7 +59,8 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
             exit_date: row.exit_date,
             exit_time: row.exit_time,
             status: row.status,
-            personnel: (row.personnel_first_name || row.personnel_last_name) ? `${row.personnel_first_name || ''} ${row.personnel_last_name || ''}`.trim() : null,
+            entry_by: (row.entry_by_first_name || row.entry_by_last_name) ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim() : null,
+            exit_by: (row.exit_by_first_name || row.exit_by_last_name) ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim() : null,
             created_at: row.created_at
         }));
 
@@ -143,7 +147,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
                 person_count, phone, notes, subcontractor_worker, for_electric_station,
-                personnel_id, entry_date, entry_time, status, send_whatsapp
+                entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                 CURRENT_DATE, CURRENT_TIME, 'inside', $12
@@ -322,9 +326,17 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
+        const personnel_id = req.user?.userId;
+
         await pool.query(
-            `UPDATE visitor_records SET exit_date = CURRENT_DATE, exit_time = CURRENT_TIME, status = 'exited', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
-            [id]
+            `UPDATE visitor_records 
+             SET exit_date = CURRENT_DATE, 
+                 exit_time = CURRENT_TIME, 
+                 exit_by = $2,
+                 status = 'exited', 
+                 updated_at = now() 
+             WHERE id = $1 AND deleted_at IS NULL`,
+            [id, personnel_id]
         );
 
         // GÜVENLİK: Audit log kaydı

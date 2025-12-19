@@ -230,7 +230,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-4 gap-4 mb-6">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
@@ -244,6 +244,13 @@ export default function Dashboard() {
                         gradient="from-green-600 to-green-700"
                         iconBgColor="bg-green-500/30"
                         icon={<VisitorIcon size={8} />}
+                    />
+                    <StatCard
+                        title="İçerideki Müdürler"
+                        value={managersInside}
+                        gradient="from-purple-600 to-purple-700"
+                        iconBgColor="bg-purple-500/30"
+                        icon={<ManagerIcon size={8} />}
                     />
                     <StatCard
                         title="Bugün Çalınan Alarmlar"

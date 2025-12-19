@@ -62,7 +62,7 @@ export const createIncidentRecord = async (req: Request, res: Response) => {
         }
 
         // GÜVENLİK: Input validasyonu ve sanitizasyonu
-        const sanitizedDescription = sanitizeInput(description, 5000);
+        const sanitizedDescription = sanitizeInput(description || '', 5000);
         const sanitizedLocation = sanitizeInput(location, 200);
         const sanitizedShiftLabel = sanitizeInput(shift_label, 100);
         const sanitizedFireLocation = sanitizeInput(fire_location, 200);
@@ -236,10 +236,12 @@ export const createShiftReport = async (req: Request, res: Response) => {
             ? `${userResult.rows[0].first_name} ${userResult.rows[0].last_name}`
             : undefined;
 
-        // Word dosyası oluştur
+        // Word dosyası oluştur (düz metin içeriği HTML formatına çevir)
         let wordFilePath: string;
         try {
-            wordFilePath = await createWordFromHtml(sanitizedReportContent, sanitizedShiftLabel, reporterName);
+            // Düz metni basit HTML formatına çevir (satır sonlarını <br> yap)
+            const htmlForWord = sanitizedReportContent.replace(/\n/g, '<br>');
+            wordFilePath = await createWordFromHtml(htmlForWord, sanitizedShiftLabel, reporterName);
         } catch (wordError) {
             console.error('Word dosyası oluşturma hatası:', wordError);
             return res.status(500).json({ success: false, message: 'Word dosyası oluşturulamadı' });
@@ -257,7 +259,7 @@ export const createShiftReport = async (req: Request, res: Response) => {
             [
                 id,
                 sanitizedShiftLabel,
-                sanitizedReportContent,
+                sanitizedReportContent,  // Düz metin olarak kaydet
                 `Vardiya Raporu: ${sanitizedShiftLabel}`,
                 'general',
                 'low',
@@ -365,16 +367,18 @@ export const updateShiftReport = async (req: Request, res: Response) => {
             ? `${userResult.rows[0].first_name} ${userResult.rows[0].last_name}`
             : undefined;
 
-        // Yeni Word dosyası oluştur
+        // Yeni Word dosyası oluştur (düz metni HTML formatına çevir)
         let wordFilePath: string;
         try {
-            wordFilePath = await createWordFromHtml(sanitizedReportContent, shiftLabel, reporterName);
+            // Düz metni basit HTML formatına çevir (satır sonlarını <br> yap)
+            const htmlForWord = sanitizedReportContent.replace(/\n/g, '<br>');
+            wordFilePath = await createWordFromHtml(htmlForWord, shiftLabel, reporterName);
         } catch (wordError) {
             console.error('Word dosyası oluşturma hatası:', wordError);
             return res.status(500).json({ success: false, message: 'Word dosyası oluşturulamadı' });
         }
 
-        // Raporu güncelle
+        // Raporu güncelle (veritabanına düz metin kaydet)
         const result = await pool.query(
             `UPDATE incidents 
              SET report_content = $1, 

@@ -22,9 +22,11 @@ const INITIAL_SEARCH_DATA: SgkSearchData = {
 
 export default function Sgk() {
     const [showUploadModal, setShowUploadModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState<SgkFormData>(INITIAL_FORM_DATA);
+    const [editingRecord, setEditingRecord] = useState<SgkRecord | null>(null);
     const [searchData, setSearchData] = useState<SgkSearchData>(INITIAL_SEARCH_DATA);
     const [searchResults, setSearchResults] = useState<SgkRecord[]>([]);
     const [previewRecord, setPreviewRecord] = useState<SgkRecord | null>(null);
@@ -176,6 +178,78 @@ export default function Sgk() {
             alert('Belge önizlenirken hata oluştu');
         }
     }, []);
+
+    // Handle edit
+    const handleEdit = useCallback((record: SgkRecord) => {
+        setEditingRecord(record);
+        setFormData({
+            tc_no: '', // TC güvenlik için gösterilmez
+            full_name: record.full_name,
+            company_name: record.company_name || '',
+            notes: record.notes || '',
+            pdf_file: null
+        });
+        setShowEditModal(true);
+    }, []);
+
+    // Handle edit submission
+    const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editingRecord) return;
+
+        if (!formData.tc_no?.trim()) {
+            alert('TC Kimlik No zorunludur');
+            return;
+        }
+
+        const cleanTC = formData.tc_no.replace(/\D/g, '');
+        if (cleanTC.length !== 11) {
+            alert('TC Kimlik No 11 haneli olmalıdır');
+            return;
+        }
+
+        if (!formData.full_name?.trim()) {
+            alert('Ad Soyad zorunludur');
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const formDataToSend = new FormData();
+            formDataToSend.append('tc_no', cleanTC);
+            formDataToSend.append('full_name', formData.full_name.trim());
+            if (formData.company_name?.trim()) {
+                formDataToSend.append('company_name', formData.company_name.trim());
+            }
+            if (formData.notes?.trim()) {
+                formDataToSend.append('notes', formData.notes.trim());
+            }
+            if (formData.pdf_file) {
+                formDataToSend.append('pdf_file', formData.pdf_file);
+            }
+
+            await api.put(`/sgk/records/${editingRecord.id}`, formDataToSend, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            alert('Kayıt başarıyla güncellendi');
+            setShowEditModal(false);
+            setEditingRecord(null);
+            resetUploadForm();
+
+            // Arama sonuçlarını güncelle
+            if (searchResults.length > 0) {
+                handleSearchSubmit(new Event('submit') as any);
+            }
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
+        } finally {
+            setLoading(false);
+        }
+    }, [editingRecord, formData, resetUploadForm, searchResults.length, handleSearchSubmit]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -332,16 +406,27 @@ export default function Sgk() {
                                                     <span className="font-medium text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
                                             </div>
-                                            <button
-                                                onClick={() => handlePreview(record)}
-                                                className="flex-shrink-0 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center gap-2"
-                                            >
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                Görüntüle
-                                            </button>
+                                            <div className="flex-shrink-0 flex gap-2">
+                                                <button
+                                                    onClick={() => handleEdit(record)}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition flex items-center gap-2"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                    </svg>
+                                                    Düzenle
+                                                </button>
+                                                <button
+                                                    onClick={() => handlePreview(record)}
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-medium transition flex items-center gap-2"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    Görüntüle
+                                                </button>
+                                            </div>
                                         </div>
                                         {record.notes && (
                                             <div className="mt-3 pt-3 border-t border-gray-200">
@@ -446,6 +531,122 @@ export default function Sgk() {
                                         Kaydet
                                     </button>
                                     <button type="button" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Modal */}
+            {showEditModal && editingRecord && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">SGK Kaydını Düzenle</h2>
+                                <button onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }} className="text-gray-400 hover:text-gray-600">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                                <p className="text-sm text-yellow-800">
+                                    <strong>Not:</strong> TC Kimlik No güncellemek için tekrar girmeniz gerekiyor.
+                                    Dosya değiştirmek isterseniz yeni dosya seçin, aksi halde mevcut dosya korunur.
+                                </p>
+                            </div>
+
+                            <form onSubmit={handleEditSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        TC Kimlik No <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.tc_no}
+                                        onChange={(e) => setFormData({ ...formData, tc_no: e.target.value })}
+                                        placeholder="11 haneli TC No (güncelleme için tekrar girin)"
+                                        maxLength={11}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Ad Soyad <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.full_name}
+                                        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                        placeholder="Tam ad soyad"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Firma Adı</label>
+                                    <input
+                                        type="text"
+                                        value={formData.company_name}
+                                        onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                                        placeholder="Firma adı (opsiyonel)"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Belge Dosyası (PDF, JPG, PNG) <span className="text-gray-500">(Opsiyonel)</span>
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept="application/pdf,image/jpeg,image/jpg,image/png"
+                                        onChange={handleFileChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    {formData.pdf_file ? (
+                                        <p className="mt-2 text-sm text-green-600">
+                                            Yeni dosya: {formData.pdf_file.name}
+                                        </p>
+                                    ) : (
+                                        <p className="mt-2 text-sm text-gray-600">
+                                            Mevcut dosya: {editingRecord.file_path}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
+                                    <textarea
+                                        value={formData.notes}
+                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                        rows={3}
+                                        placeholder="Ek notlar..."
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 rounded-lg font-medium transition"
+                                    >
+                                        {loading ? 'Güncelleniyor...' : 'Güncelle'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                    >
                                         İptal
                                     </button>
                                 </div>

@@ -335,9 +335,9 @@ export default function FireAlarms() {
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                     </tr>
@@ -357,13 +357,6 @@ export default function FireAlarms() {
                                                 <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {record.resolved ? (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
-                                                ) : (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
                                                 {record.resolution_time ? (
                                                     <>
                                                         <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
@@ -375,6 +368,13 @@ export default function FireAlarms() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {record.resolved ? (
+                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
+                                                ) : (
+                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>

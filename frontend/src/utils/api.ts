@@ -71,12 +71,9 @@ api.interceptors.response.use(
 
         switch (status) {
             case HTTP_STATUS.UNAUTHORIZED:
-                // Token invalid or expired
-                localStorage.removeItem(STORAGE_KEYS.TOKEN);
-                localStorage.removeItem(STORAGE_KEYS.USER);
-                if (!window.location.pathname.includes('/login')) {
-                    window.location.href = '/login';
-                }
+                // Otomatik çıkış devre dışı - Sadece hata göster
+                console.warn('[API] 401 Unauthorized - Token geçersiz veya süresi dolmuş');
+                // NOT: Kullanıcı manuel olarak çıkış yapmalı
                 break;
 
             case HTTP_STATUS.TOO_MANY_REQUESTS:

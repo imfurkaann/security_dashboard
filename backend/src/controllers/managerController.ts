@@ -16,7 +16,6 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
                 mr.id,
                 mr.manager_id,
                 mr.manager_name,
-                mr.recorded_by_name,
                 mr.entry_date,
                 mr.entry_time,
                 mr.exit_date,
@@ -27,11 +26,18 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
                 m.first_name as manager_first_name,
                 m.last_name as manager_last_name,
                 m.title as manager_title,
-                p.first_name as personnel_first_name,
-                p.last_name as personnel_last_name
+                pe.first_name as entry_by_first_name,
+                pe.last_name as entry_by_last_name,
+                pe.first_name as entry_by_name_first,
+                pe.last_name as entry_by_name_last,
+                px.first_name as exit_by_first_name,
+                px.last_name as exit_by_last_name,
+                px.first_name as exit_by_name_first,
+                px.last_name as exit_by_name_last
             FROM managers_records mr
             LEFT JOIN managers m ON mr.manager_id = m.id
-            LEFT JOIN personnel p ON mr.recorded_by = p.id
+            LEFT JOIN personnel pe ON mr.entry_by = pe.id
+            LEFT JOIN personnel px ON mr.exit_by = px.id
             WHERE mr.deleted_at IS NULL
             ORDER BY mr.entry_date DESC, mr.entry_time DESC
             LIMIT 1000
@@ -52,7 +58,8 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
             exit_time: row.exit_time,
             status: row.status,
             notes: row.notes,
-            personnel: row.recorded_by_name || ((row.personnel_first_name || row.personnel_last_name) ? `${row.personnel_first_name || ''} ${row.personnel_last_name || ''}`.trim() : null),
+            entry_by: (row.entry_by_first_name || row.entry_by_last_name) ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim() : null,
+            exit_by: (row.exit_by_first_name || row.exit_by_last_name) ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim() : null,
             created_at: row.created_at
         }));
 
@@ -71,7 +78,7 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
 export const createManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { manager_id, notes } = req.body;
-        const recorded_by = req.user?.userId || null;
+        const entry_by = req.user?.userId || null;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: Input sanitization
@@ -83,7 +90,7 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        if (!recorded_by) {
+        if (!entry_by) {
             res.status(401).json({ success: false, message: 'Kullanıcı doğrulanmadı. Lütfen giriş yapın.' });
             return;
         }
@@ -97,27 +104,14 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
 
         const id = uuidv4();
 
-        // Insert with minimal required fields; other columns have defaults
-        // fetch recorder's name from personnel table when possible
-        let recordedByName: string | null = null;
-        try {
-            const pRes = await pool.query('SELECT first_name, last_name FROM personnel WHERE id = $1', [recorded_by]);
-            if (pRes.rows.length > 0) {
-                recordedByName = `${pRes.rows[0].first_name || ''} ${pRes.rows[0].last_name || ''}`.trim();
-            }
-        } catch (err) {
-            // ignore and keep recordedByName null
-            console.warn('Could not fetch recorder name for managers_records:', err);
-        }
-
         const managerName = `${managerCheck.rows[0].first_name} ${managerCheck.rows[0].last_name}`;
 
         await pool.query('BEGIN');
         await pool.query(
             `INSERT INTO managers_records (
-                id, manager_id, manager_name, recorded_by, recorded_by_name, entry_date, entry_time, status, notes
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, 'inside', $6)`,
-            [id, manager_id, managerName, recorded_by, recordedByName, sanitizedNotes]
+                id, manager_id, manager_name, entry_by, entry_date, entry_time, status, notes
+            ) VALUES ($1, $2, $3, $4, CURRENT_DATE, CURRENT_TIME, 'inside', $5)`,
+            [id, manager_id, managerName, entry_by, sanitizedNotes]
         );
         await pool.query('COMMIT');
 
@@ -128,7 +122,7 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
             'INSERT',
             null,
             { manager_id, manager_name: managerName },
-            recorded_by,
+            entry_by,
             clientIp
         );
 
@@ -167,9 +161,17 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
+        const exit_by = req.user?.userId;
+
         await pool.query(
-            `UPDATE managers_records SET exit_date = CURRENT_DATE, exit_time = CURRENT_TIME, status = 'exited', updated_at = now() WHERE id = $1 AND deleted_at IS NULL`,
-            [id]
+            `UPDATE managers_records 
+             SET exit_date = CURRENT_DATE, 
+                 exit_time = CURRENT_TIME, 
+                 exit_by = $2,
+                 status = 'exited', 
+                 updated_at = now() 
+             WHERE id = $1 AND deleted_at IS NULL`,
+            [id, exit_by]
         );
 
         // GÜVENLİK: Audit log kaydı
