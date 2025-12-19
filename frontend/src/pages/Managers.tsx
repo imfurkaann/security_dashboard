@@ -331,8 +331,10 @@ export default function Managers() {
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ad Soyad</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                         </tr>
                                     </thead>
@@ -350,8 +352,16 @@ export default function Managers() {
                                                 </td>
 
                                                 <td className="px-6 py-4 align-top">
+                                                    <div className="text-sm text-gray-900">{rec.entry_by || '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{rec.exit_date ? formatDate(rec.exit_date) : '-'}</div>
                                                     <div className="text-xs text-gray-600 mt-1">{rec.exit_time ? formatTime(rec.exit_time) : '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 align-top">
+                                                    <div className="text-sm text-gray-900">{rec.exit_by || '-'}</div>
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
 import api from '../utils/api';
 import { isValidLength } from '../utils/validation';
 
@@ -67,18 +65,8 @@ export default function Incidents() {
     const [selectedShift, setSelectedShift] = useState<string | null>(null);
     const [existingReportId, setExistingReportId] = useState<string | null>(null);
     const [shiftReports, setShiftReports] = useState<Record<string, any>>({});
+    const [reportContent, setReportContent] = useState('');
     const navigate = useNavigate();
-
-    // TipTap Editor
-    const editor = useEditor({
-        extensions: [StarterKit],
-        content: '<p>Rapor içeriğini buraya yazın...</p>',
-        editorProps: {
-            attributes: {
-                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[400px] p-4',
-            },
-        },
-    });
 
     // Bugünkü vardiya raporlarını yükle
     const loadShiftReports = useCallback(async () => {
@@ -102,65 +90,60 @@ export default function Incidents() {
 
     // Vardiya raporunu kaydet veya güncelle
     const handleReportSubmit = useCallback(async () => {
-        if (!editor || !selectedShift) return;
+        if (!selectedShift || !reportContent.trim()) {
+            alert('Lütfen rapor içeriği girin');
+            return;
+        }
 
-        const htmlContent = editor.getHTML();
-
-        // HTML content uzunluk kontrolü (maksimum 50000 karakter)
-        if (!isValidLength(htmlContent, 1, 50000)) {
+        // Uzunluk kontrolü
+        if (!isValidLength(reportContent, 1, 50000)) {
             alert('Rapor içeriği en az 1, en fazla 50000 karakter olabilir');
             return;
         }
 
         try {
-            // Eğer bu vardiya için bugün bir rapor varsa, onu güncelle
             const reportId = existingReportId || shiftReports[selectedShift]?.id;
 
             if (reportId) {
                 // Güncelleme
                 await api.put(`/incidents/reports/${reportId}`, {
-                    report_content: htmlContent,
+                    report_content: reportContent,
                 });
                 alert('Rapor başarıyla güncellendi ve yeni Word dosyası oluşturuldu');
             } else {
                 // Yeni kayıt
                 await api.post('/incidents/reports', {
                     shift_label: selectedShift,
-                    report_content: htmlContent,
+                    report_content: reportContent,
                 });
                 alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
             }
 
             setShowReportModal(false);
             setExistingReportId(null);
-            loadShiftReports(); // Raporları yeniden yükle
+            setReportContent('');
+            loadShiftReports();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Rapor kaydı başarısız');
         }
-    }, [editor, selectedShift, existingReportId, shiftReports, loadShiftReports]);
+    }, [selectedShift, reportContent, existingReportId, shiftReports, loadShiftReports]);
 
     // Rapor modal aç (yeni veya düzenle)
     const openReportModal = useCallback((shiftLabel: string, isEdit: boolean = false) => {
         setSelectedShift(shiftLabel);
 
-        // Her zaman mevcut rapor varsa onun ID'sini set et
         if (shiftReports[shiftLabel]) {
             const report = shiftReports[shiftLabel];
             setExistingReportId(report.id);
-            if (editor) {
-                editor.commands.setContent(report.report_content || '<p>Rapor içeriğini buraya yazın...</p>');
-            }
+            setReportContent(report.report_content || '');
         } else {
-            // Yeni rapor
             setExistingReportId(null);
-            if (editor) {
-                editor.commands.setContent('<p>Rapor içeriğini buraya yazın...</p>');
-            }
+            setReportContent('');
         }
 
         setShowReportModal(true);
-    }, [editor, shiftReports]);
+    }, [shiftReports]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -251,7 +234,7 @@ export default function Incidents() {
             </main>
 
             {/* Rapor Modal */}
-            {showReportModal && editor && (
+            {showReportModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
@@ -272,49 +255,21 @@ export default function Incidents() {
                                 </button>
                             </div>
 
-                            {/* Editor Toolbar */}
-                            <div className="mb-4 flex flex-wrap gap-2 p-2 bg-gray-100 rounded-lg">
-                                <button
-                                    onClick={() => editor.chain().focus().toggleBold().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    <strong>B</strong>
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    <em>I</em>
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    H1
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    H2
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    • Liste
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    1. Liste
-                                </button>
-                            </div>
-
-                            {/* Editor */}
-                            <div className="border border-gray-300 rounded-lg bg-white mb-4 min-h-[400px]">
-                                <EditorContent editor={editor} />
+                            {/* Basit Textarea */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Rapor İçeriği
+                                </label>
+                                <textarea
+                                    value={reportContent}
+                                    onChange={(e) => setReportContent(e.target.value)}
+                                    placeholder="Vardiya raporu içeriğini buraya yazın..."
+                                    className="w-full min-h-[400px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
+                                    style={{ fontFamily: 'inherit' }}
+                                />
+                                <p className="text-sm text-gray-500 mt-2">
+                                    {reportContent.length} / 50000 karakter
+                                </p>
                             </div>
 
                             {/* Actions */}

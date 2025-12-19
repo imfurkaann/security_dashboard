@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
 import api from '../utils/api';
 
 // Vardiya tanımları
@@ -64,48 +62,37 @@ const getShiftAccess = (startHour: number, endHour: number): {
 export default function Incidents() {
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedShift, setSelectedShift] = useState<string | null>(null);
+    const [reportContent, setReportContent] = useState('');
     const navigate = useNavigate();
-
-    // TipTap Editor
-    const editor = useEditor({
-        extensions: [StarterKit],
-        content: '<p>Rapor içeriğini buraya yazın...</p>',
-        editorProps: {
-            attributes: {
-                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[400px] p-4',
-            },
-        },
-    });
 
     // Vardiya raporunu kaydet
     const handleReportSubmit = useCallback(async () => {
-        if (!editor || !selectedShift) return;
-
-        const htmlContent = editor.getHTML();
+        if (!selectedShift || !reportContent.trim()) {
+            alert('Lütfen rapor içeriği girin');
+            return;
+        }
 
         try {
             await api.post('/incidents/reports', {
                 shift_label: selectedShift,
-                report_content: htmlContent,
+                report_content: reportContent,
             });
 
             setShowReportModal(false);
-            editor.commands.setContent('<p>Rapor içeriğini buraya yazın...</p>');
+            setReportContent('');
             alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Rapor kaydı başarısız');
         }
-    }, [editor, selectedShift]);
+    }, [selectedShift, reportContent]);
 
     // Rapor modal aç
     const openReportModal = useCallback((shiftLabel: string) => {
         setSelectedShift(shiftLabel);
+        setReportContent('');
         setShowReportModal(true);
-        if (editor) {
-            editor.commands.setContent('<p>Rapor içeriğini buraya yazın...</p>');
-        }
-    }, [editor]);
+    }, []);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -141,8 +128,8 @@ export default function Incidents() {
                             <div
                                 key={shift.id}
                                 className={`bg-white rounded-lg shadow-md border-2 p-6 transition-all ${access.accessible
-                                        ? 'border-blue-500 ring-2 ring-blue-200'
-                                        : 'border-gray-200'
+                                    ? 'border-blue-500 ring-2 ring-blue-200'
+                                    : 'border-gray-200'
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-4">
@@ -169,8 +156,8 @@ export default function Incidents() {
                                     onClick={() => openReportModal(shift.label)}
                                     disabled={!access.accessible}
                                     className={`w-full py-3 px-4 rounded-lg font-medium transition ${access.accessible
-                                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
-                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                         }`}
                                 >
                                     {access.accessible ? 'Rapor Yaz' : `${access.hoursUntil} saat kaldı`}
@@ -182,7 +169,7 @@ export default function Incidents() {
             </main>
 
             {/* Rapor Modal */}
-            {showReportModal && editor && (
+            {showReportModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
@@ -200,49 +187,21 @@ export default function Incidents() {
                                 </button>
                             </div>
 
-                            {/* Editor Toolbar */}
-                            <div className="mb-4 flex flex-wrap gap-2 p-2 bg-gray-100 rounded-lg">
-                                <button
-                                    onClick={() => editor.chain().focus().toggleBold().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    <strong>B</strong>
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    <em>I</em>
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    H1
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    H2
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    • Liste
-                                </button>
-                                <button
-                                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                    className={`px-3 py-1 rounded ${editor.isActive('orderedList') ? 'bg-blue-600 text-white' : 'bg-white'}`}
-                                >
-                                    1. Liste
-                                </button>
-                            </div>
-
-                            {/* Editor */}
-                            <div className="border border-gray-300 rounded-lg bg-white mb-4 min-h-[400px]">
-                                <EditorContent editor={editor} />
+                            {/* Basit Textarea */}
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Rapor İçeriği
+                                </label>
+                                <textarea
+                                    value={reportContent}
+                                    onChange={(e) => setReportContent(e.target.value)}
+                                    placeholder="Vardiya raporu içeriğini buraya yazın..."
+                                    className="w-full min-h-[400px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
+                                    style={{ fontFamily: 'inherit' }}
+                                />
+                                <p className="text-sm text-gray-500 mt-2">
+                                    {reportContent.length} / 50000 karakter
+                                </p>
                             </div>
 
                             {/* Actions */}

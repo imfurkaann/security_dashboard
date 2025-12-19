@@ -20,9 +20,11 @@ export const getFireAlarms = async (_req: Request, res: Response) => {
                 fa.resolution_notes,
                 fa.false_alarm,
                 fa.created_at,
-                p.first_name || ' ' || p.last_name as recorded_by_name
+                pr.first_name || ' ' || pr.last_name as recorded_by_name,
+                ps.first_name || ' ' || ps.last_name as resolved_by_name
             FROM fire_alarms fa
-            LEFT JOIN personnel p ON fa.recorded_by = p.id
+            LEFT JOIN personnel pr ON fa.recorded_by = pr.id
+            LEFT JOIN personnel ps ON fa.resolved_by = ps.id
             WHERE fa.deleted_at IS NULL 
             ORDER BY fa.created_at DESC
             LIMIT 1000
@@ -200,10 +202,11 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
                  resolution_time = NOW(),
                  resolution_notes = $1,
                  false_alarm = $2,
+                 resolved_by = $4,
                  updated_at = NOW()
              WHERE id = $3 
              RETURNING *`,
-            [sanitizedNotes, !!false_alarm, id]
+            [sanitizedNotes, !!false_alarm, id, userId]
         );
 
         await logDataChange(

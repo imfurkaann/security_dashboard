@@ -4,6 +4,7 @@ import { sgkUpload } from '../utils/fileUpload';
 import {
     getSgkRecords,
     createSgkRecord,
+    updateSgkRecord,
     searchSgkRecords,
     getSgkFile,
     deleteSgkRecord
@@ -22,6 +23,9 @@ router.post('/records', sgkUpload.single('pdf_file'), createSgkRecord);
 
 // POST /api/sgk/records/search - TC ile kayıt ara
 router.post('/records/search', searchSgkRecords);
+
+// PUT /api/sgk/records/:id - SGK kaydını güncelle
+router.put('/records/:id', sgkUpload.single('pdf_file'), updateSgkRecord);
 
 // GET /api/sgk/records/:id/file - PDF dosyasını getir
 router.get('/records/:id/file', getSgkFile);

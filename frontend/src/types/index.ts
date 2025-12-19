@@ -39,8 +39,8 @@ export interface VehicleUsage {
     manager: string;
     manager_id?: string;
     manager_title: string;
-    personnel: string;
-    personnel_full_name?: string;
+    given_by: string | null;  // Aracı teslim eden personel
+    returned_by: string | null;  // Aracı geri alan personel
     destination: string;
     given_date: string;
     given_time: string;
@@ -68,7 +68,8 @@ export interface VisitorRecord {
     exit_date: string | null;
     exit_time: string | null;
     status: 'inside' | 'exited';
-    personnel: string | null;
+    entry_by: string | null;  // Girişi kaydeden personel
+    exit_by: string | null;  // Çıkışı kaydeden personel
     created_at: string | null;
 }
 
@@ -92,6 +93,8 @@ export interface ManagerRecord {
     exit_date?: string | null;
     exit_time?: string | null;
     status: 'inside' | 'exited';
+    entry_by: string | null;  // Girişi kaydeden personel
+    exit_by: string | null;  // Çıkışı kaydeden personel
     notes?: string | null;
     created_at?: string | null;
 }

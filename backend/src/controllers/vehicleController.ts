@@ -75,12 +75,15 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
                 m.first_name as manager_first_name,
                 m.last_name as manager_last_name,
                 m.title as manager_title,
-                p.first_name as personnel_first_name,
-                p.last_name as personnel_last_name
+                pg.first_name as given_by_first_name,
+                pg.last_name as given_by_last_name,
+                pr.first_name as returned_by_first_name,
+                pr.last_name as returned_by_last_name
             FROM vehicle_records vr
             INNER JOIN vehicles v ON vr.vehicle_id = v.id
             LEFT JOIN managers m ON vr.manager_id = m.id
-            INNER JOIN personnel p ON vr.personnel_id = p.id
+            INNER JOIN personnel pg ON vr.given_by = pg.id
+            LEFT JOIN personnel pr ON vr.returned_by = pr.id
             WHERE vr.deleted_at IS NULL
             ORDER BY vr.given_date DESC, vr.given_time DESC
             LIMIT 1000
@@ -95,7 +98,8 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
             vehicle_plate: row.vehicle_plate,
             manager: row.manager_name || `${row.manager_first_name} ${row.manager_last_name}`,
             manager_title: row.manager_title,
-            personnel: `${row.personnel_first_name} ${row.personnel_last_name}`,
+            given_by: `${row.given_by_first_name} ${row.given_by_last_name}`,
+            returned_by: row.returned_by_first_name ? `${row.returned_by_first_name} ${row.returned_by_last_name}` : null,
             given_date: row.given_date,
             given_time: row.given_time,
             return_date: row.return_date,
@@ -255,7 +259,7 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
         // Create record (resolvedManagerName is auto-populated if manager_id is provided)
         await pool.query(
             `INSERT INTO vehicle_records (
-                id, vehicle_id, manager_id, manager_name, personnel_id,
+                id, vehicle_id, manager_id, manager_name, given_by,
                 given_date, given_time, destination, notes, status
             ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, 'in_use')`,
             [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null]
@@ -366,17 +370,20 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
 
         const vehicle_id = recordCheck.rows[0].vehicle_id;
 
+        const personnel_id = req.user?.userId;
+
         // Start transaction
         await pool.query('BEGIN');
 
-        // Update record
+        // Update record - aracı iade eden kişiyi kaydet
         await pool.query(
             `UPDATE vehicle_records 
              SET return_date = CURRENT_DATE, 
                  return_time = CURRENT_TIME, 
+                 returned_by = $2,
                  status = 'returned'
              WHERE id = $1`,
-            [id]
+            [id, personnel_id]
         );
 
         // Update vehicle status
