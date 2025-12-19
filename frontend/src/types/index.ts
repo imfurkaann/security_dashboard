@@ -111,6 +111,34 @@ export interface IncidentRecord {
     created_at?: string | null;
 }
 
+// SGK Types
+export interface SgkRecord {
+    id: string;
+    hashed_tc: string;
+    full_name: string;
+    company_name: string | null;
+    file_path: string;
+    upload_date: string;
+    notes: string | null;
+    personnel: string | null;
+    created_at: string | null;
+}
+
+export interface SgkFormData {
+    tc_no: string;
+    full_name: string;
+    company_name: string;
+    notes: string;
+    pdf_file: File | null;
+}
+
+export interface SgkSearchData {
+    search_type: 'tc' | 'name' | 'company';
+    tc_no?: string;
+    full_name?: string;
+    company_name?: string;
+}
+
 // Form Types
 export interface VehicleFormData {
     vehicle_id: string;
