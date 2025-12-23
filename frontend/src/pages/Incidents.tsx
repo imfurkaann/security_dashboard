@@ -165,8 +165,8 @@ export default function Incidents() {
                                 <p className="text-gray-600 mt-1">Günlük güvenlik vardiya raporlarını kaydedin</p>
                             </div>
                         </div>
-                        <button 
-                            onClick={() => navigate('/incident-records')} 
+                        <button
+                            onClick={() => navigate('/incident-records')}
                             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

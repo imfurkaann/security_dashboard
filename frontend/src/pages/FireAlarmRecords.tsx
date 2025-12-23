@@ -57,12 +57,13 @@ export default function FireAlarmRecords() {
     }, []);
 
     // Date handlers for alarm date
-    const handleAlarmDateChange = (dates: [Dayjs, Dayjs] | null) => {
-        setAlarmDateRange(dates);
-        if (dates) {
+    const handleAlarmDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
+        if (dates && dates[0] && dates[1]) {
+            setAlarmDateRange([dates[0], dates[1]]);
             setAlarmDateStart(dates[0].format('YYYY-MM-DD'));
             setAlarmDateEnd(dates[1].format('YYYY-MM-DD'));
         } else {
+            setAlarmDateRange(null);
             setAlarmDateStart('');
             setAlarmDateEnd('');
         }
@@ -77,12 +78,13 @@ export default function FireAlarmRecords() {
     };
 
     // Date handlers for resolution date
-    const handleResolutionDateChange = (dates: [Dayjs, Dayjs] | null) => {
-        setResolutionDateRange(dates);
-        if (dates) {
+    const handleResolutionDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
+        if (dates && dates[0] && dates[1]) {
+            setResolutionDateRange([dates[0], dates[1]]);
             setResolutionDateStart(dates[0].format('YYYY-MM-DD'));
             setResolutionDateEnd(dates[1].format('YYYY-MM-DD'));
         } else {
+            setResolutionDateRange(null);
             setResolutionDateStart('');
             setResolutionDateEnd('');
         }
@@ -143,12 +145,12 @@ export default function FireAlarmRecords() {
         if (hasActiveFilters) return {};
 
         const groups: { [key: string]: { [key: string]: FireAlarmRecord[] } } = {};
-        
+
         filteredRecords.forEach(record => {
             const date = new Date(record.alarm_time);
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            
+
             if (!groups[monthKey]) {
                 groups[monthKey] = {};
             }
@@ -161,7 +163,7 @@ export default function FireAlarmRecords() {
         // Sort records within each day (newest first)
         Object.keys(groups).forEach(monthKey => {
             Object.keys(groups[monthKey]).forEach(dayKey => {
-                groups[monthKey][dayKey].sort((a, b) => 
+                groups[monthKey][dayKey].sort((a, b) =>
                     new Date(b.alarm_time).getTime() - new Date(a.alarm_time).getTime()
                 );
             });
@@ -173,7 +175,7 @@ export default function FireAlarmRecords() {
     // Sorted records for filtered view
     const sortedFilteredRecords = useMemo(() => {
         if (!hasActiveFilters) return [];
-        return [...filteredRecords].sort((a, b) => 
+        return [...filteredRecords].sort((a, b) =>
             new Date(b.alarm_time).getTime() - new Date(a.alarm_time).getTime()
         );
     }, [filteredRecords, hasActiveFilters]);
@@ -214,8 +216,8 @@ export default function FireAlarmRecords() {
             <header className="bg-white shadow-md">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                     <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => navigate('/fire-alarms')} 
+                        <button
+                            onClick={() => navigate('/fire-alarms')}
                             className="p-2 hover:bg-gray-100 rounded-lg transition"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,7 +251,7 @@ export default function FireAlarmRecords() {
                             </button>
                         )}
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Alarm Numarası</label>

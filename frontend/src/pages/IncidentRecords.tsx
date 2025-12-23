@@ -55,12 +55,13 @@ export default function IncidentRecords() {
     }, []);
 
     // Date handlers
-    const handleDateChange = (dates: [Dayjs, Dayjs] | null) => {
-        setDateRange(dates);
-        if (dates) {
+    const handleDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
+        if (dates && dates[0] && dates[1]) {
+            setDateRange([dates[0], dates[1]]);
             setDateStart(dates[0].format('YYYY-MM-DD'));
             setDateEnd(dates[1].format('YYYY-MM-DD'));
         } else {
+            setDateRange(null);
             setDateStart('');
             setDateEnd('');
         }
@@ -99,13 +100,13 @@ export default function IncidentRecords() {
         if (hasActiveFilters) return {};
 
         const groups: { [key: string]: { [key: string]: IncidentRecord[] } } = {};
-        
+
         filteredRecords.forEach(record => {
             const dateStr = record.report_date || record.created_at;
             const date = new Date(dateStr);
             const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
             const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            
+
             if (!groups[monthKey]) {
                 groups[monthKey] = {};
             }
@@ -118,7 +119,7 @@ export default function IncidentRecords() {
         // Sort records within each day (newest first)
         Object.keys(groups).forEach(monthKey => {
             Object.keys(groups[monthKey]).forEach(dayKey => {
-                groups[monthKey][dayKey].sort((a, b) => 
+                groups[monthKey][dayKey].sort((a, b) =>
                     new Date(b.report_date || b.created_at).getTime() - new Date(a.report_date || a.created_at).getTime()
                 );
             });
@@ -130,7 +131,7 @@ export default function IncidentRecords() {
     // Sorted records for filtered view
     const sortedFilteredRecords = useMemo(() => {
         if (!hasActiveFilters) return [];
-        return [...filteredRecords].sort((a, b) => 
+        return [...filteredRecords].sort((a, b) =>
             new Date(b.report_date || b.created_at).getTime() - new Date(a.report_date || a.created_at).getTime()
         );
     }, [filteredRecords, hasActiveFilters]);
@@ -349,7 +350,7 @@ export default function IncidentRecords() {
                                             </div>
                                             <div className="bg-blue-700 bg-opacity-40 px-3 py-1 rounded-full">
                                                 <span className="text-white text-sm font-medium">
-                                                    {Object.keys(groupedRecords[monthKey]).reduce((sum, dayKey) => 
+                                                    {Object.keys(groupedRecords[monthKey]).reduce((sum, dayKey) =>
                                                         sum + groupedRecords[monthKey][dayKey].length, 0
                                                     )} kayıt
                                                 </span>
@@ -461,7 +462,7 @@ export default function IncidentRecords() {
                                 </button>
                             </div>
                         </div>
-                        
+
                         <div className="px-6 py-4">
                             {/* Report Metadata */}
                             <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
@@ -492,7 +493,7 @@ export default function IncidentRecords() {
                             {/* Report Content */}
                             <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Rapor İçeriği</label>
-                                <div 
+                                <div
                                     className="bg-gray-50 rounded-lg p-4 border border-gray-200 prose prose-sm max-w-none"
                                     dangerouslySetInnerHTML={{ __html: selectedReport.report_content || '<p class="text-gray-500">Rapor içeriği bulunamadı</p>' }}
                                 />
