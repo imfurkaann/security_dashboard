@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from '../utils/dayjsConfig';
+import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
@@ -56,22 +57,22 @@ export default function IncidentRecords() {
 
     // Date handlers
     const handleDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (dates && dates[0] && dates[1]) {
+        if (!dates || (!dates[0] && !dates[1])) {
+            // Takvim temizlendi
+            setDateRange(null);
+            setDateStart('');
+            setDateEnd('');
+        } else if (dates[0] && dates[1]) {
+            // İki tarih de seçildi
             setDateRange([dates[0], dates[1]]);
             setDateStart(dates[0].format('YYYY-MM-DD'));
             setDateEnd(dates[1].format('YYYY-MM-DD'));
-        } else {
-            setDateRange(null);
-            setDateStart('');
-            setDateEnd('');
-        }
-    };
-
-    const handleCalendarChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (!dates || !dates[0] || !dates[1]) {
-            setDateRange(null);
-            setDateStart('');
-            setDateEnd('');
+        } else if (dates[0] && !dates[1]) {
+            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
+            const singleDate = dates[0].format('YYYY-MM-DD');
+            setDateRange([dates[0], dates[0]]);
+            setDateStart(singleDate);
+            setDateEnd(singleDate);
         }
     };
 
@@ -80,9 +81,9 @@ export default function IncidentRecords() {
         return records.filter(record => {
             if (reportedBy && !record.reported_by?.toLowerCase().includes(reportedBy.toLowerCase())) return false;
 
-            // Date filtering
+            // Date filtering - dayjs ile yerel tarihe çevir
             if (dateStart && dateEnd) {
-                const recordDate = record.report_date ? record.report_date.split('T')[0] : record.created_at.split('T')[0];
+                const recordDate = record.report_date ? dayjs(record.report_date).format('YYYY-MM-DD') : dayjs(record.created_at).format('YYYY-MM-DD');
                 if (recordDate < dateStart || recordDate > dateEnd) return false;
             }
 
@@ -96,6 +97,7 @@ export default function IncidentRecords() {
     }, [reportedBy, dateStart]);
 
     // Group records by month and day (only when no filters)
+    // Group records by month and day (only when no filters)
     const groupedRecords = useMemo(() => {
         if (hasActiveFilters) return {};
 
@@ -103,9 +105,9 @@ export default function IncidentRecords() {
 
         filteredRecords.forEach(record => {
             const dateStr = record.report_date || record.created_at;
-            const date = new Date(dateStr);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const date = dayjs(dateStr);
+            const monthKey = date.format('YYYY-MM');
+            const dayKey = date.format('YYYY-MM-DD');
 
             if (!groups[monthKey]) {
                 groups[monthKey] = {};
@@ -120,7 +122,7 @@ export default function IncidentRecords() {
         Object.keys(groups).forEach(monthKey => {
             Object.keys(groups[monthKey]).forEach(dayKey => {
                 groups[monthKey][dayKey].sort((a, b) =>
-                    new Date(b.report_date || b.created_at).getTime() - new Date(a.report_date || a.created_at).getTime()
+                    dayjs(b.report_date || b.created_at).valueOf() - dayjs(a.report_date || a.created_at).valueOf()
                 );
             });
         });
@@ -132,22 +134,18 @@ export default function IncidentRecords() {
     const sortedFilteredRecords = useMemo(() => {
         if (!hasActiveFilters) return [];
         return [...filteredRecords].sort((a, b) =>
-            new Date(b.report_date || b.created_at).getTime() - new Date(a.report_date || a.created_at).getTime()
+            dayjs(b.report_date || b.created_at).valueOf() - dayjs(a.report_date || a.created_at).valueOf()
         );
     }, [filteredRecords, hasActiveFilters]);
 
     // Get month name in Turkish
     const getMonthName = (monthKey: string) => {
-        const [year, month] = monthKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1);
-        return date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'long' });
+        return dayjs(monthKey + '-01').format('MMMM YYYY');
     };
 
     // Get day name in Turkish
     const getDayName = (dayKey: string) => {
-        const [year, month, day] = dayKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+        return dayjs(dayKey).format('DD MMMM YYYY dddd');
     };
 
     // Clear all filters
@@ -251,7 +249,7 @@ export default function IncidentRecords() {
                                 <RangePicker
                                     value={dateRange}
                                     onChange={handleDateChange}
-                                    onCalendarChange={handleCalendarChange}
+                                    allowEmpty={[false, true]}
                                     format="DD/MM/YYYY"
                                     placeholder={['Başlangıç', 'Bitiş']}
                                     className="w-full"

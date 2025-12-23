@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from '../utils/dayjsConfig';
+import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
@@ -58,43 +59,43 @@ export default function FireAlarmRecords() {
 
     // Date handlers for alarm date
     const handleAlarmDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (dates && dates[0] && dates[1]) {
+        if (!dates || (!dates[0] && !dates[1])) {
+            // Takvim temizlendi
+            setAlarmDateRange(null);
+            setAlarmDateStart('');
+            setAlarmDateEnd('');
+        } else if (dates[0] && dates[1]) {
+            // İki tarih de seçildi
             setAlarmDateRange([dates[0], dates[1]]);
             setAlarmDateStart(dates[0].format('YYYY-MM-DD'));
             setAlarmDateEnd(dates[1].format('YYYY-MM-DD'));
-        } else {
-            setAlarmDateRange(null);
-            setAlarmDateStart('');
-            setAlarmDateEnd('');
-        }
-    };
-
-    const handleAlarmCalendarChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (!dates || !dates[0] || !dates[1]) {
-            setAlarmDateRange(null);
-            setAlarmDateStart('');
-            setAlarmDateEnd('');
+        } else if (dates[0] && !dates[1]) {
+            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
+            const singleDate = dates[0].format('YYYY-MM-DD');
+            setAlarmDateRange([dates[0], dates[0]]);
+            setAlarmDateStart(singleDate);
+            setAlarmDateEnd(singleDate);
         }
     };
 
     // Date handlers for resolution date
     const handleResolutionDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (dates && dates[0] && dates[1]) {
+        if (!dates || (!dates[0] && !dates[1])) {
+            // Takvim temizlendi
+            setResolutionDateRange(null);
+            setResolutionDateStart('');
+            setResolutionDateEnd('');
+        } else if (dates[0] && dates[1]) {
+            // İki tarih de seçildi
             setResolutionDateRange([dates[0], dates[1]]);
             setResolutionDateStart(dates[0].format('YYYY-MM-DD'));
             setResolutionDateEnd(dates[1].format('YYYY-MM-DD'));
-        } else {
-            setResolutionDateRange(null);
-            setResolutionDateStart('');
-            setResolutionDateEnd('');
-        }
-    };
-
-    const handleResolutionCalendarChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (!dates || !dates[0] || !dates[1]) {
-            setResolutionDateRange(null);
-            setResolutionDateStart('');
-            setResolutionDateEnd('');
+        } else if (dates[0] && !dates[1]) {
+            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
+            const singleDate = dates[0].format('YYYY-MM-DD');
+            setResolutionDateRange([dates[0], dates[0]]);
+            setResolutionDateStart(singleDate);
+            setResolutionDateEnd(singleDate);
         }
     };
 
@@ -110,15 +111,15 @@ export default function FireAlarmRecords() {
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
-            // Alarm date filtering
+            // Alarm date filtering - dayjs ile yerel tarihe çevir
             if (alarmDateStart && alarmDateEnd) {
-                const alarmDate = record.alarm_time.split('T')[0];
+                const alarmDate = dayjs(record.alarm_time).format('YYYY-MM-DD');
                 if (alarmDate < alarmDateStart || alarmDate > alarmDateEnd) return false;
             }
 
-            // Resolution date filtering
+            // Resolution date filtering - dayjs ile yerel tarihe çevir
             if (resolutionDateStart && resolutionDateEnd && record.resolution_time) {
-                const resolutionDate = record.resolution_time.split('T')[0];
+                const resolutionDate = dayjs(record.resolution_time).format('YYYY-MM-DD');
                 if (resolutionDate < resolutionDateStart || resolutionDate > resolutionDateEnd) return false;
             }
 
@@ -141,15 +142,16 @@ export default function FireAlarmRecords() {
     }, [alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
 
     // Group records by month and day (only when no filters)
+    // Group records by month and day (only when no filters)
     const groupedRecords = useMemo(() => {
         if (hasActiveFilters) return {};
 
         const groups: { [key: string]: { [key: string]: FireAlarmRecord[] } } = {};
 
         filteredRecords.forEach(record => {
-            const date = new Date(record.alarm_time);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            const dayKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            const date = dayjs(record.alarm_time);
+            const monthKey = date.format('YYYY-MM');
+            const dayKey = date.format('YYYY-MM-DD');
 
             if (!groups[monthKey]) {
                 groups[monthKey] = {};
@@ -164,7 +166,7 @@ export default function FireAlarmRecords() {
         Object.keys(groups).forEach(monthKey => {
             Object.keys(groups[monthKey]).forEach(dayKey => {
                 groups[monthKey][dayKey].sort((a, b) =>
-                    new Date(b.alarm_time).getTime() - new Date(a.alarm_time).getTime()
+                    dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf()
                 );
             });
         });
@@ -176,22 +178,18 @@ export default function FireAlarmRecords() {
     const sortedFilteredRecords = useMemo(() => {
         if (!hasActiveFilters) return [];
         return [...filteredRecords].sort((a, b) =>
-            new Date(b.alarm_time).getTime() - new Date(a.alarm_time).getTime()
+            dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf()
         );
     }, [filteredRecords, hasActiveFilters]);
 
     // Get month name in Turkish
     const getMonthName = (monthKey: string) => {
-        const [year, month] = monthKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1);
-        return date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'long' });
+        return dayjs(monthKey + '-01').format('MMMM YYYY');
     };
 
     // Get day name in Turkish
     const getDayName = (dayKey: string) => {
-        const [year, month, day] = dayKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-        return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+        return dayjs(dayKey).format('DD MMMM YYYY dddd');
     };
 
     // Clear all filters
@@ -328,7 +326,7 @@ export default function FireAlarmRecords() {
                             <RangePicker
                                 value={alarmDateRange}
                                 onChange={handleAlarmDateChange}
-                                onCalendarChange={handleAlarmCalendarChange}
+                                allowEmpty={[false, true]}
                                 format="DD/MM/YYYY"
                                 placeholder={['Başlangıç', 'Bitiş']}
                                 className="w-full"
@@ -340,7 +338,7 @@ export default function FireAlarmRecords() {
                             <RangePicker
                                 value={resolutionDateRange}
                                 onChange={handleResolutionDateChange}
-                                onCalendarChange={handleResolutionCalendarChange}
+                                allowEmpty={[false, true]}
                                 format="DD/MM/YYYY"
                                 placeholder={['Başlangıç', 'Bitiş']}
                                 className="w-full"

@@ -117,7 +117,8 @@ export interface IncidentRecord {
 // SGK Types
 export interface SgkRecord {
     id: string;
-    hashed_tc: string;
+    hashed_tc: string | null;
+    hashed_passport: string | null;
     full_name: string;
     company_name: string | null;
     file_path: string;
@@ -129,17 +130,11 @@ export interface SgkRecord {
 
 export interface SgkFormData {
     tc_no: string;
+    passport_no: string;
     full_name: string;
     company_name: string;
     notes: string;
     pdf_file: File | null;
-}
-
-export interface SgkSearchData {
-    search_type: 'tc' | 'name' | 'company';
-    tc_no?: string;
-    full_name?: string;
-    company_name?: string;
 }
 
 // Form Types

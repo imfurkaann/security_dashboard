@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
-import { hashTC, formatFileName, deleteFile, getFilePath } from '../utils/fileUpload';
+import { hashTC, formatFileName, deleteFile, getFilePath, hashPassport } from '../utils/fileUpload';
 import path from 'path';
 
 /**
@@ -17,6 +17,7 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
             SELECT 
                 sr.id,
                 sr.hashed_tc,
+                sr.hashed_passport,
                 sr.full_name,
                 sr.company_name,
                 sr.file_path,
@@ -36,6 +37,7 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
             hashed_tc: row.hashed_tc,
+            hashed_passport: row.hashed_passport,
             full_name: row.full_name,
             company_name: row.company_name,
             file_path: row.file_path,
@@ -57,27 +59,72 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
 /**
  * Create new SGK record with file upload
  * POST /api/sgk/records
+ * Supports TC or Passport number (one of them is required, but not both)
+ * If neither is provided, record will use UUID-based naming
  */
 export const createSgkRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { tc_no, full_name, company_name, notes } = req.body;
+        const { tc_no, passport_no, full_name, company_name, notes } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const file = req.file;
 
         // Validasyonlar
-        if (!tc_no || !full_name || !file) {
-            res.status(400).json({ success: false, message: 'TC Kimlik No, Ad Soyad ve PDF dosyası zorunludur' });
+        if (!full_name || !file) {
+            res.status(400).json({ success: false, message: 'Ad Soyad ve PDF dosyası zorunludur' });
             return;
         }
 
-        // TC doğrulama
-        const cleanTC = tc_no.replace(/\D/g, '');
-        if (cleanTC.length !== 11) {
-            // Dosyayı sil
+        // TC ve pasaport her ikisi de girilmiş mi kontrol et
+        if (tc_no && passport_no) {
             if (file.filename) deleteFile(file.filename);
-            res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
+            res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
+        }
+
+        let hashedTC: string | null = null;
+        let hashedPassport: string | null = null;
+
+        // TC kontrolü
+        if (tc_no) {
+            const cleanTC = tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                if (file.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
+                return;
+            }
+            hashedTC = hashTC(cleanTC);
+
+            // Aynı TC ile kayıt var mı kontrol et
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL';
+            const existingResult = await pool.query(existingQuery, [hashedTC]);
+
+            if (existingResult.rows.length > 0) {
+                if (file.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait kayıt zaten mevcut' });
+                return;
+            }
+        }
+
+        // Pasaport kontrolü
+        if (passport_no) {
+            const cleanPassport = passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                if (file.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
+                return;
+            }
+            hashedPassport = hashPassport(cleanPassport);
+
+            // Aynı pasaport ile kayıt var mı kontrol et
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL';
+            const existingResult = await pool.query(existingQuery, [hashedPassport]);
+
+            if (existingResult.rows.length > 0) {
+                if (file.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait kayıt zaten mevcut' });
+                return;
+            }
         }
 
         // GÜVENLİK: Input sanitization
@@ -86,23 +133,8 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const sanitizedNotes = sanitizeInput(notes, 1000);
 
         if (!sanitizedFullName || sanitizedFullName.trim().length === 0) {
-            // Dosyayı sil
             if (file.filename) deleteFile(file.filename);
             res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
-            return;
-        }
-
-        // TC'yi hash'le (KVKK uyumu)
-        const hashedTC = hashTC(cleanTC);
-
-        // Aynı TC ile kayıt var mı kontrol et
-        const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL';
-        const existingResult = await pool.query(existingQuery, [hashedTC]);
-
-        if (existingResult.rows.length > 0) {
-            // Dosyayı sil
-            if (file.filename) deleteFile(file.filename);
-            res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait kayıt zaten mevcut' });
             return;
         }
 
@@ -111,16 +143,17 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
 
         const insertQuery = `
             INSERT INTO sgk_records (
-                id, hashed_tc, full_name, company_name, 
+                id, hashed_tc, hashed_passport, full_name, company_name, 
                 file_path, upload_date, notes, personnel_id, created_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
         `;
 
         const values = [
             id,
             hashedTC,
+            hashedPassport,
             sanitizedFullName,
             sanitizedCompanyName,
             file.filename, // Sadece dosya adı kaydet
@@ -159,15 +192,15 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
 };
 
 /**
- * Search SGK records by TC, name or company
+ * Search SGK records by TC, passport, name or company
  * POST /api/sgk/records/search
  */
 export const searchSgkRecords = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { search_type, tc_no, full_name, company_name } = req.body;
+        const { search_type, tc_no, passport_no, full_name, company_name } = req.body;
 
-        if (!search_type || !['tc', 'name', 'company'].includes(search_type)) {
-            res.status(400).json({ success: false, message: 'Geçerli bir arama türü seçiniz (tc, name, company)' });
+        if (!search_type || !['tc', 'passport', 'name', 'company'].includes(search_type)) {
+            res.status(400).json({ success: false, message: 'Geçerli bir arama türü seçiniz (tc, passport, name, company)' });
             return;
         }
 
@@ -175,6 +208,7 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             SELECT 
                 sr.id,
                 sr.hashed_tc,
+                sr.hashed_passport,
                 sr.full_name,
                 sr.company_name,
                 sr.file_path,
@@ -207,6 +241,24 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             const hashedTC = hashTC(cleanTC);
             query += ' AND sr.hashed_tc = $1';
             params.push(hashedTC);
+
+        } else if (search_type === 'passport') {
+            if (!passport_no) {
+                res.status(400).json({ success: false, message: 'Pasaport Numarası zorunludur' });
+                return;
+            }
+
+            // Pasaport doğrulama
+            const cleanPassport = passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
+                return;
+            }
+
+            // Pasaportu hash'le
+            const hashedPassport = hashPassport(cleanPassport);
+            query += ' AND sr.hashed_passport = $1';
+            params.push(hashedPassport);
 
         } else if (search_type === 'name') {
             if (!full_name || full_name.trim().length === 0) {
@@ -245,6 +297,7 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
         const formattedData = result.rows.map(record => ({
             id: record.id,
             hashed_tc: record.hashed_tc,
+            hashed_passport: record.hashed_passport,
             full_name: record.full_name,
             company_name: record.company_name,
             file_path: record.file_path,
@@ -336,7 +389,7 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
 export const updateSgkRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { tc_no, full_name, company_name, notes } = req.body;
+        const { tc_no, passport_no, full_name, company_name, notes } = req.body;
         const file = req.file;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
@@ -359,18 +412,56 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         const oldData = existingResult.rows[0];
 
-        // TC validation
-        if (!tc_no || typeof tc_no !== 'string') {
+        // TC ve pasaport her ikisi de girilmiş mi kontrol et
+        if (tc_no && passport_no) {
             if (file?.filename) deleteFile(file.filename);
-            res.status(400).json({ success: false, message: 'TC Kimlik No zorunludur' });
+            res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
         }
 
-        const cleanTC = tc_no.replace(/\D/g, '');
-        if (cleanTC.length !== 11) {
-            if (file?.filename) deleteFile(file.filename);
-            res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
-            return;
+        let hashedTC: string | null = null;
+        let hashedPassport: string | null = null;
+
+        // TC kontrolü
+        if (tc_no) {
+            const cleanTC = tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                if (file?.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
+                return;
+            }
+            hashedTC = hashTC(cleanTC);
+
+            // Aynı TC ile başka kayıt var mı kontrol et (kendi ID'si hariç)
+            const tcCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND id != $2 AND deleted_at IS NULL';
+            const tcCheckResult = await pool.query(tcCheckQuery, [hashedTC, id]);
+
+            if (tcCheckResult.rows.length > 0) {
+                if (file?.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait başka bir kayıt zaten mevcut' });
+                return;
+            }
+        }
+
+        // Pasaport kontrolü
+        if (passport_no) {
+            const cleanPassport = passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                if (file?.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
+                return;
+            }
+            hashedPassport = hashPassport(cleanPassport);
+
+            // Aynı pasaport ile başka kayıt var mı kontrol et (kendi ID'si hariç)
+            const passportCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND id != $2 AND deleted_at IS NULL';
+            const passportCheckResult = await pool.query(passportCheckQuery, [hashedPassport, id]);
+
+            if (passportCheckResult.rows.length > 0) {
+                if (file?.filename) deleteFile(file.filename);
+                res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait başka bir kayıt zaten mevcut' });
+                return;
+            }
         }
 
         // Sanitization
@@ -384,26 +475,22 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // TC'yi hash'le (KVKK uyumu)
-        const hashedTC = hashTC(cleanTC);
-
-        // Aynı TC ile başka kayıt var mı kontrol et (kendi ID'si hariç)
-        const tcCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND id != $2 AND deleted_at IS NULL';
-        const tcCheckResult = await pool.query(tcCheckQuery, [hashedTC, id]);
-
-        if (tcCheckResult.rows.length > 0) {
-            if (file?.filename) deleteFile(file.filename);
-            res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait başka bir kayıt zaten mevcut' });
-            return;
-        }
-
         const updateFields: string[] = [];
         const updateValues: any[] = [];
         let paramCounter = 1;
 
-        // TC güncellenebilir
-        updateFields.push(`hashed_tc = $${paramCounter++}`);
-        updateValues.push(hashedTC);
+        // TC/Pasaport güncellenebilir (birini null yap, diğerini set et)
+        if (tc_no) {
+            updateFields.push(`hashed_tc = $${paramCounter++}`);
+            updateValues.push(hashedTC);
+            updateFields.push(`hashed_passport = $${paramCounter++}`);
+            updateValues.push(null);
+        } else if (passport_no) {
+            updateFields.push(`hashed_passport = $${paramCounter++}`);
+            updateValues.push(hashedPassport);
+            updateFields.push(`hashed_tc = $${paramCounter++}`);
+            updateValues.push(null);
+        }
 
         // Ad Soyad güncellenebilir
         updateFields.push(`full_name = $${paramCounter++}`);
