@@ -5,6 +5,7 @@ interface JWTPayload {
     userId: string;
     username: string;
     role: string;
+    personnelRecordId?: number; // Optional: ID of the current login session
 }
 
 // GÜVENLİK: JWT_SECRET .env dosyasından alınmalı, yoksa uygulama çalışmamalı

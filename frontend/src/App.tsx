@@ -4,11 +4,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Vehicles from './pages/Vehicles';
+import VehicleRecords from './pages/VehicleRecords';
 import Visitors from './pages/Visitors';
+import VisitorRecords from './pages/VisitorRecords';
 import Managers from './pages/Managers';
 import Incidents from './pages/Incidents';
 import FireAlarms from './pages/FireAlarms';
 import Sgk from './pages/Sgk';
+import EquipmentCheck from './pages/EquipmentCheck';
 
 function App() {
   return (
@@ -17,6 +20,13 @@ function App() {
         <Routes>
           {/* Public Route */}
           <Route path="/login" element={<Login />} />
+
+          {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
+          <Route path="/equipment-check" element={
+            <ProtectedRoute>
+              <EquipmentCheck />
+            </ProtectedRoute>
+          } />
 
           {/* Protected Routes - Authentication gerekli */}
           <Route path="/dashboard" element={
@@ -29,9 +39,19 @@ function App() {
               <Vehicles />
             </ProtectedRoute>
           } />
+          <Route path="/vehicle-records" element={
+            <ProtectedRoute>
+              <VehicleRecords />
+            </ProtectedRoute>
+          } />
           <Route path="/visitors" element={
             <ProtectedRoute>
               <Visitors />
+            </ProtectedRoute>
+          } />
+          <Route path="/visitor-records" element={
+            <ProtectedRoute>
+              <VisitorRecords />
             </ProtectedRoute>
           } />
           <Route path="/managers" element={

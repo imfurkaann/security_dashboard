@@ -149,6 +149,8 @@ export interface VehicleFormData {
     manager_name: string;
     destination: string;
     notes: string;
+    given_time?: string; // Optional: HH:MM format time
+    return_time?: string; // Optional: HH:MM format time for returned vehicles
 }
 
 export interface VisitorFormData {
@@ -162,6 +164,8 @@ export interface VisitorFormData {
     subcontractor_worker: boolean;
     for_electric_station: boolean;
     send_whatsapp?: boolean;  // WhatsApp bildirimi (opsiyonel, sadece yeni kayıtlarda)
+    entry_time?: string;  // Giriş saati (HH:MM formatında)
+    exit_time?: string;  // Çıkış saati (HH:MM formatında)
 }
 
 // API Response Types

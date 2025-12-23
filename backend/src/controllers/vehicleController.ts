@@ -126,7 +126,7 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
  */
 export const createVehicleRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_id, manager_id, manager_name, destination, notes } = req.body;
+        const { vehicle_id, manager_id, manager_name, destination, notes, given_time } = req.body;
         const personnel_id = req.user?.userId;
 
         // Validate required fields
@@ -256,14 +256,27 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
         // Start transaction
         await pool.query('BEGIN');
 
-        // Create record (resolvedManagerName is auto-populated if manager_id is provided)
-        await pool.query(
-            `INSERT INTO vehicle_records (
+        // Create record with custom time if provided
+        let insertQuery: string;
+        let queryParams: any[];
+
+        if (given_time && /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time)) {
+            // If valid time provided (HH:MM format), use it
+            insertQuery = `INSERT INTO vehicle_records (
                 id, vehicle_id, manager_id, manager_name, given_by,
                 given_date, given_time, destination, notes, status
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, 'in_use')`,
-            [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null]
-        );
+            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, 'in_use')`;
+            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null];
+        } else {
+            // Use current timestamp
+            insertQuery = `INSERT INTO vehicle_records (
+                id, vehicle_id, manager_id, manager_name, given_by,
+                given_date, given_time, destination, notes, status
+            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, 'in_use')`;
+            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null];
+        }
+
+        await pool.query(insertQuery, queryParams);
 
         // Update vehicle status
         await pool.query(
@@ -325,6 +338,278 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
         res.status(500).json({
             success: false,
             message: 'Araç kaydı oluşturulurken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Update vehicle record
+ * PUT /api/vehicles/records/:id
+ */
+export const updateVehicleRecord = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { vehicle_id, manager_id, manager_name, destination, notes, given_time, return_time } = req.body;
+        const personnel_id = req.user?.userId;
+
+        // GÜVENLİK: UUID validasyonu
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kayıt ID formatı'
+            });
+            return;
+        }
+
+        // Check if record exists
+        const recordCheck = await pool.query(
+            'SELECT id, status, vehicle_id FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+
+        if (recordCheck.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Kayıt bulunamadı'
+            });
+            return;
+        }
+
+        const recordStatus = recordCheck.rows[0].status;
+        const oldVehicleId = recordCheck.rows[0].vehicle_id;
+
+        // Validate at least one field is provided
+        if (!vehicle_id && !manager_id && !manager_name && !destination && notes === undefined && !given_time && !return_time) {
+            res.status(400).json({
+                success: false,
+                message: 'En az bir alan güncellenmelidir'
+            });
+            return;
+        }
+
+        // GÜVENLİK: If vehicle_id is provided, validate UUID format
+        if (vehicle_id && !isValidUUID(vehicle_id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz araç kimliği'
+            });
+            return;
+        }
+
+        // GÜVENLİK: If manager_id is provided, validate UUID format
+        if (manager_id && !isValidUUID(manager_id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz müdür kimliği'
+            });
+            return;
+        }
+
+        // Validate manager_name (only if provided and not empty)
+        if (manager_name && typeof manager_name === 'string' && manager_name.trim().length === 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçerli bir müdür adı giriniz'
+            });
+            return;
+        }
+
+        if (manager_name && manager_name.length > 100) {
+            res.status(400).json({
+                success: false,
+                message: 'Müdür adı çok uzun (maksimum 100 karakter)'
+            });
+            return;
+        }
+
+        // Validate destination
+        if (destination !== undefined && (typeof destination !== 'string' || destination.trim().length === 0)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçerli bir gidilen yer giriniz'
+            });
+            return;
+        }
+
+        if (destination && destination.length > 255) {
+            res.status(400).json({
+                success: false,
+                message: 'Gidilen yer çok uzun (maksimum 255 karakter)'
+            });
+            return;
+        }
+
+        // Validate notes length
+        if (notes !== undefined && typeof notes === 'string' && notes.length > 1000) {
+            res.status(400).json({
+                success: false,
+                message: 'Açıklama çok uzun (maksimum 1000 karakter)'
+            });
+            return;
+        }
+
+        // Validate given_time format
+        if (given_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz saat formatı (HH:MM olmalıdır)'
+            });
+            return;
+        }
+
+        // Validate return_time format
+        if (return_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(return_time)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz teslim alınma saati formatı (HH:MM olmalıdır)'
+            });
+            return;
+        }
+
+        // If vehicle_id is provided, check if new vehicle exists and is available (only if record is still in_use)
+        if (vehicle_id && vehicle_id !== oldVehicleId) {
+            // Don't allow vehicle change for returned records
+            if (recordStatus === 'returned') {
+                res.status(400).json({
+                    success: false,
+                    message: 'Teslim alınmış araç kayıtlarında araç değiştirilemez'
+                });
+                return;
+            }
+
+            const newVehicleCheck = await pool.query(
+                'SELECT status FROM vehicles WHERE id = $1 AND deleted_at IS NULL',
+                [vehicle_id]
+            );
+
+            if (newVehicleCheck.rows.length === 0) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Yeni araç bulunamadı'
+                });
+                return;
+            }
+
+            if (newVehicleCheck.rows[0].status !== 'available') {
+                res.status(400).json({
+                    success: false,
+                    message: 'Seçilen araç kullanımda, müsait değil'
+                });
+                return;
+            }
+        }
+
+        // If manager_id is provided, check if it exists and get name
+        let resolvedManagerName = manager_name;
+        if (manager_id) {
+            const managerCheck = await pool.query(
+                'SELECT id, first_name, last_name FROM managers WHERE id = $1 AND deleted_at IS NULL AND is_active = true',
+                [manager_id]
+            );
+
+            if (managerCheck.rows.length === 0) {
+                res.status(404).json({
+                    success: false,
+                    message: 'Müdür bulunamadı'
+                });
+                return;
+            }
+
+            const manager = managerCheck.rows[0];
+            resolvedManagerName = `${manager.first_name} ${manager.last_name}`;
+        }
+
+        // Build update query dynamically
+        const updates: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
+        if (vehicle_id !== undefined && vehicle_id !== oldVehicleId) {
+            updates.push(`vehicle_id = $${paramIndex++}`);
+            values.push(vehicle_id);
+        }
+
+        if (manager_id !== undefined) {
+            updates.push(`manager_id = $${paramIndex++}`);
+            values.push(manager_id || null);
+        }
+
+        if (resolvedManagerName !== undefined) {
+            updates.push(`manager_name = $${paramIndex++}`);
+            values.push(resolvedManagerName);
+        }
+
+        if (destination !== undefined) {
+            updates.push(`destination = $${paramIndex++}`);
+            values.push(destination);
+        }
+
+        if (notes !== undefined) {
+            updates.push(`notes = $${paramIndex++}`);
+            values.push(notes || null);
+        }
+
+        if (given_time !== undefined) {
+            updates.push(`given_time = $${paramIndex++}::TIME`);
+            values.push(given_time);
+        }
+
+        if (return_time !== undefined) {
+            updates.push(`return_time = $${paramIndex++}::TIME`);
+            values.push(return_time);
+        }
+
+        // Add record ID as last parameter
+        values.push(id);
+
+        // Start transaction for vehicle status updates
+        await pool.query('BEGIN');
+
+        // Execute update
+        await pool.query(
+            `UPDATE vehicle_records SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+            values
+        );
+
+        // If vehicle changed and record is still in_use, update both old and new vehicle statuses
+        if (vehicle_id && vehicle_id !== oldVehicleId && recordStatus === 'in_use') {
+            // Set old vehicle to available
+            await pool.query(
+                'UPDATE vehicles SET status = $1 WHERE id = $2',
+                ['available', oldVehicleId]
+            );
+
+            // Set new vehicle to in_use
+            await pool.query(
+                'UPDATE vehicles SET status = $1 WHERE id = $2',
+                ['in_use', vehicle_id]
+            );
+        }
+
+        await pool.query('COMMIT');
+
+        // GÜVENLİK: Audit log kaydı
+        const clientIp = getClientIp(req);
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'UPDATE',
+            null,
+            { vehicle_id, manager_id, manager_name: resolvedManagerName, destination, notes, given_time, return_time },
+            personnel_id || null,
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Araç kaydı güncellendi'
+        });
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error('Update vehicle record error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Araç kaydı güncellenirken hata oluştu'
         });
     }
 };

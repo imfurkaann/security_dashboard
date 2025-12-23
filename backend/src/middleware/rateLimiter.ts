@@ -15,19 +15,19 @@ const RATE_LIMIT_CONFIG = {
     // Genel API limitleri
     general: {
         windowMs: 60 * 1000,      // 1 dakika
-        maxRequests: 100,         // Dakikada maksimum 100 istek
+        maxRequests: 1000,        // Dakikada maksimum 1000 istek
         blockDurationMs: 5 * 60 * 1000  // 5 dakika blok
     },
     // Login endpoint limitleri
     login: {
         windowMs: 15 * 60 * 1000, // 15 dakika
-        maxRequests: 5,           // 15 dakikada maksimum 5 deneme
+        maxRequests: 50,          // 15 dakikada maksimum 50 deneme
         blockDurationMs: 30 * 60 * 1000  // 30 dakika blok
     },
     // Yazma işlemleri (POST/PUT/DELETE)
     write: {
         windowMs: 60 * 1000,      // 1 dakika
-        maxRequests: 30,          // Dakikada maksimum 30 yazma işlemi
+        maxRequests: 300,         // Dakikada maksimum 300 yazma işlemi
         blockDurationMs: 10 * 60 * 1000  // 10 dakika blok
     }
 };

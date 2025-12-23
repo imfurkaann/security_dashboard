@@ -16,7 +16,9 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     notes: '',
     subcontractor_worker: false,
     for_electric_station: false,
-    send_whatsapp: false
+    send_whatsapp: false,
+    entry_time: '',  // Boş string = mevcut saat kullanılacak
+    exit_time: ''
 };
 
 export default function Visitors() {
@@ -72,7 +74,9 @@ export default function Visitors() {
             notes: rec.notes || '',
             subcontractor_worker: rec.subcontractor_worker ?? false,
             for_electric_station: rec.for_electric_station ?? false,
-            send_whatsapp: false  // WhatsApp sadece yeni kayıtlarda kullanılır
+            send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
+            entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
+            exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
         });
         setIsEditing(true);
         setEditingId(rec.id);
@@ -90,7 +94,9 @@ export default function Visitors() {
         notes: formData.notes?.trim() || null,
         subcontractor_worker: !!formData.subcontractor_worker,
         for_electric_station: !!formData.for_electric_station,
-        send_whatsapp: !!formData.send_whatsapp  // WhatsApp bildirimi
+        send_whatsapp: !!formData.send_whatsapp,  // WhatsApp bildirimi
+        entry_time: formData.entry_time || null,  // Giriş saati
+        exit_time: formData.exit_time || null  // Çıkış saati
     }), [formData]);
 
     // Form submission handler
@@ -132,7 +138,7 @@ export default function Visitors() {
     const handleExit = useCallback(async (id: string) => {
         if (!confirm('Ziyaretçinin çıkışını kaydetmek istediğinize emin misiniz?')) return;
         try {
-            const response = await api.post(`/visitors/records/${id}/exit`, {});
+            const response = await api.post(`/visitors/records/${id}/exit`, { exit_time: null });
             fetchData();
 
             // WhatsApp mesajı varsa modal göster
@@ -184,12 +190,23 @@ export default function Visitors() {
                                 <p className="text-gray-600 mt-1">Ziyaretçi giriş/çıkış kayıtlarını yönetin</p>
                             </div>
                         </div>
-                        <button onClick={openModalForNew} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Yeni Kayıt
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => navigate('/visitor-records')}
+                                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                Kayıt Filtrele
+                            </button>
+                            <button onClick={openModalForNew} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Yeni Kayıt
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -284,6 +301,7 @@ export default function Visitors() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
                                             <th className="px-6 py-3 w-60 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
@@ -339,6 +357,10 @@ export default function Visitors() {
                                                     ) : (
                                                         <span className="text-gray-400">-</span>
                                                     )}
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{rec.phone || '-'}</div>
                                                 </td>
 
                                                 <td className="px-6 py-4 max-w-[240px]">
@@ -432,6 +454,30 @@ export default function Visitors() {
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
                                         <input value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="05xx..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                                     </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
+                                        <input
+                                            type="time"
+                                            value={formData.entry_time || ''}
+                                            onChange={(e) => setFormData({ ...formData, entry_time: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Boş bırakırsanız mevcut saat kullanılır</p>
+                                    </div>
+
+                                    {isEditing && records.find(r => r.id === editingId)?.status === 'exited' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
+                                            <input
+                                                type="time"
+                                                value={formData.exit_time || ''}
+                                                onChange={(e) => setFormData({ ...formData, exit_time: e.target.value })}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">Çıkış kaydı için saat belirtebilirsiniz</p>
+                                        </div>
+                                    )}
 
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>

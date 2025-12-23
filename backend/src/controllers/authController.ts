@@ -122,11 +122,21 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         clearAttempts(clientIp);
         await logLoginAttempt(user.id, sanitizedUsername, true, clientIp, userAgent);
 
+        // Create personnel_record entry for login time tracking
+        const personnelRecordQuery = `
+            INSERT INTO personnel_records (personnel_id, login_time, login_ip)
+            VALUES ($1, CURRENT_TIMESTAMP, $2)
+            RETURNING id
+        `;
+        const personnelRecordResult = await pool.query(personnelRecordQuery, [user.id, clientIp]);
+        const personnelRecordId = personnelRecordResult.rows[0].id;
+
         // Generate JWT token
         const token = generateToken({
             userId: user.id,
             username: user.username,
             role: user.role,
+            personnelRecordId: personnelRecordId,
         });
 
         // Return success response
@@ -156,7 +166,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 };
 
 /**
- * Logout controller (client-side token removal)
+ * Logout controller (client-side token removal + personnel record update)
  * POST /api/auth/logout
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
@@ -169,6 +179,21 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
     if (userId) {
         await logLogout(userId, clientIp);
+
+        // Update personnel_record with logout time
+        try {
+            const updateQuery = `
+                UPDATE personnel_records
+                SET logout_time = CURRENT_TIMESTAMP,
+                    logout_ip = $2,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE personnel_id = $1 AND logout_time IS NULL
+            `;
+            await pool.query(updateQuery, [userId, clientIp]);
+        } catch (error) {
+            console.error('Error updating personnel_record on logout:', error);
+            // Don't fail logout if personnel_record update fails
+        }
     }
 
     res.status(200).json({
