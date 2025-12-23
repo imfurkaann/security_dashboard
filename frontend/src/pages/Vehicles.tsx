@@ -10,7 +10,9 @@ const INITIAL_FORM_DATA: VehicleFormData = {
     manager_id: '',
     manager_name: '',
     destination: '',
-    notes: ''
+    notes: '',
+    given_time: '', // Empty means current time
+    return_time: '' // Empty means no return time
 };
 
 export default function Vehicles() {
@@ -22,6 +24,8 @@ export default function Vehicles() {
     const [whatsappMessage, setWhatsappMessage] = useState(''); const [showCustomManager, setShowCustomManager] = useState(false);
     const [filter, setFilter] = useState<VehicleFilterType>('all');
     const [formData, setFormData] = useState<VehicleFormData>(INITIAL_FORM_DATA);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingUsage, setEditingUsage] = useState<VehicleUsage | null>(null);
     const navigate = useNavigate();
 
     // Fetch all data in parallel
@@ -98,6 +102,63 @@ export default function Vehicles() {
         setShowModal(true);
     }, [resetForm]);
 
+    // Open edit modal
+    const openEditModal = useCallback((usage: VehicleUsage) => {
+        setEditingUsage(usage);
+
+        // Parse vehicle_id from the usage record
+        const vehicleMatch = vehicles.find(v => v.plate === usage.vehicle_plate);
+        const vehicleId = vehicleMatch?.id || '';
+
+        // Parse manager_id if exists (check if manager is in the list)
+        const managerMatch = managers.find(m =>
+            `${m.first_name} ${m.last_name}` === usage.manager
+        );
+        const managerId = managerMatch?.id || '';
+
+        // Pre-fill form with existing data
+        setFormData({
+            vehicle_id: vehicleId,
+            manager_id: managerId,
+            manager_name: managerId ? '' : usage.manager, // Use manager_name if not in list
+            destination: usage.destination || '',
+            notes: usage.notes || '',
+            given_time: usage.given_time ? formatTime(usage.given_time) : '',
+            return_time: usage.return_time ? formatTime(usage.return_time) : ''
+        });
+
+        // If manager not in list, show custom input
+        setShowCustomManager(!managerId);
+        setShowEditModal(true);
+    }, [vehicles, managers]);
+
+    // Handle edit submit
+    const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUsage) return;
+
+        try {
+            await api.put(`/vehicles/records/${editingUsage.id}`, {
+                vehicle_id: formData.vehicle_id,
+                manager_id: formData.manager_id || null,
+                manager_name: formData.manager_name || null,
+                destination: formData.destination,
+                notes: formData.notes || null,
+                given_time: formData.given_time || null,
+                return_time: formData.return_time || null
+            });
+            setShowEditModal(false);
+            setEditingUsage(null);
+            setFormData(INITIAL_FORM_DATA);
+            setShowCustomManager(false);
+            fetchData();
+            alert('Kayıt başarıyla güncellendi');
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'İşlem başarısız');
+        }
+    }, [formData, editingUsage, fetchData]);
+
     // Memoized calculations for performance
     const todayUsages = useMemo(() =>
         usages.filter(u => isToday(u.given_date) || (u.return_date && isToday(u.return_date))),
@@ -134,15 +195,26 @@ export default function Vehicles() {
                                 <p className="text-gray-600 mt-1">Otel araçlarının kullanım kayıtlarını yönetin</p>
                             </div>
                         </div>
-                        <button
-                            onClick={() => openModal()}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Teslim Et
-                        </button>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => navigate('/vehicle-records')}
+                                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                Kayıt Filtrele
+                            </button>
+                            <button
+                                onClick={() => openModal()}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Teslim Et
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -150,44 +222,44 @@ export default function Vehicles() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-blue-600 text-sm font-medium">Toplam Araç</p>
-                                <p className="text-3xl font-bold text-blue-900">{vehicles.length}</p>
+                                <p className="text-2xl font-bold text-blue-900">{vehicles.length}</p>
                             </div>
-                            <div className="p-3 bg-blue-100 rounded-lg">
-                                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                                 </svg>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-orange-600 text-sm font-medium">Kullanımda</p>
-                                <p className="text-3xl font-bold text-orange-900">{inUseCount}</p>
+                                <p className="text-2xl font-bold text-orange-900">{inUseCount}</p>
                             </div>
-                            <div className="p-3 bg-orange-100 rounded-lg">
-                                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="p-2 bg-orange-100 rounded-lg">
+                                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-purple-600 text-sm font-medium">Teslim Alınan</p>
-                                <p className="text-3xl font-bold text-purple-900">
+                                <p className="text-2xl font-bold text-purple-900">
                                     {usages.filter(u => isToday(u.given_date)).length}
                                 </p>
                             </div>
-                            <div className="p-3 bg-purple-100 rounded-lg">
-                                <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="p-2 bg-purple-100 rounded-lg">
+                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                             </div>
@@ -295,15 +367,24 @@ export default function Vehicles() {
                                                     <div className="text-sm text-gray-900">{usage.returned_by || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    {usage.status === 'in_use' && (
+                                                    <div className="flex gap-2">
                                                         <button
-                                                            onClick={() => handleReturn(usage.id)}
-                                                            className="text-green-600 hover:text-green-900 transition font-medium"
-                                                            title="Aracı Teslim Al"
+                                                            onClick={() => openEditModal(usage)}
+                                                            className="text-blue-600 hover:text-blue-900 transition font-medium"
+                                                            title="Kaydı Düzenle"
                                                         >
-                                                            Teslim Al
+                                                            Düzenle
                                                         </button>
-                                                    )}
+                                                        {usage.status === 'in_use' && (
+                                                            <button
+                                                                onClick={() => handleReturn(usage.id)}
+                                                                className="text-green-600 hover:text-green-900 transition font-medium"
+                                                                title="Aracı Teslim Al"
+                                                            >
+                                                                Teslim Al
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -426,6 +507,23 @@ export default function Vehicles() {
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Teslim Saati
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={formData.given_time}
+                                            onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
+                                            step="60"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            style={{ colorScheme: 'light' }}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Boş bırakırsanız anlık saat kaydedilir
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Açıklama / Not
                                         </label>
                                         <textarea
@@ -449,6 +547,189 @@ export default function Vehicles() {
                                     <button
                                         type="button"
                                         onClick={() => { setShowModal(false); resetForm(); }}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                    >
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Modal */}
+            {showEditModal && editingUsage && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">
+                                    Araç Kaydını Düzenle
+                                </h2>
+                                <button
+                                    onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleEditSubmit} className="space-y-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Araç Seçin <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            required
+                                            value={formData.vehicle_id}
+                                            onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                                            disabled={editingUsage?.status === 'returned'}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="">Araç seçiniz...</option>
+                                            {vehicles.map(vehicle => (
+                                                <option key={vehicle.id} value={vehicle.id}>
+                                                    {vehicle.plate} - {vehicle.brand}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {editingUsage?.status === 'returned' && (
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Teslim alınmış kayıtlarda araç değiştirilemez
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Aracı Alan Müdür <span className="text-red-500">*</span>
+                                        </label>
+                                        {!showCustomManager ? (
+                                            <>
+                                                <select
+                                                    required={!showCustomManager}
+                                                    value={formData.manager_id}
+                                                    onChange={(e) => {
+                                                        if (e.target.value === 'custom') {
+                                                            setShowCustomManager(true);
+                                                            setFormData({ ...formData, manager_id: '', manager_name: '' });
+                                                        } else {
+                                                            setFormData({ ...formData, manager_id: e.target.value, manager_name: '' });
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                >
+                                                    <option value="">Müdür seçiniz...</option>
+                                                    {managers.map(manager => (
+                                                        <option key={manager.id} value={manager.id}>
+                                                            {manager.first_name} {manager.last_name} - {manager.title}
+                                                        </option>
+                                                    ))}
+                                                    <option value="custom">🔽 Listede Yok - Elle Gir</option>
+                                                </select>
+                                            </>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    required={showCustomManager}
+                                                    value={formData.manager_name}
+                                                    onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
+                                                    placeholder="Müdür adı soyadı"
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowCustomManager(false);
+                                                        setFormData({ ...formData, manager_id: '', manager_name: '' });
+                                                    }}
+                                                    className="text-sm text-blue-600 hover:text-blue-800"
+                                                >
+                                                    ← Listeye Dön
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Gidilen Yer <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.destination}
+                                            onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                                            placeholder="Örn: Havalimanı, Şehir Merkezi"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Teslim Saati
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={formData.given_time}
+                                            onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
+                                            step="60"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            style={{ colorScheme: 'light' }}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Boş bırakırsanız mevcut saat korunur
+                                        </p>
+                                    </div>
+
+                                    {editingUsage && editingUsage.status === 'returned' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Teslim Alınma Saati
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={formData.return_time}
+                                                onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
+                                                step="60"
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                style={{ colorScheme: 'light' }}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Boş bırakırsanız mevcut saat korunur
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Açıklama / Not
+                                        </label>
+                                        <textarea
+                                            value={formData.notes}
+                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                            rows={3}
+                                            placeholder="Kullanım amacı, ek notlar..."
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
+                                    >
+                                        Güncelle
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
                                         className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
                                     >
                                         İptal

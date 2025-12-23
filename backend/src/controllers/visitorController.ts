@@ -78,7 +78,7 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station, entry_time } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
 
@@ -121,6 +121,12 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
+        // entry_time validasyonu (HH:MM formatı)
+        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+            res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
+
         // person_count opsiyonel
         let personCountValue: number | null = null;
         if (person_count !== undefined && person_count !== null && person_count !== '') {
@@ -150,7 +156,9 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                 entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                CURRENT_DATE, CURRENT_TIME, 'inside', $12
+                CURRENT_DATE, 
+                COALESCE($12::time, CURRENT_TIME), 
+                'inside', $13
             )
             RETURNING entry_date, entry_time
         `;
@@ -168,6 +176,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             Boolean(subcontractor_worker),
             Boolean(for_electric_station),
             personnel_id,
+            entry_time || null,  // entry_time boşsa null, CURRENT_TIME kullanılacak
             sendWhatsApp
         ];
 
@@ -229,7 +238,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station, entry_time, exit_time } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -241,6 +250,16 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         const recordCheck = await pool.query('SELECT id FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
         if (recordCheck.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        // entry_time ve exit_time validasyonu
+        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+            res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
+        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+            res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
             return;
         }
 
@@ -269,6 +288,14 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
         }
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
+        if (entry_time !== undefined) {
+            updates.push(`entry_time = $${idx++}`);
+            params.push(entry_time || null);
+        }
+        if (exit_time !== undefined) {
+            updates.push(`exit_time = $${idx++}`);
+            params.push(exit_time || null);
+        }
 
         if (updates.length === 0) {
             res.status(400).json({ success: false, message: 'Güncellenecek alan bulunamadı' });
@@ -306,11 +333,18 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
 export const exitVisitor = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const { exit_time } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
         if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        // exit_time validasyonu
+        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+            res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
             return;
         }
 
@@ -331,12 +365,12 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         await pool.query(
             `UPDATE visitor_records 
              SET exit_date = CURRENT_DATE, 
-                 exit_time = CURRENT_TIME, 
+                 exit_time = COALESCE($3::time, CURRENT_TIME), 
                  exit_by = $2,
                  status = 'exited', 
                  updated_at = now() 
              WHERE id = $1 AND deleted_at IS NULL`,
-            [id, personnel_id]
+            [id, personnel_id, exit_time || null]
         );
 
         // GÜVENLİK: Audit log kaydı

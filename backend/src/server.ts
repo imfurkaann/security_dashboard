@@ -9,6 +9,7 @@ import managersRoutes from './routes/managers';
 import incidentsRoutes from './routes/incidents';
 import fireAlarmsRoutes from './routes/fireAlarms';
 import sgkRoutes from './routes/sgk';
+import equipmentCheckRoutes from './routes/equipmentCheck';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 
 dotenv.config();
@@ -84,6 +85,7 @@ app.use('/api/managers', managersRoutes);
 app.use('/api/incidents', incidentsRoutes);
 app.use('/api/fire-alarms', fireAlarmsRoutes);
 app.use('/api/sgk', sgkRoutes);
+app.use('/api/equipment-check', equipmentCheckRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

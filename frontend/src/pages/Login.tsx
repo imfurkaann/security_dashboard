@@ -48,7 +48,9 @@ export default function Login() {
             const { token, user } = response.data.data;
             localStorage.setItem(STORAGE_KEYS.TOKEN, token);
             localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-            navigate('/dashboard');
+
+            // After login, redirect to equipment check page
+            navigate('/equipment-check');
         } catch (err) {
             const axiosError = err as AxiosError<{ message?: string }>;
 

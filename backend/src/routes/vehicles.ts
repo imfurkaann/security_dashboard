@@ -4,7 +4,8 @@ import {
     getManagers,
     getVehicleRecords,
     createVehicleRecord,
-    returnVehicle
+    returnVehicle,
+    updateVehicleRecord
 } from '../controllers/vehicleController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -24,6 +25,9 @@ router.get('/records', getVehicleRecords);
 
 // Create new vehicle record
 router.post('/records', createVehicleRecord);
+
+// Update vehicle record
+router.put('/records/:id', updateVehicleRecord);
 
 // Return vehicle
 router.post('/records/:id/return', returnVehicle);
