@@ -32,8 +32,8 @@ export default function FireAlarms() {
     const [filter, setFilter] = useState<FilterType>('today');
     const [alarmNumber, setAlarmNumber] = useState('');
     const [location, setLocation] = useState('');
-    const [alarmDate, setAlarmDate] = useState('');
     const [alarmTime, setAlarmTime] = useState('');
+    const [resolutionTime, setResolutionTime] = useState('');
     const [resolutionNotes, setResolutionNotes] = useState('');
     const [falseAlarm, setFalseAlarm] = useState(false);
     const navigate = useNavigate();
@@ -58,8 +58,8 @@ export default function FireAlarms() {
     const resetForm = useCallback(() => {
         setAlarmNumber('');
         setLocation('');
-        setAlarmDate('');
         setAlarmTime('');
+        setResolutionTime('');
         setResolutionNotes('');
         setFalseAlarm(false);
         setIsEditing(false);
@@ -69,10 +69,6 @@ export default function FireAlarms() {
     // Open modal for new record
     const openModalForNew = useCallback(() => {
         resetForm();
-        // Otomatik olarak şimdiki tarih ve saati ayarla
-        const now = new Date();
-        setAlarmDate(now.toISOString().split('T')[0]);
-        setAlarmTime(now.toTimeString().slice(0, 5));
         setShowModal(true);
     }, [resetForm]);
 
@@ -81,11 +77,13 @@ export default function FireAlarms() {
         setAlarmNumber(record.alarm_number || '');
         setLocation(record.location);
         if (record.alarm_time) {
-            const dt = new Date(record.alarm_time);
-            setAlarmDate(dt.toISOString().split('T')[0]);
-            setAlarmTime(dt.toTimeString().slice(0, 5));
+            setAlarmTime(formatTime(record.alarm_time));
+        }
+        if (record.resolution_time) {
+            setResolutionTime(formatTime(record.resolution_time));
         }
         setResolutionNotes(record.resolution_notes || '');
+        setFalseAlarm(record.false_alarm);
         setIsEditing(true);
         setEditingId(record.id);
         setShowModal(true);
@@ -116,24 +114,12 @@ export default function FireAlarms() {
         }
 
         try {
-            // Yeni kayıt için otomatik şimdiki zaman, düzenleme için mevcut değeri kullan
-            let combinedDateTime = undefined;
-            if (isEditing) {
-                if (alarmDate && alarmTime) {
-                    combinedDateTime = `${alarmDate}T${alarmTime}:00`;
-                } else if (alarmDate) {
-                    combinedDateTime = `${alarmDate}T00:00:00`;
-                }
-            } else {
-                // Yeni kayıt - otomatik şimdiki zaman
-                combinedDateTime = new Date().toISOString();
-            }
-
             const payload = {
                 alarm_number: alarmNumber.trim() || null,
                 location: location.trim(),
-                alarm_time: combinedDateTime,
-                false_alarm: false,
+                alarm_time: alarmTime || null,
+                resolution_time: isEditing ? (resolutionTime || null) : null,
+                false_alarm: falseAlarm,
                 resolution_notes: resolutionNotes.trim() || null,
             };
 
@@ -156,7 +142,7 @@ export default function FireAlarms() {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'İşlem başarısız');
         }
-    }, [alarmNumber, location, alarmDate, alarmTime, resolutionNotes, falseAlarm, isEditing, editingId, resetForm, fetchData]);
+    }, [alarmNumber, location, alarmTime, resolutionTime, resolutionNotes, falseAlarm, isEditing, editingId, resetForm, fetchData]);
 
     // Handle resolve
     const handleResolve = useCallback(async () => {
@@ -232,12 +218,20 @@ export default function FireAlarms() {
                                 <p className="text-gray-600 mt-1">Yangın alarm kayıtlarını yönetin</p>
                             </div>
                         </div>
-                        <button onClick={openModalForNew} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Yeni Alarm Kaydı
-                        </button>
+                        <div className="flex gap-3">
+                            <button onClick={() => navigate('/fire-alarm-records')} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                Kayıt Filtrele
+                            </button>
+                            <button onClick={openModalForNew} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Yeni Alarm Kaydı
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -441,59 +435,25 @@ export default function FireAlarms() {
                                     required
                                 />
                             </div>
-                            {isEditing && (
-                                <>
-                                    <div className="mb-4">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Alarm Tarihi</label>
-                                        <input
-                                            type="date"
-                                            value={alarmDate}
-                                            onChange={(e) => setAlarmDate(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div className="mb-4">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Alarm Saati (24 Saat Formatı)</label>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1">
-                                                <select
-                                                    value={alarmTime.split(':')[0] || ''}
-                                                    onChange={(e) => {
-                                                        const hour = e.target.value;
-                                                        const minute = alarmTime.split(':')[1] || '00';
-                                                        setAlarmTime(hour ? `${hour}:${minute}` : '');
-                                                    }}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                                                >
-                                                    <option value="">Saat</option>
-                                                    {Array.from({ length: 24 }, (_, i) => (
-                                                        <option key={i} value={String(i).padStart(2, '0')}>
-                                                            {String(i).padStart(2, '0')}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div className="flex-1">
-                                                <select
-                                                    value={alarmTime.split(':')[1] || ''}
-                                                    onChange={(e) => {
-                                                        const hour = alarmTime.split(':')[0] || '00';
-                                                        const minute = e.target.value;
-                                                        setAlarmTime(minute ? `${hour}:${minute}` : '');
-                                                    }}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                                                >
-                                                    <option value="">Dakika</option>
-                                                    {Array.from({ length: 60 }, (_, i) => (
-                                                        <option key={i} value={String(i).padStart(2, '0')}>
-                                                            {String(i).padStart(2, '0')}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Alarm Saati</label>
+                                <input
+                                    type="time"
+                                    value={alarmTime}
+                                    onChange={(e) => setAlarmTime(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                />
+                            </div>
+                            {isEditing && records.find(r => r.id === editingId)?.resolved && (
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çözüm Saati</label>
+                                    <input
+                                        type="time"
+                                        value={resolutionTime}
+                                        onChange={(e) => setResolutionTime(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    />
+                                </div>
                             )}
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
@@ -505,6 +465,19 @@ export default function FireAlarms() {
                                     placeholder="Alarm ile ilgili notlar..."
                                 />
                             </div>
+                            {isEditing && (
+                                <div className="mb-4">
+                                    <label className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={falseAlarm}
+                                            onChange={(e) => setFalseAlarm(e.target.checked)}
+                                            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                                        />
+                                        <span className="text-sm text-gray-700">Bu bir yanlış alarmdı</span>
+                                    </label>
+                                </div>
+                            )}
                             <div className="flex gap-3">
                                 <button
                                     type="submit"
