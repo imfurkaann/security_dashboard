@@ -14,6 +14,9 @@ import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 
 dotenv.config();
 
+// Türkiye saat dilimi ayarı (Node.js için)
+process.env.TZ = 'Europe/Istanbul';
+
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 

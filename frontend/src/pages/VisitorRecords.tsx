@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from '../utils/dayjsConfig';
+import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
@@ -106,20 +107,30 @@ export default function VisitorRecords() {
                 return false;
             }
 
-            // Entry date range filter
-            if (filters.entryDateStart && record.entry_date && record.entry_date < filters.entryDateStart) {
-                return false;
+            // Entry date range filter - dayjs ile yerel tarihe çevir
+            const entryDateOnly = record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '';
+            if (filters.entryDateStart && entryDateOnly) {
+                if (entryDateOnly < filters.entryDateStart) {
+                    return false;
+                }
             }
-            if (filters.entryDateEnd && record.entry_date && record.entry_date > filters.entryDateEnd) {
-                return false;
+            if (filters.entryDateEnd && entryDateOnly) {
+                if (entryDateOnly > filters.entryDateEnd) {
+                    return false;
+                }
             }
 
-            // Exit date range filter
-            if (filters.exitDateStart && record.exit_date && record.exit_date < filters.exitDateStart) {
-                return false;
+            // Exit date range filter - dayjs ile yerel tarihe çevir
+            const exitDateOnly = record.exit_date ? dayjs(record.exit_date).format('YYYY-MM-DD') : '';
+            if (filters.exitDateStart && exitDateOnly) {
+                if (exitDateOnly < filters.exitDateStart) {
+                    return false;
+                }
             }
-            if (filters.exitDateEnd && record.exit_date && record.exit_date > filters.exitDateEnd) {
-                return false;
+            if (filters.exitDateEnd && exitDateOnly) {
+                if (exitDateOnly > filters.exitDateEnd) {
+                    return false;
+                }
             }
 
             return true;
@@ -221,24 +232,22 @@ export default function VisitorRecords() {
 
     // Handle date range change for entry dates
     const handleEntryDateChange = (dates: null | [Dayjs | null, Dayjs | null], dateStrings: [string, string]) => {
-        if (dates && dates[0] && dates[1]) {
-            setFilters({
-                ...filters,
-                entryDateStart: dates[0].format('YYYY-MM-DD'),
-                entryDateEnd: dates[1].format('YYYY-MM-DD')
-            });
-        } else {
+        if (!dates || (!dates[0] && !dates[1])) {
+            // Takvim temizlendi
             setFilters({
                 ...filters,
                 entryDateStart: '',
                 entryDateEnd: ''
             });
-        }
-    };
-
-    // Handle single date selection or clear for entry dates
-    const handleEntryCalendarChange = (dates: null | [Dayjs | null, Dayjs | null]) => {
-        if (dates && dates[0] && !dates[1]) {
+        } else if (dates[0] && dates[1]) {
+            // İki tarih de seçildi
+            setFilters({
+                ...filters,
+                entryDateStart: dates[0].format('YYYY-MM-DD'),
+                entryDateEnd: dates[1].format('YYYY-MM-DD')
+            });
+        } else if (dates[0] && !dates[1]) {
+            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
             const singleDate = dates[0].format('YYYY-MM-DD');
             setFilters({
                 ...filters,
@@ -250,24 +259,22 @@ export default function VisitorRecords() {
 
     // Handle date range change for exit dates
     const handleExitDateChange = (dates: null | [Dayjs | null, Dayjs | null], dateStrings: [string, string]) => {
-        if (dates && dates[0] && dates[1]) {
-            setFilters({
-                ...filters,
-                exitDateStart: dates[0].format('YYYY-MM-DD'),
-                exitDateEnd: dates[1].format('YYYY-MM-DD')
-            });
-        } else {
+        if (!dates || (!dates[0] && !dates[1])) {
+            // Takvim temizlendi
             setFilters({
                 ...filters,
                 exitDateStart: '',
                 exitDateEnd: ''
             });
-        }
-    };
-
-    // Handle single date selection or clear for exit dates
-    const handleExitCalendarChange = (dates: null | [Dayjs | null, Dayjs | null]) => {
-        if (dates && dates[0] && !dates[1]) {
+        } else if (dates[0] && dates[1]) {
+            // İki tarih de seçildi
+            setFilters({
+                ...filters,
+                exitDateStart: dates[0].format('YYYY-MM-DD'),
+                exitDateEnd: dates[1].format('YYYY-MM-DD')
+            });
+        } else if (dates[0] && !dates[1]) {
+            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
             const singleDate = dates[0].format('YYYY-MM-DD');
             setFilters({
                 ...filters,
@@ -483,7 +490,7 @@ export default function VisitorRecords() {
                                         filters.entryDateEnd ? dayjs(filters.entryDateEnd) : null
                                     ]}
                                     onChange={handleEntryDateChange}
-                                    onCalendarChange={handleEntryCalendarChange}
+                                    allowEmpty={[false, true]}
                                     format="DD/MM/YYYY"
                                     placeholder={['Başlangıç', 'Bitiş']}
                                     className="w-full text-sm"
@@ -502,7 +509,7 @@ export default function VisitorRecords() {
                                         filters.exitDateEnd ? dayjs(filters.exitDateEnd) : null
                                     ]}
                                     onChange={handleExitDateChange}
-                                    onCalendarChange={handleExitCalendarChange}
+                                    allowEmpty={[false, true]}
                                     format="DD/MM/YYYY"
                                     placeholder={['Başlangıç', 'Bitiş']}
                                     className="w-full text-sm"

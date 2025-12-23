@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import dayjs from '../utils/dayjsConfig';
 import { isValidLength } from '../utils/validation';
 import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
 
@@ -142,26 +143,15 @@ export default function Managers() {
 
     // Memoized statistics
     const stats = useMemo(() => {
-        const today = new Date();
+        const today = dayjs().format('YYYY-MM-DD');
         const todayRecords = records.filter(r => {
-            const entryDate = r.entry_date ? new Date(r.entry_date) : null;
-            const exitDate = r.exit_date ? new Date(r.exit_date) : null;
-            const isEntryToday = entryDate &&
-                entryDate.getDate() === today.getDate() &&
-                entryDate.getMonth() === today.getMonth() &&
-                entryDate.getFullYear() === today.getFullYear();
-            const isExitToday = exitDate &&
-                exitDate.getDate() === today.getDate() &&
-                exitDate.getMonth() === today.getMonth() &&
-                exitDate.getFullYear() === today.getFullYear();
-            return isEntryToday || isExitToday;
+            const entryDate = r.entry_date ? dayjs(r.entry_date).format('YYYY-MM-DD') : null;
+            const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
+            return entryDate === today || exitDate === today;
         });
         const todayExits = records.filter(r => {
-            const exitDate = r.exit_date ? new Date(r.exit_date) : null;
-            return exitDate &&
-                exitDate.getDate() === today.getDate() &&
-                exitDate.getMonth() === today.getMonth() &&
-                exitDate.getFullYear() === today.getFullYear();
+            const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
+            return exitDate === today;
         });
         return {
             totalManagers: managersList.length,
@@ -173,31 +163,19 @@ export default function Managers() {
 
     // Memoized filtered records
     const filteredRecords = useMemo(() => {
+        const today = dayjs().format('YYYY-MM-DD');
         return records.filter(r => {
             if (filterMode === 'all') {
                 // Bugünün kayıtları: bugün giriş yapan veya bugün çıkış yapan
-                const entryDate = r.entry_date ? new Date(r.entry_date) : null;
-                const exitDate = r.exit_date ? new Date(r.exit_date) : null;
-                const today = new Date();
-                const isEntryToday = entryDate &&
-                    entryDate.getDate() === today.getDate() &&
-                    entryDate.getMonth() === today.getMonth() &&
-                    entryDate.getFullYear() === today.getFullYear();
-                const isExitToday = exitDate &&
-                    exitDate.getDate() === today.getDate() &&
-                    exitDate.getMonth() === today.getMonth() &&
-                    exitDate.getFullYear() === today.getFullYear();
-                return isEntryToday || isExitToday;
+                const entryDate = r.entry_date ? dayjs(r.entry_date).format('YYYY-MM-DD') : null;
+                const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
+                return entryDate === today || exitDate === today;
             }
             if (filterMode === 'inside') return r.status === 'inside'; // Aktif içeridekiler
             if (filterMode === 'exited') {
                 // Bugün çıkış yapanlar
-                const exitDate = r.exit_date ? new Date(r.exit_date) : null;
-                const today = new Date();
-                return exitDate &&
-                    exitDate.getDate() === today.getDate() &&
-                    exitDate.getMonth() === today.getMonth() &&
-                    exitDate.getFullYear() === today.getFullYear();
+                const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
+                return exitDate === today;
             }
             return true;
         });

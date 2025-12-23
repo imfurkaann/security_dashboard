@@ -19,11 +19,26 @@ export const hashTC = (tcNo: string): string => {
 };
 
 /**
+ * Pasaport numarasını hash'le (KVKK uyumu için)
+ */
+export const hashPassport = (passportNo: string): string => {
+    return crypto.createHash('sha256').update(passportNo.toUpperCase().trim()).digest('hex');
+};
+
+/**
  * TC'nin son 4 hanesini al
  */
 export const getLastFourDigits = (tcNo: string): string => {
     const digits = tcNo.replace(/\D/g, '');
     return digits.slice(-4);
+};
+
+/**
+ * Pasaport numarasının son 4 karakterini al
+ */
+export const getLastFourChars = (passportNo: string): string => {
+    const clean = passportNo.toUpperCase().trim();
+    return clean.slice(-4);
 };
 
 /**
@@ -34,10 +49,12 @@ export const generateShortId = (): string => {
 };
 
 /**
- * Dosya adını format'la: TCson4Hane_Ad_Soyad_UniqueID.ext
+ * Dosya adını format'la
+ * TC varsa: TCson4Hane_Ad_Soyad_UniqueID.ext
+ * Pasaport varsa: Pasaportson4Hane_Ad_Soyad_UniqueID.ext
+ * Hiçbiri yoksa: Ad_Soyad_UUID.ext
  */
-export const formatFileName = (tcNo: string, fullName: string, extension: string): string => {
-    const lastFour = getLastFourDigits(tcNo);
+export const formatFileName = (fullName: string, extension: string, tcNo?: string, passportNo?: string): string => {
     // Ad soyadı temizle (Türkçe karakterler dahil, sadece özel karakterleri kaldır)
     const cleanName = fullName
         .trim()
@@ -47,8 +64,21 @@ export const formatFileName = (tcNo: string, fullName: string, extension: string
     // Benzersiz ID ekle
     const uniqueId = generateShortId();
 
-    return `${lastFour}_${cleanName}_${uniqueId}${extension}`;
-};
+    let prefix = '';
+
+    if (tcNo) {
+        // TC varsa son 4 hane
+        prefix = getLastFourDigits(tcNo);
+    } else if (passportNo) {
+        // Pasaport varsa son 4 karakter
+        prefix = getLastFourChars(passportNo);
+    } else {
+        // Hiçbiri yoksa sadece isim-uuid
+        return `${cleanName}_${uniqueId}${extension}`;
+    }
+
+    return `${prefix}_${cleanName}_${uniqueId}${extension}`;
+};;
 
 /**
  * Multer storage configuration
@@ -59,19 +89,23 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         try {
-            // Request body'den TC ve ad soyad al
+            // Request body'den TC, pasaport ve ad soyad al
             const tcNo = req.body.tc_no;
+            const passportNo = req.body.passport_no;
             const fullName = req.body.full_name;
 
-            if (!tcNo || !fullName) {
-                return cb(new Error('TC ve Ad Soyad zorunludur'), '');
+            if (!fullName) {
+                return cb(new Error('Ad Soyad zorunludur'), '');
             }
+
+            // TC veya pasaport en az biri olmalı (ama zorunlu değil - UUID ile kayıt olabilir)
+            // Dosya adı için hangisi varsa onu kullan
 
             // Dosya uzantısını al
             const ext = path.extname(file.originalname).toLowerCase();
 
             // Dosya adını oluştur
-            const fileName = formatFileName(tcNo, fullName, ext);
+            const fileName = formatFileName(fullName, ext, tcNo, passportNo);
             cb(null, fileName);
         } catch (error) {
             cb(error as Error, '');

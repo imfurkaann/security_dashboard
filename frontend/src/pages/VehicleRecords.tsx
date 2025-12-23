@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from '../utils/dayjsConfig';
+import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
@@ -81,22 +82,32 @@ export default function VehicleRecords() {
                 return false;
             }
 
-            // Given date range filter
-            if (filters.givenDateStart && record.given_date < filters.givenDateStart) {
-                return false;
+            // Given date range filter - dayjs ile yerel tarihe çevir
+            const givenDateOnly = record.given_date ? dayjs(record.given_date).format('YYYY-MM-DD') : '';
+            if (filters.givenDateStart && givenDateOnly) {
+                if (givenDateOnly < filters.givenDateStart) {
+                    return false;
+                }
             }
 
-            if (filters.givenDateEnd && record.given_date > filters.givenDateEnd) {
-                return false;
+            if (filters.givenDateEnd && givenDateOnly) {
+                if (givenDateOnly > filters.givenDateEnd) {
+                    return false;
+                }
             }
 
-            // Return date range filter
-            if (filters.returnDateStart && record.return_date && record.return_date < filters.returnDateStart) {
-                return false;
+            // Return date range filter - dayjs ile yerel tarihe çevir
+            const returnDateOnly = record.return_date ? dayjs(record.return_date).format('YYYY-MM-DD') : '';
+            if (filters.returnDateStart && returnDateOnly) {
+                if (returnDateOnly < filters.returnDateStart) {
+                    return false;
+                }
             }
 
-            if (filters.returnDateEnd && record.return_date && record.return_date > filters.returnDateEnd) {
-                return false;
+            if (filters.returnDateEnd && returnDateOnly) {
+                if (returnDateOnly > filters.returnDateEnd) {
+                    return false;
+                }
             }
 
             return true;
@@ -336,22 +347,22 @@ export default function VehicleRecords() {
                                         filters.givenDateEnd ? dayjs(filters.givenDateEnd) : null
                                     ]}
                                     onChange={(dates) => {
-                                        if (!dates) {
+                                        if (!dates || (!dates[0] && !dates[1])) {
+                                            // Takvim temizlendi - filtreleri sıfırla
                                             setFilters({
                                                 ...filters,
                                                 givenDateStart: '',
                                                 givenDateEnd: ''
                                             });
                                         } else if (dates[0] && dates[1]) {
+                                            // İki tarih de seçildi
                                             setFilters({
                                                 ...filters,
                                                 givenDateStart: dates[0].format('YYYY-MM-DD'),
                                                 givenDateEnd: dates[1].format('YYYY-MM-DD')
                                             });
-                                        }
-                                    }}
-                                    onCalendarChange={(dates) => {
-                                        if (dates && dates[0] && !dates[1]) {
+                                        } else if (dates[0] && !dates[1]) {
+                                            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
                                             const singleDate = dates[0].format('YYYY-MM-DD');
                                             setFilters({
                                                 ...filters,
@@ -360,6 +371,7 @@ export default function VehicleRecords() {
                                             });
                                         }
                                     }}
+                                    allowEmpty={[false, true]}
                                     format="DD/MM/YYYY"
                                     placeholder={['Başlangıç', 'Bitiş']}
                                     className="w-full"
@@ -379,22 +391,22 @@ export default function VehicleRecords() {
                                         filters.returnDateEnd ? dayjs(filters.returnDateEnd) : null
                                     ]}
                                     onChange={(dates) => {
-                                        if (!dates) {
+                                        if (!dates || (!dates[0] && !dates[1])) {
+                                            // Takvim temizlendi - filtreleri sıfırla
                                             setFilters({
                                                 ...filters,
                                                 returnDateStart: '',
                                                 returnDateEnd: ''
                                             });
                                         } else if (dates[0] && dates[1]) {
+                                            // İki tarih de seçildi
                                             setFilters({
                                                 ...filters,
                                                 returnDateStart: dates[0].format('YYYY-MM-DD'),
                                                 returnDateEnd: dates[1].format('YYYY-MM-DD')
                                             });
-                                        }
-                                    }}
-                                    onCalendarChange={(dates) => {
-                                        if (dates && dates[0] && !dates[1]) {
+                                        } else if (dates[0] && !dates[1]) {
+                                            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
                                             const singleDate = dates[0].format('YYYY-MM-DD');
                                             setFilters({
                                                 ...filters,
@@ -403,6 +415,7 @@ export default function VehicleRecords() {
                                             });
                                         }
                                     }}
+                                    allowEmpty={[false, true]}
                                     format="DD/MM/YYYY"
                                     placeholder={['Başlangıç', 'Bitiş']}
                                     className="w-full"

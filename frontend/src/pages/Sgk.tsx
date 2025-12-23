@@ -1,47 +1,163 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
-import type { SgkRecord, SgkFormData, SgkSearchData } from '../types';
+import type { SgkRecord, SgkFormData } from '../types';
 
 // Initial form states
 const INITIAL_FORM_DATA: SgkFormData = {
     tc_no: '',
+    passport_no: '',
     full_name: '',
     company_name: '',
     notes: '',
     pdf_file: null
 };
 
-const INITIAL_SEARCH_DATA: SgkSearchData = {
-    search_type: 'tc',
-    tc_no: '',
-    full_name: '',
-    company_name: ''
-};
-
 export default function Sgk() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [formData, setFormData] = useState<SgkFormData>(INITIAL_FORM_DATA);
     const [editingRecord, setEditingRecord] = useState<SgkRecord | null>(null);
-    const [searchData, setSearchData] = useState<SgkSearchData>(INITIAL_SEARCH_DATA);
-    const [searchResults, setSearchResults] = useState<SgkRecord[]>([]);
+    const [allRecords, setAllRecords] = useState<SgkRecord[]>([]);
     const [previewRecord, setPreviewRecord] = useState<SgkRecord | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string>('');
     const navigate = useNavigate();
 
+    // Filter states
+    const [filters, setFilters] = useState({
+        tc_no: '',
+        passport_no: '',
+        full_name: '',
+        company_name: ''
+    });
+
+    // Search mode: 'all' = tüm kayıtlar, 'tc' = TC araması, 'passport' = pasaport araması
+    const [searchMode, setSearchMode] = useState<'all' | 'tc' | 'passport'>('all');
+    const [searching, setSearching] = useState(false);
+
+    // Fetch all records on mount
+    useEffect(() => {
+        const fetchRecords = async () => {
+            try {
+                const response = await api.get('/sgk/records');
+                setAllRecords(response.data || []);
+            } catch (error) {
+                console.error('SGK kayıtları yüklenemedi:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchRecords();
+    }, []);
+
+    // Filtered records with useMemo
+    const filteredRecords = useMemo(() => {
+        return allRecords.filter(record => {
+            // Full name filter
+            if (filters.full_name && !record.full_name.toLowerCase().includes(filters.full_name.toLowerCase())) {
+                return false;
+            }
+
+            // Company name filter
+            if (filters.company_name && record.company_name && !record.company_name.toLowerCase().includes(filters.company_name.toLowerCase())) {
+                return false;
+            }
+
+            return true;
+        });
+    }, [allRecords, filters]);
+
+    // Check if any filter is active
+    const hasActiveFilters = useMemo(() => {
+        return filters.full_name !== '' || filters.company_name !== '' || filters.tc_no !== '' || filters.passport_no !== '';
+    }, [filters]);
+
+    // Handle TC/Pasaport search
+    const handleTcPassportSearch = useCallback(async () => {
+        if (filters.tc_no) {
+            const cleanTC = filters.tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                alert('TC Kimlik No 11 haneli olmalıdır');
+                return;
+            }
+
+            setSearching(true);
+            setSearchMode('tc');
+            try {
+                const response = await api.post('/sgk/records/search', {
+                    search_type: 'tc',
+                    tc_no: cleanTC
+                });
+                setAllRecords(response.data.data || []);
+                if (!response.data.data || response.data.data.length === 0) {
+                    alert('Bu TC Kimlik No ile kayıt bulunamadı');
+                }
+            } catch (error) {
+                console.error('TC araması başarısız:', error);
+                alert('Arama sırasında hata oluştu');
+            } finally {
+                setSearching(false);
+            }
+        } else if (filters.passport_no) {
+            const cleanPassport = filters.passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                return;
+            }
+
+            setSearching(true);
+            setSearchMode('passport');
+            try {
+                const response = await api.post('/sgk/records/search', {
+                    search_type: 'passport',
+                    passport_no: cleanPassport
+                });
+                setAllRecords(response.data.data || []);
+                if (!response.data.data || response.data.data.length === 0) {
+                    alert('Bu Pasaport No ile kayıt bulunamadı');
+                }
+            } catch (error) {
+                console.error('Pasaport araması başarısız:', error);
+                alert('Arama sırasında hata oluştu');
+            } finally {
+                setSearching(false);
+            }
+        }
+    }, [filters.tc_no, filters.passport_no]);
+
+    // Reset to show all records
+    const resetToAllRecords = useCallback(async () => {
+        setSearchMode('all');
+        setLoading(true);
+        try {
+            const response = await api.get('/sgk/records');
+            setAllRecords(response.data || []);
+        } catch (error) {
+            console.error('Kayıtlar yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // Reset filters
+    const resetFilters = useCallback(() => {
+        setFilters({
+            tc_no: '',
+            passport_no: '',
+            full_name: '',
+            company_name: ''
+        });
+        if (searchMode !== 'all') {
+            resetToAllRecords();
+        }
+    }, [searchMode, resetToAllRecords]);
+
     // Reset upload form
     const resetUploadForm = useCallback(() => {
         setFormData(INITIAL_FORM_DATA);
-    }, []);
-
-    // Reset search form
-    const resetSearchForm = useCallback(() => {
-        setSearchData(INITIAL_SEARCH_DATA);
-        setSearchResults([]);
     }, []);
 
     // Handle file selection
@@ -62,15 +178,28 @@ export default function Sgk() {
         e.preventDefault();
 
         // Frontend validasyon
-        if (!formData.tc_no?.trim()) {
-            alert('TC Kimlik No zorunludur');
+        // TC ve pasaport her ikisi de girilmiş mi?
+        if (formData.tc_no?.trim() && formData.passport_no?.trim()) {
+            alert('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
             return;
         }
 
-        const cleanTC = formData.tc_no.replace(/\D/g, '');
-        if (cleanTC.length !== 11) {
-            alert('TC Kimlik No 11 haneli olmalıdır');
-            return;
+        // TC kontrolü
+        if (formData.tc_no?.trim()) {
+            const cleanTC = formData.tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                alert('TC Kimlik No 11 haneli olmalıdır');
+                return;
+            }
+        }
+
+        // Pasaport kontrolü
+        if (formData.passport_no?.trim()) {
+            const cleanPassport = formData.passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                return;
+            }
         }
 
         if (!formData.full_name?.trim()) {
@@ -86,13 +215,22 @@ export default function Sgk() {
         try {
             // FormData oluştur
             const uploadData = new FormData();
-            uploadData.append('tc_no', cleanTC);
+
+            if (formData.tc_no?.trim()) {
+                const cleanTC = formData.tc_no.replace(/\D/g, '');
+                uploadData.append('tc_no', cleanTC);
+            }
+
+            if (formData.passport_no?.trim()) {
+                uploadData.append('passport_no', formData.passport_no.trim().toUpperCase());
+            }
+
             uploadData.append('full_name', formData.full_name.trim());
             uploadData.append('company_name', formData.company_name?.trim() || '');
             uploadData.append('notes', formData.notes?.trim() || '');
             uploadData.append('pdf_file', formData.pdf_file);
 
-            await api.post('/sgk/records', uploadData, {
+            const response = await api.post('/sgk/records', uploadData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }
@@ -101,62 +239,15 @@ export default function Sgk() {
             alert('SGK belgesi başarıyla kaydedildi');
             setShowUploadModal(false);
             resetUploadForm();
+
+            // Listeyi yenile
+            const recordsResponse = await api.get('/sgk/records');
+            setAllRecords(recordsResponse.data || []);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Kayıt başarısız');
         }
     }, [formData, resetUploadForm]);
-
-    // Handle search submission
-    const handleSearchSubmit = useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Validasyon
-        if (searchData.search_type === 'tc') {
-            if (!searchData.tc_no?.trim()) {
-                alert('TC Kimlik No zorunludur');
-                return;
-            }
-            const cleanTC = searchData.tc_no.replace(/\D/g, '');
-            if (cleanTC.length !== 11) {
-                alert('TC Kimlik No 11 haneli olmalıdır');
-                return;
-            }
-        } else if (searchData.search_type === 'name') {
-            if (!searchData.full_name?.trim()) {
-                alert('Ad Soyad zorunludur');
-                return;
-            }
-        } else if (searchData.search_type === 'company') {
-            if (!searchData.company_name?.trim()) {
-                alert('Firma adı zorunludur');
-                return;
-            }
-        }
-
-        try {
-            const payload: any = { search_type: searchData.search_type };
-
-            if (searchData.search_type === 'tc') {
-                payload.tc_no = searchData.tc_no!.replace(/\D/g, '');
-            } else if (searchData.search_type === 'name') {
-                payload.full_name = searchData.full_name!.trim();
-            } else if (searchData.search_type === 'company') {
-                payload.company_name = searchData.company_name!.trim();
-            }
-
-            const response = await api.post('/sgk/records/search', payload);
-            setSearchResults(response.data.data || []);
-
-            if (!response.data.data || response.data.data.length === 0) {
-                alert('Arama kriterlerine uygun kayıt bulunamadı');
-            }
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Arama sırasında hata oluştu');
-            setSearchResults([]);
-        }
-    }, [searchData]);
 
     // Handle preview
     const handlePreview = useCallback(async (record: SgkRecord) => {
@@ -184,6 +275,7 @@ export default function Sgk() {
         setEditingRecord(record);
         setFormData({
             tc_no: '', // TC güvenlik için gösterilmez
+            passport_no: '', // Pasaport güvenlik için gösterilmez
             full_name: record.full_name,
             company_name: record.company_name || '',
             notes: record.notes || '',
@@ -198,15 +290,34 @@ export default function Sgk() {
 
         if (!editingRecord) return;
 
-        if (!formData.tc_no?.trim()) {
-            alert('TC Kimlik No zorunludur');
+        // TC ve pasaport her ikisi de girilmiş mi?
+        if (formData.tc_no?.trim() && formData.passport_no?.trim()) {
+            alert('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
             return;
         }
 
-        const cleanTC = formData.tc_no.replace(/\D/g, '');
-        if (cleanTC.length !== 11) {
-            alert('TC Kimlik No 11 haneli olmalıdır');
+        // En az birinin girilmiş olması gerekir
+        if (!formData.tc_no?.trim() && !formData.passport_no?.trim()) {
+            alert('TC Kimlik No veya Pasaport Numarası zorunludur');
             return;
+        }
+
+        // TC kontrolü
+        if (formData.tc_no?.trim()) {
+            const cleanTC = formData.tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                alert('TC Kimlik No 11 haneli olmalıdır');
+                return;
+            }
+        }
+
+        // Pasaport kontrolü
+        if (formData.passport_no?.trim()) {
+            const cleanPassport = formData.passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                return;
+            }
         }
 
         if (!formData.full_name?.trim()) {
@@ -218,8 +329,18 @@ export default function Sgk() {
 
         try {
             const formDataToSend = new FormData();
-            formDataToSend.append('tc_no', cleanTC);
+
+            if (formData.tc_no?.trim()) {
+                const cleanTC = formData.tc_no.replace(/\D/g, '');
+                formDataToSend.append('tc_no', cleanTC);
+            }
+
+            if (formData.passport_no?.trim()) {
+                formDataToSend.append('passport_no', formData.passport_no.trim().toUpperCase());
+            }
+
             formDataToSend.append('full_name', formData.full_name.trim());
+
             if (formData.company_name?.trim()) {
                 formDataToSend.append('company_name', formData.company_name.trim());
             }
@@ -239,17 +360,16 @@ export default function Sgk() {
             setEditingRecord(null);
             resetUploadForm();
 
-            // Arama sonuçlarını güncelle
-            if (searchResults.length > 0) {
-                handleSearchSubmit(new Event('submit') as any);
-            }
+            // Listeyi yenile
+            const recordsResponse = await api.get('/sgk/records');
+            setAllRecords(recordsResponse.data || []);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
         } finally {
             setLoading(false);
         }
-    }, [editingRecord, formData, resetUploadForm, searchResults.length, handleSearchSubmit]);
+    }, [editingRecord, formData, resetUploadForm]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -282,114 +402,119 @@ export default function Sgk() {
             </header>
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Search Form */}
+                {/* Filter Section */}
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-6">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Belge Ara</h2>
-                    <form onSubmit={handleSearchSubmit} className="space-y-4">
-                        {/* Search Type Selection */}
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-900">
+                            SGK Belgeleri
+                            <span className="ml-3 text-sm font-normal text-gray-500">
+                                ({filteredRecords.length} kayıt{hasActiveFilters && ` - ${allRecords.length} toplam`})
+                            </span>
+                        </h2>
+                        {hasActiveFilters && (
+                            <button
+                                onClick={resetFilters}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Filtreleri Temizle
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Arama Türü
+                                TC Kimlik No
                             </label>
-                            <div className="grid grid-cols-3 gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchData({ ...INITIAL_SEARCH_DATA, search_type: 'tc' })}
-                                    className={`px-4 py-3 rounded-lg border-2 transition ${searchData.search_type === 'tc'
-                                        ? 'border-blue-600 bg-blue-50 text-blue-700 font-semibold'
-                                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
-                                        }`}
-                                >
-                                    TC Kimlik No
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchData({ ...INITIAL_SEARCH_DATA, search_type: 'name' })}
-                                    className={`px-4 py-3 rounded-lg border-2 transition ${searchData.search_type === 'name'
-                                        ? 'border-blue-600 bg-blue-50 text-blue-700 font-semibold'
-                                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
-                                        }`}
-                                >
-                                    Ad Soyad
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchData({ ...INITIAL_SEARCH_DATA, search_type: 'company' })}
-                                    className={`px-4 py-3 rounded-lg border-2 transition ${searchData.search_type === 'company'
-                                        ? 'border-blue-600 bg-blue-50 text-blue-700 font-semibold'
-                                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400'
-                                        }`}
-                                >
-                                    Firma Adı
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Search Input based on type */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div className="md:col-span-3">
-                                {searchData.search_type === 'tc' && (
-                                    <input
-                                        type="text"
-                                        value={searchData.tc_no || ''}
-                                        onChange={(e) => setSearchData({ ...searchData, tc_no: e.target.value })}
-                                        placeholder="11 haneli TC No"
-                                        maxLength={11}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                )}
-
-                                {searchData.search_type === 'name' && (
-                                    <input
-                                        type="text"
-                                        value={searchData.full_name || ''}
-                                        onChange={(e) => setSearchData({ ...searchData, full_name: e.target.value })}
-                                        placeholder="Örn: Ahmet Yılmaz"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                )}
-
-                                {searchData.search_type === 'company' && (
-                                    <input
-                                        type="text"
-                                        value={searchData.company_name || ''}
-                                        onChange={(e) => setSearchData({ ...searchData, company_name: e.target.value })}
-                                        placeholder="Örn: ABC Şirketi"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                )}
-                            </div>
                             <div className="flex gap-2">
-                                <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2">
+                                <input
+                                    type="text"
+                                    value={filters.tc_no}
+                                    onChange={(e) => setFilters({ ...filters, tc_no: e.target.value, passport_no: '' })}
+                                    placeholder="11 haneli TC No"
+                                    maxLength={11}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    onClick={handleTcPassportSearch}
+                                    disabled={!filters.tc_no || searching}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg transition"
+                                    title="TC ile ara"
+                                >
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                     </svg>
-                                    Ara
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        resetSearchForm();
-                                    }}
-                                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
-                                >
-                                    Temizle
                                 </button>
                             </div>
                         </div>
-                    </form>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Pasaport No
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={filters.passport_no}
+                                    onChange={(e) => setFilters({ ...filters, passport_no: e.target.value, tc_no: '' })}
+                                    placeholder="6-20 karakter"
+                                    maxLength={20}
+                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <button
+                                    onClick={handleTcPassportSearch}
+                                    disabled={!filters.passport_no || searching}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg transition"
+                                    title="Pasaport ile ara"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Ad Soyad
+                            </label>
+                            <input
+                                type="text"
+                                value={filters.full_name}
+                                onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
+                                placeholder="İsim ile filtrele..."
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Firma Adı
+                            </label>
+                            <input
+                                type="text"
+                                value={filters.company_name}
+                                onChange={(e) => setFilters({ ...filters, company_name: e.target.value })}
+                                placeholder="Firma adı ile filtrele..."
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Records List */}
-                {searchResults.length > 0 && (
+                {loading ? (
+                    <div className="text-center py-12">
+                        <p className="text-gray-500">Yükleniyor...</p>
+                    </div>
+                ) : filteredRecords.length > 0 ? (
                     <div className="bg-white rounded-lg shadow border border-gray-200">
                         <div className="p-6">
-                            <h2 className="text-xl font-bold text-gray-900 mb-4">
-                                Arama Sonuçları ({searchResults.length})
-                            </h2>
-
                             <div className="space-y-3">
-                                {searchResults.map((record) => (
+                                {filteredRecords.map((record) => (
                                     <div key={record.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition">
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
@@ -439,6 +564,24 @@ export default function Sgk() {
                             </div>
                         </div>
                     </div>
+                ) : (
+                    <div className="bg-white rounded-lg shadow border border-gray-200 p-12 text-center">
+                        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <h3 className="mt-2 text-sm font-medium text-gray-900">Kayıt bulunamadı</h3>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {hasActiveFilters ? 'Filtrelere uygun kayıt bulunamadı.' : 'Henüz SGK belgesi kaydı yok.'}
+                        </p>
+                        {hasActiveFilters && (
+                            <button
+                                onClick={resetFilters}
+                                className="mt-4 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                                Filtreleri Temizle
+                            </button>
+                        )}
+                    </div>
                 )}
             </main>
 
@@ -457,19 +600,36 @@ export default function Sgk() {
                             </div>
 
                             <form onSubmit={handleUploadSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        TC Kimlik No <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.tc_no}
-                                        onChange={(e) => setFormData({ ...formData, tc_no: e.target.value })}
-                                        placeholder="11 haneli TC No"
-                                        maxLength={11}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                        required
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            TC Kimlik No
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.tc_no}
+                                            onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
+                                            placeholder="11 haneli TC No"
+                                            maxLength={11}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Pasaport Numarası
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.passport_no}
+                                            onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
+                                            placeholder="Pasaport No (6-20 karakter)"
+                                            maxLength={20}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
+                                    </div>
                                 </div>
 
                                 <div>
@@ -556,25 +716,42 @@ export default function Sgk() {
 
                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-yellow-800">
-                                    <strong>Not:</strong> TC Kimlik No güncellemek için tekrar girmeniz gerekiyor.
+                                    <strong>Not:</strong> TC/Pasaport güncellemek için tekrar girmeniz gerekiyor.
                                     Dosya değiştirmek isterseniz yeni dosya seçin, aksi halde mevcut dosya korunur.
                                 </p>
                             </div>
 
                             <form onSubmit={handleEditSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        TC Kimlik No <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.tc_no}
-                                        onChange={(e) => setFormData({ ...formData, tc_no: e.target.value })}
-                                        placeholder="11 haneli TC No (güncelleme için tekrar girin)"
-                                        maxLength={11}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        required
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            TC Kimlik No <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.tc_no}
+                                            onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
+                                            placeholder="11 haneli TC No"
+                                            maxLength={11}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Pasaport Numarası <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.passport_no}
+                                            onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
+                                            placeholder="Pasaport No (6-20 karakter)"
+                                            maxLength={20}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
+                                    </div>
                                 </div>
 
                                 <div>

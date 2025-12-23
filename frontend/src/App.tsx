@@ -1,4 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ConfigProvider } from 'antd';
+import trTR from 'antd/locale/tr_TR';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -18,97 +20,99 @@ import EquipmentCheck from './pages/EquipmentCheck';
 
 function App() {
   return (
-    <ThemeProvider>
-      <Router>
-        <Routes>
-          {/* Public Route */}
-          <Route path="/login" element={<Login />} />
+    <ConfigProvider locale={trTR}>
+      <ThemeProvider>
+        <Router>
+          <Routes>
+            {/* Public Route */}
+            <Route path="/login" element={<Login />} />
 
-          {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
-          <Route path="/equipment-check" element={
-            <ProtectedRoute>
-              <EquipmentCheck />
-            </ProtectedRoute>
-          } />
+            {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
+            <Route path="/equipment-check" element={
+              <ProtectedRoute>
+                <EquipmentCheck />
+              </ProtectedRoute>
+            } />
 
-          {/* Protected Routes - Authentication gerekli */}
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/vehicles" element={
-            <ProtectedRoute>
-              <Vehicles />
-            </ProtectedRoute>
-          } />
-          <Route path="/vehicle-records" element={
-            <ProtectedRoute>
-              <VehicleRecords />
-            </ProtectedRoute>
-          } />
-          <Route path="/visitors" element={
-            <ProtectedRoute>
-              <Visitors />
-            </ProtectedRoute>
-          } />
-          <Route path="/visitor-records" element={
-            <ProtectedRoute>
-              <VisitorRecords />
-            </ProtectedRoute>
-          } />
-          <Route path="/managers" element={
-            <ProtectedRoute>
-              <Managers />
-            </ProtectedRoute>
-          } />
-          <Route path="/manager-records" element={
-            <ProtectedRoute>
-              <ManagerRecords />
-            </ProtectedRoute>
-          } />
-          <Route path="/incidents" element={
-            <ProtectedRoute>
-              <Incidents />
-            </ProtectedRoute>
-          } />
-          <Route path="/incident-records" element={
-            <ProtectedRoute>
-              <IncidentRecords />
-            </ProtectedRoute>
-          } />
-          <Route path="/fire-alarms" element={
-            <ProtectedRoute>
-              <FireAlarms />
-            </ProtectedRoute>
-          } />          <Route path="/fire-alarm-records" element={
-            <ProtectedRoute>
-              <FireAlarmRecords />
-            </ProtectedRoute>
-          } />          <Route path="/sgk" element={
-            <ProtectedRoute>
-              <Sgk />
-            </ProtectedRoute>
-          } />
+            {/* Protected Routes - Authentication gerekli */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/vehicles" element={
+              <ProtectedRoute>
+                <Vehicles />
+              </ProtectedRoute>
+            } />
+            <Route path="/vehicle-records" element={
+              <ProtectedRoute>
+                <VehicleRecords />
+              </ProtectedRoute>
+            } />
+            <Route path="/visitors" element={
+              <ProtectedRoute>
+                <Visitors />
+              </ProtectedRoute>
+            } />
+            <Route path="/visitor-records" element={
+              <ProtectedRoute>
+                <VisitorRecords />
+              </ProtectedRoute>
+            } />
+            <Route path="/managers" element={
+              <ProtectedRoute>
+                <Managers />
+              </ProtectedRoute>
+            } />
+            <Route path="/manager-records" element={
+              <ProtectedRoute>
+                <ManagerRecords />
+              </ProtectedRoute>
+            } />
+            <Route path="/incidents" element={
+              <ProtectedRoute>
+                <Incidents />
+              </ProtectedRoute>
+            } />
+            <Route path="/incident-records" element={
+              <ProtectedRoute>
+                <IncidentRecords />
+              </ProtectedRoute>
+            } />
+            <Route path="/fire-alarms" element={
+              <ProtectedRoute>
+                <FireAlarms />
+              </ProtectedRoute>
+            } />          <Route path="/fire-alarm-records" element={
+              <ProtectedRoute>
+                <FireAlarmRecords />
+              </ProtectedRoute>
+            } />          <Route path="/sgk" element={
+              <ProtectedRoute>
+                <Sgk />
+              </ProtectedRoute>
+            } />
 
-          {/* Default redirect */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Default redirect */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* 404 - Bulunamayan sayfalar */}
-          <Route path="*" element={
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold text-white mb-4">404</h1>
-                <p className="text-gray-400 mb-4">Sayfa bulunamadı</p>
-                <a href="/dashboard" className="text-blue-400 hover:text-blue-300">
-                  Ana sayfaya dön
-                </a>
+            {/* 404 - Bulunamayan sayfalar */}
+            <Route path="*" element={
+              <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-4xl font-bold text-white mb-4">404</h1>
+                  <p className="text-gray-400 mb-4">Sayfa bulunamadı</p>
+                  <a href="/dashboard" className="text-blue-400 hover:text-blue-300">
+                    Ana sayfaya dön
+                  </a>
+                </div>
               </div>
-            </div>
-          } />
-        </Routes>
-      </Router>
-    </ThemeProvider>
+            } />
+          </Routes>
+        </Router>
+      </ThemeProvider>
+    </ConfigProvider>
   );
 }
 
