@@ -474,16 +474,6 @@ export default function IncidentRecords() {
                                     <label className="block text-sm font-medium text-gray-500 mb-1">Vardiya</label>
                                     <p className="text-gray-900">{selectedReport.shift_label || '-'}</p>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-500 mb-1">Önem Derecesi</label>
-                                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getSeverityColor(selectedReport.severity)}`}>
-                                        {getSeverityLabel(selectedReport.severity)}
-                                    </span>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-500 mb-1">Konum</label>
-                                    <p className="text-gray-900">{selectedReport.location || '-'}</p>
-                                </div>
                                 <div className="col-span-2">
                                     <label className="block text-sm font-medium text-gray-500 mb-1">Raporu Kaydeden</label>
                                     <p className="text-gray-900">{selectedReport.reported_by}</p>
