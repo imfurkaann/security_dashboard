@@ -8,8 +8,11 @@ import VehicleRecords from './pages/VehicleRecords';
 import Visitors from './pages/Visitors';
 import VisitorRecords from './pages/VisitorRecords';
 import Managers from './pages/Managers';
+import ManagerRecords from './pages/ManagerRecords';
 import Incidents from './pages/Incidents';
+import IncidentRecords from './pages/IncidentRecords';
 import FireAlarms from './pages/FireAlarms';
+import FireAlarmRecords from './pages/FireAlarmRecords';
 import Sgk from './pages/Sgk';
 import EquipmentCheck from './pages/EquipmentCheck';
 
@@ -59,17 +62,30 @@ function App() {
               <Managers />
             </ProtectedRoute>
           } />
+          <Route path="/manager-records" element={
+            <ProtectedRoute>
+              <ManagerRecords />
+            </ProtectedRoute>
+          } />
           <Route path="/incidents" element={
             <ProtectedRoute>
               <Incidents />
+            </ProtectedRoute>
+          } />
+          <Route path="/incident-records" element={
+            <ProtectedRoute>
+              <IncidentRecords />
             </ProtectedRoute>
           } />
           <Route path="/fire-alarms" element={
             <ProtectedRoute>
               <FireAlarms />
             </ProtectedRoute>
-          } />
-          <Route path="/sgk" element={
+          } />          <Route path="/fire-alarm-records" element={
+            <ProtectedRoute>
+              <FireAlarmRecords />
+            </ProtectedRoute>
+          } />          <Route path="/sgk" element={
             <ProtectedRoute>
               <Sgk />
             </ProtectedRoute>

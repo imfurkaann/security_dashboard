@@ -26,6 +26,8 @@ export default function Managers() {
     const [managersList, setManagersList] = useState<Personnel[]>([]);
     const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
     const [notes, setNotes] = useState('');
+    const [entryTime, setEntryTime] = useState('');
+    const [exitTime, setExitTime] = useState('');
     const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
     const navigate = useNavigate();
 
@@ -62,6 +64,8 @@ export default function Managers() {
         setEditingId(null);
         setSelectedManagerId(null);
         setNotes('');
+        setEntryTime('');
+        setExitTime('');
     }, []);
 
     // Open modal for new record
@@ -78,6 +82,8 @@ export default function Managers() {
         });
         setSelectedManagerId(found ? found.id : null);
         setNotes(rec.notes || '');
+        setEntryTime(rec.entry_time ? formatTime(rec.entry_time) : '');
+        setExitTime(rec.exit_time ? formatTime(rec.exit_time) : '');
         setIsEditing(true);
         setEditingId(rec.id);
         setShowModal(true);
@@ -101,7 +107,9 @@ export default function Managers() {
         try {
             const payload = {
                 manager_id: selectedManagerId,
-                notes: notes?.trim() || null
+                notes: notes?.trim() || null,
+                entry_time: entryTime || null,
+                exit_time: exitTime || null
             };
 
             if (isEditing && editingId) {
@@ -117,14 +125,14 @@ export default function Managers() {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'İşlem başarısız');
         }
-    }, [selectedManagerId, notes, isEditing, editingId, resetForm, fetchData]);
+    }, [selectedManagerId, notes, entryTime, exitTime, isEditing, editingId, resetForm, fetchData]);
 
     // Handle manager exit
     const handleExit = useCallback(async (id: string) => {
         if (!confirm('Seçili müdür için çıkış kaydı oluşturulsun mu?')) return;
 
         try {
-            await api.post(`/managers/records/${id}/exit`, {});
+            await api.post(`/managers/records/${id}/exit`, { exit_time: null });
             fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
@@ -234,12 +242,23 @@ export default function Managers() {
                                 <p className="text-gray-600 mt-1">Müdür kayıtlarını görüntüle ve yönet</p>
                             </div>
                         </div>
-                        <button onClick={openModalForNew} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Yeni Müdür
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => navigate('/manager-records')}
+                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg>
+                                Kayıt Filtrele
+                            </button>
+                            <button onClick={openModalForNew} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Yeni Müdür
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -330,7 +349,7 @@ export default function Managers() {
                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ad Soyad</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
@@ -341,29 +360,41 @@ export default function Managers() {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className="hover:bg-gray-50">
+                                                {/* İsim Soyisim */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm font-bold text-gray-900">{rec.manager || '-'}</div>
                                                     <div className="text-xs text-gray-600 mt-1">{rec.manager_title || '-'}</div>
                                                 </td>
 
+                                                {/* Giriş Tarihi */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{formatDate(rec.entry_date)}</div>
                                                     <div className="text-xs text-gray-600 mt-1">{formatTime(rec.entry_time)}</div>
                                                 </td>
 
+                                                {/* Çıkış Tarihi */}
+                                                <td className="px-6 py-4 align-top">
+                                                    {rec.exit_date ? (
+                                                        <>
+                                                            <div className="text-sm text-gray-900">{formatDate(rec.exit_date)}</div>
+                                                            <div className="text-xs text-gray-600 mt-1">{formatTime(rec.exit_time)}</div>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-gray-400">-</span>
+                                                    )}
+                                                </td>
+
+                                                {/* Giriş Yapan */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{rec.entry_by || '-'}</div>
                                                 </td>
 
-                                                <td className="px-6 py-4 align-top">
-                                                    <div className="text-sm text-gray-900">{rec.exit_date ? formatDate(rec.exit_date) : '-'}</div>
-                                                    <div className="text-xs text-gray-600 mt-1">{rec.exit_time ? formatTime(rec.exit_time) : '-'}</div>
-                                                </td>
-
+                                                {/* Çıkış Yapan */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{rec.exit_by || '-'}</div>
                                                 </td>
 
+                                                {/* İşlem */}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                     <div className="inline-flex items-center gap-3">
                                                         <button
@@ -431,6 +462,36 @@ export default function Managers() {
                                         );
                                     })()}
                                 </div>
+
+                                {/* Entry Time */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Giriş Saati (isteğe bağlı)
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={entryTime}
+                                        onChange={(e) => setEntryTime(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">Boş bırakırsanız anlık saat kaydedilir</p>
+                                </div>
+
+                                {/* Exit Time - only show when editing exited records */}
+                                {isEditing && records.find(r => r.id === editingId)?.status === 'exited' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Çıkış Saati (isteğe bağlı)
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={exitTime}
+                                            onChange={(e) => setExitTime(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Çıkış saatini düzenleyebilirsiniz</p>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama (isteğe bağlı)</label>

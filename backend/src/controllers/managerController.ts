@@ -77,12 +77,18 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
  */
 export const createManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { manager_id, notes } = req.body;
+        const { manager_id, notes, entry_time } = req.body;
         const entry_by = req.user?.userId || null;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: Input sanitization
         const sanitizedNotes = sanitizeInput(notes, 1000);
+
+        // Time validation (optional, HH:MM format)
+        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+            res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
 
         // GÜVENLİK: UUID validasyonu
         if (!manager_id || !isValidUUID(manager_id)) {
@@ -110,8 +116,8 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         await pool.query(
             `INSERT INTO managers_records (
                 id, manager_id, manager_name, entry_by, entry_date, entry_time, status, notes
-            ) VALUES ($1, $2, $3, $4, CURRENT_DATE, CURRENT_TIME, 'inside', $5)`,
-            [id, manager_id, managerName, entry_by, sanitizedNotes]
+            ) VALUES ($1, $2, $3, $4, CURRENT_DATE, COALESCE($6::time, CURRENT_TIME), 'inside', $5)`,
+            [id, manager_id, managerName, entry_by, sanitizedNotes, entry_time || null]
         );
         await pool.query('COMMIT');
 
@@ -142,7 +148,14 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
 export const exitManager = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const { exit_time } = req.body;
         const clientIp = getClientIp(req);
+
+        // Time validation (optional, HH:MM format)
+        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+            res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
+            return;
+        }
 
         // GÜVENLİK: UUID validasyonu
         if (!isValidUUID(id)) {
@@ -166,12 +179,12 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
         await pool.query(
             `UPDATE managers_records 
              SET exit_date = CURRENT_DATE, 
-                 exit_time = CURRENT_TIME, 
+                 exit_time = COALESCE($3::time, CURRENT_TIME), 
                  exit_by = $2,
                  status = 'exited', 
                  updated_at = now() 
              WHERE id = $1 AND deleted_at IS NULL`,
-            [id, exit_by]
+            [id, exit_by, exit_time || null]
         );
 
         // GÜVENLİK: Audit log kaydı
@@ -200,8 +213,18 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
 export const updateManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { notes } = req.body;
+        const { notes, entry_time, exit_time } = req.body;
         const clientIp = getClientIp(req);
+
+        // Time validation
+        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+            res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
+        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+            res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
+            return;
+        }
 
         // GÜVENLİK: UUID validasyonu
         if (!isValidUUID(id)) {
@@ -220,6 +243,8 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
         let idx = 1;
 
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
+        if (entry_time !== undefined) { updates.push(`entry_time = $${idx++}`); params.push(entry_time || null); }
+        if (exit_time !== undefined) { updates.push(`exit_time = $${idx++}`); params.push(exit_time || null); }
 
         if (updates.length === 0) {
             res.status(400).json({ success: false, message: 'Güncellenecek alan bulunamadı' });

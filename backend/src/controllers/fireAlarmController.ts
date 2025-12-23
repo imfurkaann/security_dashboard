@@ -51,6 +51,11 @@ export const createFireAlarm = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Konum gereklidir' });
         }
 
+        // Time validasyonu
+        if (alarm_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(alarm_time)) {
+            return res.status(400).json({ success: false, message: 'Alarm saati HH:MM formatında olmalıdır' });
+        }
+
         // Input sanitizasyonu
         const sanitizedAlarmNumber = alarm_number ? sanitizeInput(alarm_number, 50) : null;
         const sanitizedLocation = sanitizeInput(location, 255);
@@ -65,15 +70,16 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         }
 
         const id = uuidv4();
-        const alarmTime = alarm_time || new Date();
 
         const result = await pool.query(
             `INSERT INTO fire_alarms (
                 id, alarm_number, location, alarm_time, false_alarm, 
                 resolution_notes, recorded_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7) 
+            ) VALUES ($1, $2, $3, 
+                CURRENT_DATE + COALESCE($4::time, CURRENT_TIME), 
+                $5, $6, $7) 
             RETURNING *`,
-            [id, sanitizedAlarmNumber, sanitizedLocation, alarmTime, !!false_alarm, sanitizedNotes, userId]
+            [id, sanitizedAlarmNumber, sanitizedLocation, alarm_time || null, !!false_alarm, sanitizedNotes, userId]
         );
 
         await logDataChange(
@@ -81,7 +87,7 @@ export const createFireAlarm = async (req: Request, res: Response) => {
             id,
             'INSERT',
             null,
-            { alarm_number: sanitizedAlarmNumber, location: sanitizedLocation, alarm_time: alarmTime },
+            { alarm_number: sanitizedAlarmNumber, location: sanitizedLocation, alarm_time },
             userId,
             clientIp
         );
@@ -89,8 +95,8 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         // WhatsApp mesaj şablonu oluştur
         let whatsappMessage = '';
         try {
-            const alarmDate = new Date(alarmTime);
-            const timeString = alarmDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            const alarmDateTime = result.rows[0].alarm_time;
+            const timeString = new Date(alarmDateTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
             whatsappMessage = createFireAlarmMessage({
                 alarmNumber: sanitizedAlarmNumber || 'Belirtilmemiş',
                 location: sanitizedLocation,
@@ -112,7 +118,7 @@ export const createFireAlarm = async (req: Request, res: Response) => {
 export const updateFireAlarm = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { alarm_number, location, false_alarm, resolution_notes } = req.body;
+        const { alarm_number, location, alarm_time, false_alarm, resolution_notes, resolution_time } = req.body;
         const userId = req.user?.userId;
         const clientIp = getClientIp(req);
 
@@ -122,6 +128,15 @@ export const updateFireAlarm = async (req: Request, res: Response) => {
 
         if (!isValidUUID(id)) {
             return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+        }
+
+        // Time validasyonu
+        if (alarm_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(alarm_time)) {
+            return res.status(400).json({ success: false, message: 'Alarm saati HH:MM formatında olmalıdır' });
+        }
+
+        if (resolution_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(resolution_time)) {
+            return res.status(400).json({ success: false, message: 'Çözüm saati HH:MM formatında olmalıdır' });
         }
 
         // Mevcut kaydı al
@@ -142,13 +157,21 @@ export const updateFireAlarm = async (req: Request, res: Response) => {
         const result = await pool.query(
             `UPDATE fire_alarms 
              SET alarm_number = $1,
-                 location = $2, 
-                 false_alarm = $3,
-                 resolution_notes = $4,
+                 location = $2,
+                 alarm_time = CASE 
+                     WHEN $3::time IS NOT NULL THEN (alarm_time::date) + $3::time
+                     ELSE alarm_time
+                 END,
+                 resolution_time = CASE 
+                     WHEN $4::time IS NOT NULL THEN (COALESCE(resolution_time::date, CURRENT_DATE)) + $4::time
+                     ELSE resolution_time
+                 END,
+                 false_alarm = $5,
+                 resolution_notes = $6,
                  updated_at = NOW()
-             WHERE id = $5 
+             WHERE id = $7 
              RETURNING *`,
-            [sanitizedAlarmNumber, sanitizedLocation, !!false_alarm, sanitizedNotes, id]
+            [sanitizedAlarmNumber, sanitizedLocation, alarm_time || null, resolution_time || null, !!false_alarm, sanitizedNotes, id]
         );
 
         await logDataChange(
