@@ -2,6 +2,7 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './config/database';
+import { runMigrations } from './config/migrations';
 import authRoutes from './routes/auth';
 import vehicleRoutes from './routes/vehicles';
 import visitorRoutes from './routes/visitors';
@@ -42,6 +43,9 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 });
 
 // GÜVENLİK: CORS yapılandırması
+// CORS_ORIGIN="*" ayarlandığında tüm originlere izin verir (yerel ağ paylaşımı için)
+const corsOriginSetting = process.env.CORS_ORIGIN;
+
 const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:5174',
     'http://localhost:5173',
@@ -52,12 +56,23 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Eğer CORS_ORIGIN="*" ise tüm originlere izin ver (yerel ağ paylaşımı)
+        if (corsOriginSetting === '*') {
+            callback(null, true);
+            return;
+        }
         // API istekleri (origin olmadan) veya izin verilen originler
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            console.warn(`Reddedilen CORS isteği: ${origin}`);
-            callback(new Error('CORS policy violation'));
+            // Yerel ağ IP'leri için de izin ver (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+            const localNetworkPattern = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+            if (origin && localNetworkPattern.test(origin)) {
+                callback(null, true);
+            } else {
+                console.warn(`Reddedilen CORS isteği: ${origin}`);
+                callback(new Error('CORS policy violation'));
+            }
         }
     },
     credentials: true,
@@ -174,10 +189,25 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-    console.log(`📝 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🔗 API URL: http://localhost:${PORT}`);
-});
+// Uygulama başlatma fonksiyonu
+const startServer = async () => {
+    try {
+        // Migration'ları çalıştır
+        await runMigrations();
+        
+        // Sunucuyu başlat
+        app.listen(PORT, () => {
+            console.log(`🚀 Server is running on port ${PORT}`);
+            console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+            console.log(`🔗 API URL: http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error('❌ Sunucu başlatma hatası:', error);
+        process.exit(1);
+    }
+};
+
+// Sunucuyu başlat
+startServer();
 
 export default app;
