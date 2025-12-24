@@ -34,14 +34,33 @@ if not defined HOST_IP (
 echo [OK] IP Adresi: %HOST_IP%
 echo.
 
-:: Docker kontrolü
+:: Docker Desktop kontrolü ve başlatma
 echo [2/5] Docker kontrol ediliyor...
 docker info >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [HATA] Docker çalışmıyor! Lütfen Docker Desktop'ı başlatın.
-    pause
-    exit /b 1
+    echo [BILGI] Docker çalışmıyor, Docker Desktop başlatılıyor...
+    
+    :: Docker Desktop'ı başlat
+    start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    
+    :: Docker'ın başlamasını bekle (maksimum 120 saniye)
+    echo [BILGI] Docker Desktop başlatılıyor, lütfen bekleyin...
+    set /a counter=0
+    :wait_docker
+    timeout /t 5 /nobreak >nul
+    docker info >nul 2>&1
+    if %errorlevel% equ 0 goto docker_ready
+    set /a counter+=5
+    echo         Bekleniyor... (%counter% saniye)
+    if %counter% geq 120 (
+        echo [HATA] Docker Desktop 120 saniye içinde başlamadı!
+        echo        Lütfen Docker Desktop'ı manuel olarak başlatın ve tekrar deneyin.
+        pause
+        exit /b 1
+    )
+    goto wait_docker
 )
+:docker_ready
 echo [OK] Docker çalışıyor.
 echo.
 

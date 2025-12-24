@@ -194,7 +194,7 @@ const startServer = async () => {
     try {
         // Migration'ları çalıştır
         await runMigrations();
-        
+
         // Sunucuyu başlat
         app.listen(PORT, () => {
             console.log(`🚀 Server is running on port ${PORT}`);
