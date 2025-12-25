@@ -17,6 +17,8 @@ import AdminIncidentRecords from './pages/AdminIncidentRecords';
 import AdminFireAlarmRecords from './pages/AdminFireAlarmRecords';
 import AdminManagePersonnel from './pages/AdminManagePersonnel';
 import AdminManageManagers from './pages/AdminManageManagers';
+import AdminExportData from './pages/AdminExportData';
+import AdminStatistics from './pages/AdminStatistics';
 import Visitors from './pages/Visitors';
 import VisitorRecords from './pages/VisitorRecords';
 import Managers from './pages/Managers';
@@ -88,6 +90,16 @@ function App() {
             <Route path="/admin/manage-managers" element={
               <AdminProtectedRoute>
                 <AdminManageManagers />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/export-data" element={
+              <AdminProtectedRoute>
+                <AdminExportData />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/statistics" element={
+              <AdminProtectedRoute>
+                <AdminStatistics />
               </AdminProtectedRoute>
             } />
 
