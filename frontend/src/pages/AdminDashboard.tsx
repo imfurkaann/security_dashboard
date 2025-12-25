@@ -105,6 +105,18 @@ const PersonnelIcon = ({ size = 12 }: { size?: number }) => (
     </svg>
 );
 
+const ExportIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+const StatisticsIcon = ({ size = 12 }: { size?: number }) => (
+    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+);
+
 export default function AdminDashboard() {
     const [admin, setAdmin] = useState<AdminUser | null>(null);
     const [loading, setLoading] = useState(true);
@@ -322,6 +334,22 @@ export default function AdminDashboard() {
                         hoverGradient="hover:from-indigo-700 hover:to-indigo-800"
                         icon={<PersonnelIcon />}
                         onClick={() => navigate('/admin/manage-personnel')}
+                    />
+                    <NavCard
+                        title="Veri Dışa Aktarma"
+                        description="Kayıtları Excel formatında indir"
+                        gradient="from-teal-600 to-teal-700"
+                        hoverGradient="hover:from-teal-700 hover:to-teal-800"
+                        icon={<ExportIcon />}
+                        onClick={() => navigate('/admin/export-data')}
+                    />
+                    <NavCard
+                        title="İstatistikler"
+                        description="Grafikler ve detaylı analizler"
+                        gradient="from-cyan-600 to-cyan-700"
+                        hoverGradient="hover:from-cyan-700 hover:to-cyan-800"
+                        icon={<StatisticsIcon />}
+                        onClick={() => navigate('/admin/statistics')}
                     />
                 </div>
             </div>

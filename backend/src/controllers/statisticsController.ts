@@ -1,0 +1,510 @@
+import { Request, Response } from 'express';
+import pool from '../config/database';
+
+// Genel istatistikleri getir
+export const getGeneralStats = async (_req: Request, res: Response) => {
+    try {
+        const client = await pool.connect();
+
+        try {
+            // Bugünkü istatistikler
+            const todayStats = await client.query(`
+                SELECT 
+                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date = CURRENT_DATE AND deleted_at IS NULL) as today_visitors,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE given_date = CURRENT_DATE AND deleted_at IS NULL) as today_vehicles,
+                    (SELECT COUNT(*) FROM managers_records WHERE entry_date = CURRENT_DATE AND deleted_at IS NULL) as today_managers,
+                    (SELECT COUNT(*) FROM fire_alarms WHERE alarm_time::date = CURRENT_DATE AND deleted_at IS NULL) as today_alarms,
+                    (SELECT COUNT(*) FROM incidents WHERE report_date = CURRENT_DATE AND deleted_at IS NULL) as today_incidents
+            `);
+
+            // Bu ayki istatistikler
+            const monthStats = await client.query(`
+                SELECT 
+                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_visitors,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE EXTRACT(MONTH FROM given_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM given_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_vehicles,
+                    (SELECT COUNT(*) FROM managers_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_managers
+            `);
+
+            // Aktif durumlar
+            const activeStats = await client.query(`
+                SELECT 
+                    (SELECT COUNT(*) FROM visitor_records WHERE status = 'inside' AND deleted_at IS NULL) as active_visitors,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE status = 'in_use' AND deleted_at IS NULL) as active_vehicles,
+                    (SELECT COUNT(*) FROM managers_records WHERE status = 'inside' AND deleted_at IS NULL) as active_managers
+            `);
+
+            res.json({
+                success: true,
+                data: {
+                    today: todayStats.rows[0],
+                    month: monthStats.rows[0],
+                    active: activeStats.rows[0]
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Genel istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'İstatistikler alınamadı' });
+    }
+};
+
+// Ziyaretçi trend verileri
+export const getVisitorTrends = async (req: Request, res: Response) => {
+    try {
+        const { period = 'daily', days = 30 } = req.query;
+        const client = await pool.connect();
+
+        try {
+            let query = '';
+
+            if (period === 'daily') {
+                query = `
+                    SELECT 
+                        entry_date::text as date,
+                        COUNT(*) as count,
+                        SUM(person_count) as total_persons
+                    FROM visitor_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY entry_date
+                    ORDER BY entry_date ASC
+                `;
+            } else if (period === 'weekly') {
+                query = `
+                    SELECT 
+                        DATE_TRUNC('week', entry_date)::date::text as date,
+                        COUNT(*) as count,
+                        SUM(person_count) as total_persons
+                    FROM visitor_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY DATE_TRUNC('week', entry_date)
+                    ORDER BY date ASC
+                `;
+            } else if (period === 'monthly') {
+                query = `
+                    SELECT 
+                        TO_CHAR(entry_date, 'YYYY-MM') as date,
+                        COUNT(*) as count,
+                        SUM(person_count) as total_persons
+                    FROM visitor_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY TO_CHAR(entry_date, 'YYYY-MM')
+                    ORDER BY date ASC
+                `;
+            }
+
+            const result = await client.query(query, [days]);
+
+            res.json({
+                success: true,
+                data: result.rows
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Ziyaretçi trend hatası:', error);
+        res.status(500).json({ success: false, message: 'Trend verileri alınamadı' });
+    }
+};
+
+// Araç kullanım istatistikleri
+export const getVehicleStats = async (req: Request, res: Response) => {
+    try {
+        const { period = 'daily', days = 30 } = req.query;
+        const client = await pool.connect();
+
+        try {
+            // Günlük/haftalık/aylık araç kullanım trendi
+            let trendQuery = '';
+            if (period === 'daily') {
+                trendQuery = `
+                    SELECT 
+                        given_date::text as date,
+                        COUNT(*) as count
+                    FROM vehicle_records 
+                    WHERE given_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY given_date
+                    ORDER BY given_date ASC
+                `;
+            } else if (period === 'weekly') {
+                trendQuery = `
+                    SELECT 
+                        DATE_TRUNC('week', given_date)::date::text as date,
+                        COUNT(*) as count
+                    FROM vehicle_records 
+                    WHERE given_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY DATE_TRUNC('week', given_date)
+                    ORDER BY date ASC
+                `;
+            } else if (period === 'monthly') {
+                trendQuery = `
+                    SELECT 
+                        TO_CHAR(given_date, 'YYYY-MM') as date,
+                        COUNT(*) as count
+                    FROM vehicle_records 
+                    WHERE given_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY TO_CHAR(given_date, 'YYYY-MM')
+                    ORDER BY date ASC
+                `;
+            }
+
+            const trendResult = await client.query(trendQuery, [days]);
+
+            // En çok kullanılan araçlar
+            const topVehicles = await client.query(`
+                SELECT 
+                    v.plate,
+                    v.brand,
+                    COUNT(vr.id) as usage_count
+                FROM vehicles v
+                LEFT JOIN vehicle_records vr ON v.id = vr.vehicle_id AND vr.deleted_at IS NULL
+                WHERE v.deleted_at IS NULL
+                GROUP BY v.id, v.plate, v.brand
+                ORDER BY usage_count DESC
+                LIMIT 10
+            `);
+
+            // En çok araç alan yöneticiler
+            const topManagers = await client.query(`
+                SELECT 
+                    COALESCE(m.first_name || ' ' || m.last_name, vr.manager_name) as manager_name,
+                    COUNT(vr.id) as usage_count
+                FROM vehicle_records vr
+                LEFT JOIN managers m ON vr.manager_id = m.id
+                WHERE vr.deleted_at IS NULL
+                  AND vr.given_date >= CURRENT_DATE - $1::integer
+                GROUP BY COALESCE(m.first_name || ' ' || m.last_name, vr.manager_name)
+                HAVING COALESCE(m.first_name || ' ' || m.last_name, vr.manager_name) IS NOT NULL
+                ORDER BY usage_count DESC
+                LIMIT 10
+            `, [days]);
+
+            // Araç durumu dağılımı
+            const statusDistribution = await client.query(`
+                SELECT 
+                    status,
+                    COUNT(*) as count
+                FROM vehicle_records 
+                WHERE deleted_at IS NULL
+                  AND given_date >= CURRENT_DATE - $1::integer
+                GROUP BY status
+            `, [days]);
+
+            res.json({
+                success: true,
+                data: {
+                    trend: trendResult.rows,
+                    topVehicles: topVehicles.rows,
+                    topManagers: topManagers.rows,
+                    statusDistribution: statusDistribution.rows
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Araç istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'Araç istatistikleri alınamadı' });
+    }
+};
+
+// Yönetici giriş-çıkış istatistikleri
+export const getManagerStats = async (req: Request, res: Response) => {
+    try {
+        const { period = 'daily', days = 30 } = req.query;
+        const client = await pool.connect();
+
+        try {
+            // Günlük/haftalık/aylık trend
+            let trendQuery = '';
+            if (period === 'daily') {
+                trendQuery = `
+                    SELECT 
+                        entry_date::text as date,
+                        COUNT(*) as count
+                    FROM managers_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY entry_date
+                    ORDER BY entry_date ASC
+                `;
+            } else if (period === 'weekly') {
+                trendQuery = `
+                    SELECT 
+                        DATE_TRUNC('week', entry_date)::date::text as date,
+                        COUNT(*) as count
+                    FROM managers_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY DATE_TRUNC('week', entry_date)
+                    ORDER BY date ASC
+                `;
+            } else if (period === 'monthly') {
+                trendQuery = `
+                    SELECT 
+                        TO_CHAR(entry_date, 'YYYY-MM') as date,
+                        COUNT(*) as count
+                    FROM managers_records 
+                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                      AND deleted_at IS NULL
+                    GROUP BY TO_CHAR(entry_date, 'YYYY-MM')
+                    ORDER BY date ASC
+                `;
+            }
+
+            const trendResult = await client.query(trendQuery, [days]);
+
+            // En sık gelen yöneticiler
+            const topManagers = await client.query(`
+                SELECT 
+                    COALESCE(m.first_name || ' ' || m.last_name, mr.manager_name) as manager_name,
+                    COUNT(mr.id) as visit_count
+                FROM managers_records mr
+                LEFT JOIN managers m ON mr.manager_id = m.id
+                WHERE mr.deleted_at IS NULL
+                  AND mr.entry_date >= CURRENT_DATE - $1::integer
+                GROUP BY COALESCE(m.first_name || ' ' || m.last_name, mr.manager_name)
+                HAVING COALESCE(m.first_name || ' ' || m.last_name, mr.manager_name) IS NOT NULL
+                ORDER BY visit_count DESC
+                LIMIT 10
+            `, [days]);
+
+            // Saat bazlı dağılım
+            const hourlyDistribution = await client.query(`
+                SELECT 
+                    EXTRACT(HOUR FROM entry_time) as hour,
+                    COUNT(*) as count
+                FROM managers_records 
+                WHERE deleted_at IS NULL
+                  AND entry_date >= CURRENT_DATE - $1::integer
+                GROUP BY EXTRACT(HOUR FROM entry_time)
+                ORDER BY hour ASC
+            `, [days]);
+
+            res.json({
+                success: true,
+                data: {
+                    trend: trendResult.rows,
+                    topManagers: topManagers.rows,
+                    hourlyDistribution: hourlyDistribution.rows
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Yönetici istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'Yönetici istatistikleri alınamadı' });
+    }
+};
+
+// Yangın alarmı istatistikleri
+export const getFireAlarmStats = async (req: Request, res: Response) => {
+    try {
+        const { days = 365 } = req.query;
+        const client = await pool.connect();
+
+        try {
+            // Aylık alarm trendi
+            const monthlyTrend = await client.query(`
+                SELECT 
+                    TO_CHAR(alarm_time, 'YYYY-MM') as date,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN false_alarm = true THEN 1 ELSE 0 END) as false_alarms,
+                    SUM(CASE WHEN false_alarm = false OR false_alarm IS NULL THEN 1 ELSE 0 END) as real_alarms
+                FROM fire_alarms 
+                WHERE alarm_time >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                GROUP BY TO_CHAR(alarm_time, 'YYYY-MM')
+                ORDER BY date ASC
+            `, [days]);
+
+            // Lokasyona göre dağılım
+            const locationDistribution = await client.query(`
+                SELECT 
+                    COALESCE(location, 'Belirtilmemiş') as location,
+                    COUNT(*) as count
+                FROM fire_alarms 
+                WHERE deleted_at IS NULL
+                  AND alarm_time >= CURRENT_DATE - $1::integer
+                GROUP BY location
+                ORDER BY count DESC
+                LIMIT 10
+            `, [days]);
+
+            // Çözüm durumu
+            const resolutionStats = await client.query(`
+                SELECT 
+                    CASE WHEN resolved = true THEN 'Çözüldü' ELSE 'Beklemede' END as status,
+                    COUNT(*) as count
+                FROM fire_alarms 
+                WHERE deleted_at IS NULL
+                  AND alarm_time >= CURRENT_DATE - $1::integer
+                GROUP BY resolved
+            `, [days]);
+
+            res.json({
+                success: true,
+                data: {
+                    monthlyTrend: monthlyTrend.rows,
+                    locationDistribution: locationDistribution.rows,
+                    resolutionStats: resolutionStats.rows
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Yangın alarmı istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'Alarm istatistikleri alınamadı' });
+    }
+};
+
+// Olay istatistikleri
+export const getIncidentStats = async (req: Request, res: Response) => {
+    try {
+        const { days = 365 } = req.query;
+        const client = await pool.connect();
+
+        try {
+            // Aylık olay trendi
+            const monthlyTrend = await client.query(`
+                SELECT 
+                    TO_CHAR(report_date, 'YYYY-MM') as date,
+                    COUNT(*) as count
+                FROM incidents 
+                WHERE report_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                GROUP BY TO_CHAR(report_date, 'YYYY-MM')
+                ORDER BY date ASC
+            `, [days]);
+
+            // Olay türüne göre dağılım
+            const typeDistribution = await client.query(`
+                SELECT 
+                    COALESCE(incident_type, 'Genel') as type,
+                    COUNT(*) as count
+                FROM incidents 
+                WHERE deleted_at IS NULL
+                  AND report_date >= CURRENT_DATE - $1::integer
+                GROUP BY incident_type
+                ORDER BY count DESC
+            `, [days]);
+
+            // Ciddiyet dağılımı
+            const severityDistribution = await client.query(`
+                SELECT 
+                    COALESCE(severity, 'Belirtilmemiş') as severity,
+                    COUNT(*) as count
+                FROM incidents 
+                WHERE deleted_at IS NULL
+                  AND report_date >= CURRENT_DATE - $1::integer
+                GROUP BY severity
+                ORDER BY count DESC
+            `, [days]);
+
+            // Vardiya bazlı dağılım
+            const shiftDistribution = await client.query(`
+                SELECT 
+                    COALESCE(shift_label, shift, 'Belirtilmemiş') as shift,
+                    COUNT(*) as count
+                FROM incidents 
+                WHERE deleted_at IS NULL
+                  AND report_date >= CURRENT_DATE - $1::integer
+                GROUP BY COALESCE(shift_label, shift, 'Belirtilmemiş')
+                ORDER BY count DESC
+            `, [days]);
+
+            res.json({
+                success: true,
+                data: {
+                    monthlyTrend: monthlyTrend.rows,
+                    typeDistribution: typeDistribution.rows,
+                    severityDistribution: severityDistribution.rows,
+                    shiftDistribution: shiftDistribution.rows
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Olay istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'Olay istatistikleri alınamadı' });
+    }
+};
+
+// Karşılaştırmalı analiz
+export const getComparativeAnalysis = async (req: Request, res: Response) => {
+    try {
+        const client = await pool.connect();
+
+        try {
+            // Bu ay vs geçen ay karşılaştırması
+            const comparison = await client.query(`
+                SELECT 
+                    'visitors' as category,
+                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+                UNION ALL
+                SELECT 
+                    'vehicles' as category,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE EXTRACT(MONTH FROM given_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM given_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE EXTRACT(MONTH FROM given_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM given_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+                UNION ALL
+                SELECT 
+                    'managers' as category,
+                    (SELECT COUNT(*) FROM managers_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COUNT(*) FROM managers_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+                UNION ALL
+                SELECT 
+                    'fire_alarms' as category,
+                    (SELECT COUNT(*) FROM fire_alarms WHERE EXTRACT(MONTH FROM alarm_time) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM alarm_time) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COUNT(*) FROM fire_alarms WHERE EXTRACT(MONTH FROM alarm_time) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM alarm_time) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+                UNION ALL
+                SELECT 
+                    'incidents' as category,
+                    (SELECT COUNT(*) FROM incidents WHERE EXTRACT(MONTH FROM report_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM report_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COUNT(*) FROM incidents WHERE EXTRACT(MONTH FROM report_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM report_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+            `);
+
+            // Haftalık karşılaştırma
+            const weeklyComparison = await client.query(`
+                SELECT 
+                    'visitors' as category,
+                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
+                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 14 AND entry_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
+                UNION ALL
+                SELECT 
+                    'vehicles' as category,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE given_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
+                    (SELECT COUNT(*) FROM vehicle_records WHERE given_date >= CURRENT_DATE - 14 AND given_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
+                UNION ALL
+                SELECT 
+                    'managers' as category,
+                    (SELECT COUNT(*) FROM managers_records WHERE entry_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
+                    (SELECT COUNT(*) FROM managers_records WHERE entry_date >= CURRENT_DATE - 14 AND entry_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
+            `);
+
+            res.json({
+                success: true,
+                data: {
+                    monthlyComparison: comparison.rows,
+                    weeklyComparison: weeklyComparison.rows
+                }
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Karşılaştırma hatası:', error);
+        res.status(500).json({ success: false, message: 'Karşılaştırma verileri alınamadı' });
+    }
+};
