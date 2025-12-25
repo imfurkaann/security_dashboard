@@ -72,6 +72,302 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
 
 
 /**
+ * Get all managers (not records)
+ * GET /api/managers
+ */
+export const getAllManagers = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const query = `
+            SELECT id, first_name, last_name, title, is_active, created_at, updated_at
+            FROM managers
+            WHERE deleted_at IS NULL
+            ORDER BY first_name, last_name
+        `;
+        const result = await pool.query(query);
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Error fetching managers:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Müdür verileri alınırken bir hata oluştu'
+        });
+    }
+};
+
+/**
+ * Create new manager
+ * POST /api/managers
+ */
+export const createManager = async (req: Request, res: Response): Promise<void> => {
+    const client = await pool.connect();
+
+    try {
+        const { firstName, lastName, title } = req.body;
+        const userId = (req as any).user?.userId;
+        const clientIp = getClientIp(req);
+
+        // Validate required fields
+        if (!firstName || !lastName) {
+            res.status(400).json({
+                success: false,
+                message: 'Ad ve soyad zorunludur'
+            });
+            return;
+        }
+
+        // Sanitize inputs
+        const sanitizedFirstName = sanitizeInput(firstName, 50);
+        const sanitizedLastName = sanitizeInput(lastName, 50);
+        const sanitizedTitle = sanitizeInput(title, 100);
+
+        if (!sanitizedFirstName || !sanitizedLastName) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz ad veya soyad'
+            });
+            return;
+        }
+
+        await client.query('BEGIN');
+
+        // Insert manager
+        const insertQuery = `
+            INSERT INTO managers (first_name, last_name, title, is_active)
+            VALUES ($1, $2, $3, true)
+            RETURNING id, first_name, last_name, title, is_active, created_at
+        `;
+        const result = await client.query(insertQuery, [
+            sanitizedFirstName,
+            sanitizedLastName,
+            sanitizedTitle || null
+        ]);
+
+        const newManager = result.rows[0];
+
+        // Log the creation
+        await logDataChange(
+            'managers',
+            newManager.id,
+            'INSERT',
+            null,
+            {
+                first_name: sanitizedFirstName,
+                last_name: sanitizedLastName,
+                title: sanitizedTitle
+            },
+            userId,
+            clientIp
+        );
+
+        await client.query('COMMIT');
+
+        res.status(201).json({
+            success: true,
+            message: 'Müdür başarıyla eklendi',
+            data: newManager
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error creating manager:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Müdür eklenirken bir hata oluştu'
+        });
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Update manager
+ * PUT /api/managers/:id
+ */
+export const updateManager = async (req: Request, res: Response): Promise<void> => {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+        const { firstName, lastName, title, isActive } = req.body;
+        const userId = (req as any).user?.userId;
+        const clientIp = getClientIp(req);
+
+        // Validate UUID
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz müdür kimliği'
+            });
+            return;
+        }
+
+        // Validate required fields
+        if (!firstName || !lastName) {
+            res.status(400).json({
+                success: false,
+                message: 'Ad ve soyad zorunludur'
+            });
+            return;
+        }
+
+        // Sanitize inputs
+        const sanitizedFirstName = sanitizeInput(firstName, 50);
+        const sanitizedLastName = sanitizeInput(lastName, 50);
+        const sanitizedTitle = sanitizeInput(title, 100);
+
+        if (!sanitizedFirstName || !sanitizedLastName) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz ad veya soyad'
+            });
+            return;
+        }
+
+        await client.query('BEGIN');
+
+        // Get old values
+        const oldDataQuery = 'SELECT first_name, last_name, title, is_active FROM managers WHERE id = $1 AND deleted_at IS NULL';
+        const oldData = await client.query(oldDataQuery, [id]);
+
+        if (oldData.rows.length === 0) {
+            await client.query('ROLLBACK');
+            res.status(404).json({
+                success: false,
+                message: 'Müdür bulunamadı'
+            });
+            return;
+        }
+
+        // Update query
+        const updateQuery = `
+            UPDATE managers
+            SET first_name = $1, last_name = $2, title = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $5
+            RETURNING id, first_name, last_name, title, is_active, updated_at
+        `;
+        const result = await client.query(updateQuery, [
+            sanitizedFirstName,
+            sanitizedLastName,
+            sanitizedTitle || null,
+            isActive !== undefined ? isActive : true,
+            id
+        ]);
+
+        const updatedManager = result.rows[0];
+
+        // Log the update
+        await logDataChange(
+            'managers',
+            id,
+            'UPDATE',
+            oldData.rows[0],
+            {
+                first_name: sanitizedFirstName,
+                last_name: sanitizedLastName,
+                title: sanitizedTitle,
+                is_active: isActive !== undefined ? isActive : true
+            },
+            userId,
+            clientIp
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Müdür başarıyla güncellendi',
+            data: updatedManager
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error updating manager:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Müdür güncellenirken bir hata oluştu'
+        });
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Delete manager (soft delete)
+ * DELETE /api/managers/:id
+ */
+export const deleteManager = async (req: Request, res: Response): Promise<void> => {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+        const userId = (req as any).user?.userId;
+        const clientIp = getClientIp(req);
+
+        // Validate UUID
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz müdür kimliği'
+            });
+            return;
+        }
+
+        await client.query('BEGIN');
+
+        // Get old values
+        const oldDataQuery = 'SELECT first_name, last_name, title FROM managers WHERE id = $1 AND deleted_at IS NULL';
+        const oldData = await client.query(oldDataQuery, [id]);
+
+        if (oldData.rows.length === 0) {
+            await client.query('ROLLBACK');
+            res.status(404).json({
+                success: false,
+                message: 'Müdür bulunamadı'
+            });
+            return;
+        }
+
+        // Soft delete
+        const deleteQuery = `
+            UPDATE managers
+            SET deleted_at = CURRENT_TIMESTAMP, is_active = false, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+        `;
+        await client.query(deleteQuery, [id]);
+
+        // Log the deletion
+        await logDataChange(
+            'managers',
+            id,
+            'DELETE',
+            oldData.rows[0],
+            null,
+            userId,
+            clientIp
+        );
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Müdür başarıyla silindi'
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error deleting manager:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Müdür silinirken bir hata oluştu'
+        });
+    } finally {
+        client.release();
+    }
+};
+
+
+/**
  * Create new manager record
  * POST /api/managers/records
  */

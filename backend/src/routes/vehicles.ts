@@ -5,7 +5,10 @@ import {
     getVehicleRecords,
     createVehicleRecord,
     returnVehicle,
-    updateVehicleRecord
+    updateVehicleRecord,
+    createVehicle,
+    updateVehicle,
+    deleteVehicle
 } from '../controllers/vehicleController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -16,6 +19,15 @@ router.use(authMiddleware);
 
 // Get all vehicles
 router.get('/', getVehicles);
+
+// Create new vehicle
+router.post('/', createVehicle);
+
+// Update vehicle
+router.put('/:id', updateVehicle);
+
+// Delete vehicle
+router.delete('/:id', deleteVehicle);
 
 // Get all managers
 router.get('/managers', getManagers);

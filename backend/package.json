@@ -7,7 +7,6 @@
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "migrate": "node -r ts-node/register database/migrate.ts",
     "health": "node healthcheck.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch"

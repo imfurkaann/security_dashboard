@@ -3,10 +3,20 @@ import { ConfigProvider } from 'antd';
 import trTR from 'antd/locale/tr_TR';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminProtectedRoute from './components/AdminProtectedRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import AdminDashboard from './pages/AdminDashboard';
 import Vehicles from './pages/Vehicles';
 import VehicleRecords from './pages/VehicleRecords';
+import AdminVehicleRecords from './pages/AdminVehicleRecords';
+import AdminManageVehicles from './pages/AdminManageVehicles';
+import AdminVisitorRecords from './pages/AdminVisitorRecords';
+import AdminManagerRecords from './pages/AdminManagerRecords';
+import AdminIncidentRecords from './pages/AdminIncidentRecords';
+import AdminFireAlarmRecords from './pages/AdminFireAlarmRecords';
+import AdminManagePersonnel from './pages/AdminManagePersonnel';
+import AdminManageManagers from './pages/AdminManageManagers';
 import Visitors from './pages/Visitors';
 import VisitorRecords from './pages/VisitorRecords';
 import Managers from './pages/Managers';
@@ -24,7 +34,7 @@ function App() {
       <ThemeProvider>
         <Router>
           <Routes>
-            {/* Public Route */}
+            {/* Public Routes */}
             <Route path="/login" element={<Login />} />
 
             {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
@@ -32,6 +42,53 @@ function App() {
               <ProtectedRoute>
                 <EquipmentCheck />
               </ProtectedRoute>
+            } />
+
+            {/* Admin Protected Routes */}
+            <Route path="/admin/dashboard" element={
+              <AdminProtectedRoute>
+                <AdminDashboard />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/vehicle-records" element={
+              <AdminProtectedRoute>
+                <AdminVehicleRecords />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/manage-vehicles" element={
+              <AdminProtectedRoute>
+                <AdminManageVehicles />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/visitor-records" element={
+              <AdminProtectedRoute>
+                <AdminVisitorRecords />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/manager-records" element={
+              <AdminProtectedRoute>
+                <AdminManagerRecords />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/incident-records" element={
+              <AdminProtectedRoute>
+                <AdminIncidentRecords />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/fire-alarm-records" element={
+              <AdminProtectedRoute>
+                <AdminFireAlarmRecords />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/manage-personnel" element={
+              <AdminProtectedRoute>
+                <AdminManagePersonnel />
+              </AdminProtectedRoute>
+            } />
+            <Route path="/admin/manage-managers" element={
+              <AdminProtectedRoute>
+                <AdminManageManagers />
+              </AdminProtectedRoute>
             } />
 
             {/* Protected Routes - Authentication gerekli */}
