@@ -137,8 +137,8 @@ export const runMigrations = async (): Promise<void> => {
         await createMigrationTable();
 
         // Migration klasörünün yolunu belirle
-        // Docker'da /app/migrations, local'de ../../database/migrations
-        let migrationsDir = path.resolve(__dirname, '../../database/migrations');
+        // Docker'da /app/migrations, local'de ../../../database/migrations
+        let migrationsDir = path.resolve(__dirname, '../../../database/migrations');
 
         // Docker ortamında farklı yol kullan
         if (process.env.NODE_ENV === 'production') {

@@ -733,3 +733,255 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
         });
     }
 };
+
+/**
+ * Create new vehicle
+ * POST /api/vehicles
+ */
+export const createVehicle = async (req: Request, res: Response): Promise<void> => {
+    const clientIp = getClientIp(req);
+    const userId = req.user?.userId;
+
+    try {
+        const { plate, brand } = req.body;
+
+        // Validation
+        if (!plate || !brand) {
+            res.status(400).json({
+                success: false,
+                message: 'Plaka ve marka zorunludur'
+            });
+            return;
+        }
+
+        const normalizedPlate = normalizePlate(plate);
+        if (!normalizedPlate) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz plaka formatı'
+            });
+            return;
+        }
+
+        // Check if plate already exists
+        const checkQuery = 'SELECT id FROM vehicles WHERE plate = $1 AND deleted_at IS NULL';
+        const checkResult = await pool.query(checkQuery, [normalizedPlate]);
+
+        if (checkResult.rows.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Bu plaka zaten kayıtlı'
+            });
+            return;
+        }
+
+        const id = uuidv4();
+        const query = `
+            INSERT INTO vehicles (id, plate, brand, is_active, status)
+            VALUES ($1, $2, $3, true, 'available')
+            RETURNING *
+        `;
+
+        const result = await pool.query(query, [
+            id,
+            normalizedPlate,
+            sanitizeInput(brand, 100)
+        ]);
+
+        // Audit log
+        await logDataChange(
+            'vehicles',
+            id,
+            'INSERT',
+            null,
+            result.rows[0],
+            userId || 'unknown',
+            clientIp
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Araç başarıyla eklendi',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Create vehicle error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Araç eklenirken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Update vehicle
+ * PUT /api/vehicles/:id
+ */
+export const updateVehicle = async (req: Request, res: Response): Promise<void> => {
+    const clientIp = getClientIp(req);
+    const userId = req.user?.userId;
+    const { id } = req.params;
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz araç ID'
+            });
+            return;
+        }
+
+        const { plate, brand } = req.body;
+
+        // Get old data for audit log
+        const oldDataQuery = 'SELECT * FROM vehicles WHERE id = $1 AND deleted_at IS NULL';
+        const oldDataResult = await pool.query(oldDataQuery, [id]);
+
+        if (oldDataResult.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Araç bulunamadı'
+            });
+            return;
+        }
+
+        const normalizedPlate = normalizePlate(plate);
+        if (!normalizedPlate) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz plaka formatı'
+            });
+            return;
+        }
+
+        // Check if plate is taken by another vehicle
+        const checkQuery = 'SELECT id FROM vehicles WHERE plate = $1 AND id != $2 AND deleted_at IS NULL';
+        const checkResult = await pool.query(checkQuery, [normalizedPlate, id]);
+
+        if (checkResult.rows.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Bu plaka başka bir araçta kayıtlı'
+            });
+            return;
+        }
+
+        const query = `
+            UPDATE vehicles
+            SET plate = $1,
+                brand = $2,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $3 AND deleted_at IS NULL
+            RETURNING *
+        `;
+
+        const result = await pool.query(query, [
+            normalizedPlate,
+            sanitizeInput(brand, 100),
+            id
+        ]);
+
+        // Audit log
+        await logDataChange(
+            'vehicles',
+            id,
+            'UPDATE',
+            oldDataResult.rows[0],
+            result.rows[0],
+            userId || 'unknown',
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Araç başarıyla güncellendi',
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Update vehicle error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Araç güncellenirken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Delete vehicle (soft delete)
+ * DELETE /api/vehicles/:id
+ */
+export const deleteVehicle = async (req: Request, res: Response): Promise<void> => {
+    const clientIp = getClientIp(req);
+    const userId = req.user?.userId;
+    const { id } = req.params;
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz araç ID'
+            });
+            return;
+        }
+
+        // Get old data for audit log
+        const oldDataQuery = 'SELECT * FROM vehicles WHERE id = $1 AND deleted_at IS NULL';
+        const oldDataResult = await pool.query(oldDataQuery, [id]);
+
+        if (oldDataResult.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Araç bulunamadı'
+            });
+            return;
+        }
+
+        // Check if vehicle has active records
+        const activeRecordsQuery = `
+            SELECT COUNT(*) as count
+            FROM vehicle_records
+            WHERE vehicle_id = $1 AND return_time IS NULL
+        `;
+        const activeRecordsResult = await pool.query(activeRecordsQuery, [id]);
+
+        if (parseInt(activeRecordsResult.rows[0].count) > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Bu araç şu anda kullanımda, silinemez'
+            });
+            return;
+        }
+
+        const query = `
+            UPDATE vehicles
+            SET deleted_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+            RETURNING *
+        `;
+
+        const result = await pool.query(query, [id]);
+
+        // Audit log
+        await logDataChange(
+            'vehicles',
+            id,
+            'SOFT_DELETE',
+            oldDataResult.rows[0],
+            result.rows[0],
+            userId || 'unknown',
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Araç başarıyla silindi'
+        });
+    } catch (error) {
+        console.error('Delete vehicle error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Araç silinirken hata oluştu'
+        });
+    }
+};

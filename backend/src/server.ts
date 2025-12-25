@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import pool from './config/database';
 import { runMigrations } from './config/migrations';
 import authRoutes from './routes/auth';
+import adminRoutes from './routes/admin';
 import vehicleRoutes from './routes/vehicles';
 import visitorRoutes from './routes/visitors';
 import managersRoutes from './routes/managers';
@@ -11,6 +12,7 @@ import incidentsRoutes from './routes/incidents';
 import fireAlarmsRoutes from './routes/fireAlarms';
 import sgkRoutes from './routes/sgk';
 import equipmentCheckRoutes from './routes/equipmentCheck';
+import personnelRoutes from './routes/personnel';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 
 dotenv.config();
@@ -96,6 +98,7 @@ app.use(generalRateLimiter);
 app.use(writeRateLimiter);
 
 // Routes
+app.use('/api/admin', adminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/visitors', visitorRoutes);
@@ -104,6 +107,7 @@ app.use('/api/incidents', incidentsRoutes);
 app.use('/api/fire-alarms', fireAlarmsRoutes);
 app.use('/api/sgk', sgkRoutes);
 app.use('/api/equipment-check', equipmentCheckRoutes);
+app.use('/api/personnel', personnelRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {

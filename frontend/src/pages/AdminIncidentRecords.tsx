@@ -4,7 +4,7 @@ import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
-import api from '../utils/api';
+import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 
 const { RangePicker } = DatePicker;
@@ -25,7 +25,7 @@ interface IncidentRecord {
     reported_by: string;
 }
 
-export default function IncidentRecords() {
+export default function AdminIncidentRecords() {
     const [records, setRecords] = useState<IncidentRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [showReportModal, setShowReportModal] = useState(false);
@@ -38,11 +38,17 @@ export default function IncidentRecords() {
     const [dateStart, setDateStart] = useState('');
     const [dateEnd, setDateEnd] = useState('');
 
-    // Fetch all records
+    // Fetch all records with admin authentication
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await api.get('/incidents/records');
+                const adminToken = localStorage.getItem('adminToken');
+                const config = {
+                    headers: {
+                        Authorization: `Bearer ${adminToken}`
+                    }
+                };
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/incidents/records`, config);
                 setRecords(res.data?.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);
@@ -168,7 +174,7 @@ export default function IncidentRecords() {
                     <div className="flex justify-between items-center">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => navigate('/incidents')}
+                                onClick={() => navigate('/admin/dashboard')}
                                 className="p-2 hover:bg-gray-100 rounded-lg transition"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

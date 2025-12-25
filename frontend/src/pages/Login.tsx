@@ -40,17 +40,44 @@ export default function Login() {
         setLoading(true);
 
         try {
-            const response = await api.post('/auth/login', {
+            // First, try regular login to check user role
+            const checkResponse = await api.post('/auth/login', {
                 username: username.trim(),
                 password
             });
 
-            const { token, user } = response.data.data;
-            localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+            const { user } = checkResponse.data.data;
 
-            // After login, redirect to equipment check page
-            navigate('/equipment-check');
+            // Check user role and use appropriate login endpoint
+            if (user.role === 'admin') {
+                // Admin users: Use admin login endpoint to get proper admin token
+                console.log('Admin user detected, calling admin login...');
+                const adminResponse = await api.post('/admin/login', {
+                    username: username.trim(),
+                    password
+                });
+
+                console.log('Admin login response:', adminResponse.data);
+                const { token: adminToken } = adminResponse.data.data;
+                console.log('Admin token received:', adminToken ? 'yes' : 'no');
+                console.log('Admin token length:', adminToken?.length);
+
+                localStorage.setItem('adminToken', adminToken);
+                localStorage.setItem('adminUser', JSON.stringify({ ...user, isAdmin: true }));
+
+                console.log('LocalStorage adminToken:', localStorage.getItem('adminToken'));
+
+                // Small delay to ensure localStorage is saved before navigation
+                setTimeout(() => {
+                    navigate('/admin/dashboard', { replace: true });
+                }, 100);
+            } else {
+                // Regular users: Use token from first login
+                const { token } = checkResponse.data.data;
+                localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+                localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+                navigate('/equipment-check', { replace: true });
+            }
         } catch (err) {
             const axiosError = err as AxiosError<{ message?: string }>;
 
