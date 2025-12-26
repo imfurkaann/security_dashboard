@@ -29,6 +29,17 @@ const api = axios.create({
 });
 
 /**
+ * Gets the appropriate token based on current path
+ */
+const getToken = (): string | null => {
+    const isAdminPath = window.location.pathname.startsWith('/admin');
+    if (isAdminPath) {
+        return localStorage.getItem('adminToken') || localStorage.getItem(STORAGE_KEYS.TOKEN);
+    }
+    return localStorage.getItem(STORAGE_KEYS.TOKEN);
+};
+
+/**
  * Validates token format
  */
 const isValidToken = (token: string | null): token is string => {
@@ -40,7 +51,7 @@ const isValidToken = (token: string | null): token is string => {
  */
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+        const token = getToken();
 
         // Add token if valid
         if (isValidToken(token)) {

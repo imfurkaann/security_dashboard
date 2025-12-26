@@ -177,7 +177,7 @@ export default function AdminDashboard() {
 
         } catch (error) {
             console.error('Admin dashboard data loading error:', error);
-            navigate('/admin/login');
+            navigate('/login');
         } finally {
             setLoading(false);
         }
@@ -206,9 +206,10 @@ export default function AdminDashboard() {
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
+            // Only remove admin-specific tokens, keep personnel tokens intact
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
-            navigate('/admin/login');
+            navigate('/login');
         }
     };
 

@@ -99,9 +99,134 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
 
             const result = await client.query(query, [days]);
 
+            // Saatlik yoğunluk (Gün x Saat ısı haritası için)
+            const hourlyHeatmap = await client.query(`
+                SELECT 
+                    TO_CHAR(entry_date, 'Day') as day_name,
+                    EXTRACT(DOW FROM entry_date) as day_of_week,
+                    EXTRACT(HOUR FROM entry_time::time) as hour,
+                    COUNT(*) as visit_count,
+                    SUM(person_count) as total_persons
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND entry_time IS NOT NULL
+                GROUP BY TO_CHAR(entry_date, 'Day'), EXTRACT(DOW FROM entry_date), EXTRACT(HOUR FROM entry_time::time)
+                ORDER BY day_of_week, hour
+            `, [days]);
+
+            // Ortalama ziyaret süresi
+            const avgDuration = await client.query(`
+                SELECT 
+                    AVG(EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600) as avg_hours,
+                    MIN(EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600) as min_hours,
+                    MAX(EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600) as max_hours,
+                    COUNT(*) as completed_visits
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND entry_time IS NOT NULL
+                  AND exit_time IS NOT NULL
+                  AND exit_time::time > entry_time::time
+            `, [days]);
+
+            // Ziyaret süresi dağılımı (histogram için)
+            const durationDistribution = await client.query(`
+                SELECT 
+                    CASE 
+                        WHEN EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600 < 0.5 THEN '0-30 dk'
+                        WHEN EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600 < 1 THEN '30-60 dk'
+                        WHEN EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600 < 2 THEN '1-2 saat'
+                        WHEN EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600 < 4 THEN '2-4 saat'
+                        ELSE '4+ saat'
+                    END as duration_range,
+                    COUNT(*) as count
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND entry_time IS NOT NULL
+                  AND exit_time IS NOT NULL
+                  AND exit_time::time > entry_time::time
+                GROUP BY duration_range
+                ORDER BY duration_range
+            `, [days]);
+
+            // Kime gelindiği bazlı dağılım
+            const hostDistribution = await client.query(`
+                SELECT 
+                    COALESCE(visiting_person, 'Belirtilmemiş') as host,
+                    COUNT(*) as visit_count,
+                    SUM(person_count) as total_persons
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                GROUP BY visiting_person
+                ORDER BY visit_count DESC
+                LIMIT 15
+            `, [days]);
+
+            // Elektrik istasyonu için gelenler
+            const electricStationVisitors = await client.query(`
+                SELECT 
+                    entry_date::text as date,
+                    COUNT(*) as count,
+                    SUM(person_count) as total_persons
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND for_electric_station = true
+                GROUP BY entry_date
+                ORDER BY entry_date ASC
+            `, [days]);
+
+            // Taşeron işçi ziyaretleri
+            const subcontractorVisitors = await client.query(`
+                SELECT 
+                    entry_date::text as date,
+                    COUNT(*) as count,
+                    SUM(person_count) as total_persons
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND subcontractor_worker = true
+                GROUP BY entry_date
+                ORDER BY entry_date ASC
+            `, [days]);
+
+            // Elektrik istasyonu vs Taşeron karşılaştırması
+            const categoryComparison = await client.query(`
+                SELECT 
+                    CASE 
+                        WHEN for_electric_station = true THEN 'Elektrik İstasyonu'
+                        WHEN subcontractor_worker = true THEN 'Taşeron İşçi'
+                        ELSE 'Diğer'
+                    END as category,
+                    COUNT(*) as count,
+                    SUM(person_count) as total_persons
+                FROM visitor_records 
+                WHERE entry_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                GROUP BY 
+                    CASE 
+                        WHEN for_electric_station = true THEN 'Elektrik İstasyonu'
+                        WHEN subcontractor_worker = true THEN 'Taşeron İşçi'
+                        ELSE 'Diğer'
+                    END
+                ORDER BY count DESC
+            `, [days]);
+
             res.json({
                 success: true,
-                data: result.rows
+                data: {
+                    trend: result.rows,
+                    hourlyHeatmap: hourlyHeatmap.rows,
+                    avgDuration: avgDuration.rows[0],
+                    durationDistribution: durationDistribution.rows,
+                    hostDistribution: hostDistribution.rows,
+                    electricStationVisitors: electricStationVisitors.rows,
+                    subcontractorVisitors: subcontractorVisitors.rows,
+                    categoryComparison: categoryComparison.rows
+                }
             });
         } finally {
             client.release();
@@ -198,13 +323,76 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                 GROUP BY status
             `, [days]);
 
+            // Hedef lokasyon analizi (en çok gidilen yerler)
+            const topDestinations = await client.query(`
+                SELECT 
+                    destination,
+                    COUNT(*) as count
+                FROM vehicle_records 
+                WHERE deleted_at IS NULL
+                  AND destination IS NOT NULL
+                  AND destination != ''
+                  AND given_date >= CURRENT_DATE - $1::integer
+                GROUP BY destination
+                ORDER BY count DESC
+                LIMIT 10
+            `, [days]);
+
+            // Saatlik kullanım yoğunluğu
+            const hourlyUsage = await client.query(`
+                SELECT 
+                    EXTRACT(HOUR FROM given_time::time) as hour,
+                    COUNT(*) as count
+                FROM vehicle_records 
+                WHERE deleted_at IS NULL
+                  AND given_time IS NOT NULL
+                  AND given_date >= CURRENT_DATE - $1::integer
+                GROUP BY EXTRACT(HOUR FROM given_time::time)
+                ORDER BY hour ASC
+            `, [days]);
+
+            // Gün x Saat ısı haritası
+            const hourlyHeatmap = await client.query(`
+                SELECT 
+                    TO_CHAR(given_date, 'Day') as day_name,
+                    EXTRACT(DOW FROM given_date) as day_of_week,
+                    EXTRACT(HOUR FROM given_time::time) as hour,
+                    COUNT(*) as count
+                FROM vehicle_records 
+                WHERE given_date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                  AND given_time IS NOT NULL
+                GROUP BY TO_CHAR(given_date, 'Day'), EXTRACT(DOW FROM given_date), EXTRACT(HOUR FROM given_time::time)
+                ORDER BY day_of_week, hour
+            `, [days]);
+
+            // Personel bazlı araç kullanımı (Kim hangi aracı kullanıyor)
+            const personnelVehicleUsage = await client.query(`
+                SELECT 
+                    COALESCE(p.first_name || ' ' || p.last_name, 'Belirtilmemiş') as personnel_name,
+                    v.plate as vehicle_plate,
+                    COUNT(*) as usage_count
+                FROM vehicle_records vr
+                LEFT JOIN vehicles v ON vr.vehicle_id = v.id
+                LEFT JOIN personnel p ON vr.given_by = p.id
+                WHERE vr.deleted_at IS NULL
+                  AND vr.given_date >= CURRENT_DATE - $1::integer
+                GROUP BY p.first_name, p.last_name, v.plate
+                ORDER BY usage_count DESC
+                LIMIT 20
+            `, [days]);
+
             res.json({
                 success: true,
                 data: {
                     trend: trendResult.rows,
                     topVehicles: topVehicles.rows,
                     topManagers: topManagers.rows,
-                    statusDistribution: statusDistribution.rows
+                    statusDistribution: statusDistribution.rows,
+                    topDestinations: topDestinations.rows,
+                    hourlyUsage: hourlyUsage.rows,
+                    hourlyHeatmap: hourlyHeatmap.rows,
+                    personnelVehicleUsage: personnelVehicleUsage.rows
                 }
             });
         } finally {
@@ -313,6 +501,18 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
         const client = await pool.connect();
 
         try {
+            // Günlük alarm trendi
+            const dailyTrend = await client.query(`
+                SELECT 
+                    alarm_time::date::text as date,
+                    COUNT(*) as count
+                FROM fire_alarms 
+                WHERE alarm_time::date >= CURRENT_DATE - $1::integer
+                  AND deleted_at IS NULL
+                GROUP BY alarm_time::date
+                ORDER BY alarm_time::date ASC
+            `, [days]);
+
             // Aylık alarm trendi
             const monthlyTrend = await client.query(`
                 SELECT 
@@ -351,12 +551,28 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                 GROUP BY resolved
             `, [days]);
 
+            // Saatlik alarm çalma trendi
+            const hourlyTrend = await client.query(`
+                SELECT 
+                    EXTRACT(HOUR FROM alarm_time) as hour,
+                    COUNT(*) as count,
+                    SUM(CASE WHEN false_alarm = true THEN 1 ELSE 0 END) as false_alarms,
+                    SUM(CASE WHEN false_alarm = false OR false_alarm IS NULL THEN 1 ELSE 0 END) as real_alarms
+                FROM fire_alarms 
+                WHERE deleted_at IS NULL
+                  AND alarm_time >= CURRENT_DATE - $1::integer
+                GROUP BY EXTRACT(HOUR FROM alarm_time)
+                ORDER BY hour ASC
+            `, [days]);
+
             res.json({
                 success: true,
                 data: {
+                    dailyTrend: dailyTrend.rows,
                     monthlyTrend: monthlyTrend.rows,
                     locationDistribution: locationDistribution.rows,
-                    resolutionStats: resolutionStats.rows
+                    resolutionStats: resolutionStats.rows,
+                    hourlyTrend: hourlyTrend.rows
                 }
             });
         } finally {
@@ -378,12 +594,12 @@ export const getIncidentStats = async (req: Request, res: Response) => {
             // Aylık olay trendi
             const monthlyTrend = await client.query(`
                 SELECT 
-                    TO_CHAR(report_date, 'YYYY-MM') as date,
+                    TO_CHAR(incident_time::date, 'YYYY-MM') as date,
                     COUNT(*) as count
                 FROM incidents 
-                WHERE report_date >= CURRENT_DATE - $1::integer
+                WHERE incident_time::date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
-                GROUP BY TO_CHAR(report_date, 'YYYY-MM')
+                GROUP BY TO_CHAR(incident_time::date, 'YYYY-MM')
                 ORDER BY date ASC
             `, [days]);
 
@@ -394,7 +610,7 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM incidents 
                 WHERE deleted_at IS NULL
-                  AND report_date >= CURRENT_DATE - $1::integer
+                  AND incident_time::date >= CURRENT_DATE - $1::integer
                 GROUP BY incident_type
                 ORDER BY count DESC
             `, [days]);
@@ -406,20 +622,8 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM incidents 
                 WHERE deleted_at IS NULL
-                  AND report_date >= CURRENT_DATE - $1::integer
+                  AND incident_time::date >= CURRENT_DATE - $1::integer
                 GROUP BY severity
-                ORDER BY count DESC
-            `, [days]);
-
-            // Vardiya bazlı dağılım
-            const shiftDistribution = await client.query(`
-                SELECT 
-                    COALESCE(shift_label, shift, 'Belirtilmemiş') as shift,
-                    COUNT(*) as count
-                FROM incidents 
-                WHERE deleted_at IS NULL
-                  AND report_date >= CURRENT_DATE - $1::integer
-                GROUP BY COALESCE(shift_label, shift, 'Belirtilmemiş')
                 ORDER BY count DESC
             `, [days]);
 
@@ -428,8 +632,7 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                 data: {
                     monthlyTrend: monthlyTrend.rows,
                     typeDistribution: typeDistribution.rows,
-                    severityDistribution: severityDistribution.rows,
-                    shiftDistribution: shiftDistribution.rows
+                    severityDistribution: severityDistribution.rows
                 }
             });
         } finally {

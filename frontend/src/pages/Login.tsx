@@ -62,6 +62,7 @@ export default function Login() {
                 console.log('Admin token received:', adminToken ? 'yes' : 'no');
                 console.log('Admin token length:', adminToken?.length);
 
+                // Save admin token ONLY to admin-specific keys (not to shared token key)
                 localStorage.setItem('adminToken', adminToken);
                 localStorage.setItem('adminUser', JSON.stringify({ ...user, isAdmin: true }));
 
@@ -72,7 +73,7 @@ export default function Login() {
                     navigate('/admin/dashboard', { replace: true });
                 }, 100);
             } else {
-                // Regular users: Use token from first login
+                // Regular users: Use token from first login - save ONLY to personnel-specific keys
                 const { token } = checkResponse.data.data;
                 localStorage.setItem(STORAGE_KEYS.TOKEN, token);
                 localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
