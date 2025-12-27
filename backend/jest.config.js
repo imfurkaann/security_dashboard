@@ -18,4 +18,13 @@ module.exports = {
     coverageReporters: ['text', 'lcov', 'html'],
     moduleFileExtensions: ['ts', 'js', 'json', 'node'],
     setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+    globalTeardown: '<rootDir>/tests/globalTeardown.ts',
+    // Test ortamı için timeout artır
+    testTimeout: 30000,
+    // Verbose çıktı
+    verbose: false,
+    // Force exit (open handles sorununu çöz)
+    forceExit: true,
+    // Detect open handles (debug için)
+    detectOpenHandles: false,
 };

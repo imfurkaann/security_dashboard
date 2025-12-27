@@ -10,25 +10,28 @@ interface RateLimitRecord {
     blockedUntil: number | null;
 }
 
+// Test ortamı kontrolü
+const isTestEnv = process.env.NODE_ENV === 'test';
+
 // Rate limit konfigürasyonu
 const RATE_LIMIT_CONFIG = {
     // Genel API limitleri
     general: {
-        windowMs: 60 * 1000,      // 1 dakika
-        maxRequests: 1000,        // Dakikada maksimum 1000 istek
-        blockDurationMs: 5 * 60 * 1000  // 5 dakika blok
+        windowMs: isTestEnv ? 1000 : 60 * 1000,      // Test: 1sn, Prod: 1 dakika
+        maxRequests: isTestEnv ? 10000 : 1000,       // Test: 10000, Prod: 1000
+        blockDurationMs: isTestEnv ? 1000 : 5 * 60 * 1000  // Test: 1sn, Prod: 5 dakika
     },
     // Login endpoint limitleri
     login: {
-        windowMs: 15 * 60 * 1000, // 15 dakika
-        maxRequests: 50,          // 15 dakikada maksimum 50 deneme
-        blockDurationMs: 30 * 60 * 1000  // 30 dakika blok
+        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // Test: 1sn, Prod: 15 dakika
+        maxRequests: isTestEnv ? 10000 : 50,         // Test: 10000, Prod: 50
+        blockDurationMs: isTestEnv ? 1000 : 30 * 60 * 1000  // Test: 1sn, Prod: 30 dakika
     },
     // Yazma işlemleri (POST/PUT/DELETE)
     write: {
-        windowMs: 60 * 1000,      // 1 dakika
-        maxRequests: 300,         // Dakikada maksimum 300 yazma işlemi
-        blockDurationMs: 10 * 60 * 1000  // 10 dakika blok
+        windowMs: isTestEnv ? 1000 : 60 * 1000,      // Test: 1sn, Prod: 1 dakika
+        maxRequests: isTestEnv ? 10000 : 300,        // Test: 10000, Prod: 300
+        blockDurationMs: isTestEnv ? 1000 : 10 * 60 * 1000  // Test: 1sn, Prod: 10 dakika
     }
 };
 
