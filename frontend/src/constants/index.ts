@@ -4,10 +4,25 @@
  */
 
 // API Configuration
-const ENV_API_URL = typeof import.meta !== 'undefined'
-    ? import.meta.env?.VITE_API_URL
-    : undefined;
-export const API_URL = ENV_API_URL || 'http://localhost:5000/api';
+// Dinamik API URL - Tarayıcının eriştiği host'u kullanır
+const getApiUrl = () => {
+    // Build zamanında set edilen URL varsa kullan
+    const envUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_URL : undefined;
+    if (envUrl) return envUrl;
+
+    // Runtime'da dinamik URL oluştur
+    if (typeof window !== 'undefined') {
+        const protocol = window.location.protocol;
+        const hostname = window.location.hostname;
+        // Eğer localhost ise port 5000, değilse port 5000
+        return `${protocol}//${hostname}:5000/api`;
+    }
+
+    // Fallback
+    return 'http://localhost:5000/api';
+};
+
+export const API_URL = getApiUrl();
 export const API_TIMEOUT = 30000; // 30 saniye
 
 // Pagination

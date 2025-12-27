@@ -6,6 +6,7 @@ import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import { API_URL } from '../constants';
 
 const { RangePicker } = DatePicker;
 
@@ -48,7 +49,7 @@ export default function AdminIncidentRecords() {
                         Authorization: `Bearer ${adminToken}`
                     }
                 };
-                const res = await axios.get(`${import.meta.env.VITE_API_URL}/incidents/records`, config);
+                const res = await axios.get(`${API_URL}/incidents/records`, config);
                 setRecords(res.data?.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);

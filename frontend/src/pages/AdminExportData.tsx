@@ -5,10 +5,9 @@ import { DatePicker } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
+import { API_URL } from '../constants';
 
 dayjs.locale('tr');
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 interface RecordCounts {
     managers: number;

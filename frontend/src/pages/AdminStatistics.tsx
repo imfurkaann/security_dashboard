@@ -508,7 +508,7 @@ const AdminStatistics = () => {
                                         cx="50%"
                                         cy="50%"
                                         labelLine={false}
-                                        label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        label={({ name, percent }) => (percent && percent > 0.05) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
                                         outerRadius={100}
                                         dataKey="value"
                                     >
@@ -1410,7 +1410,7 @@ const AdminStatistics = () => {
                                     cx="50%"
                                     cy="50%"
                                     labelLine={false}
-                                    label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                    label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
                                     outerRadius={120}
                                     dataKey="value"
                                 >
@@ -1480,7 +1480,7 @@ const AdminStatistics = () => {
                                         outerRadius={100}
                                         dataKey="value"
                                         labelLine={false}
-                                        label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
                                     >
                                         <Cell fill="#3B82F6" />
                                         <Cell fill="#10B981" />
@@ -1524,7 +1524,7 @@ const AdminStatistics = () => {
                                         outerRadius={100}
                                         dataKey="value"
                                         labelLine={false}
-                                        label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
                                     >
                                         <Cell fill="#EC4899" />
                                         <Cell fill="#F472B6" />

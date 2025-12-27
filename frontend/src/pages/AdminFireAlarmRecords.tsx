@@ -6,9 +6,9 @@ import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import { API_URL } from '../constants';
 
 const { RangePicker } = DatePicker;
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 interface FireAlarmRecord {
     id: string;

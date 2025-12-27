@@ -31,5 +31,9 @@ Thumbs.db
 *.sql.backup
 *.dump
 
+# Docker (auto-generated)
+docker-compose.override.yml
+ERISIM_BILGILERI.txt
+
 # TypeScript
 *.tsbuildinfo
