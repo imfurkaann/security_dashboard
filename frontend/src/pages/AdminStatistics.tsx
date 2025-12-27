@@ -100,6 +100,34 @@ const AdminStatistics = () => {
         return Math.round(((current - previous) / previous) * 100);
     };
 
+    // Dinamik etiketler için yardımcı fonksiyonlar
+    const getPeriodLabel = () => {
+        switch (period) {
+            case 'daily': return 'Günlük';
+            case 'weekly': return 'Haftalık';
+            case 'monthly': return 'Aylık';
+            default: return 'Günlük';
+        }
+    };
+
+    const getDaysLabel = () => {
+        switch (days) {
+            case 7: return 'Son 7 Gün';
+            case 30: return 'Son 30 Gün';
+            case 90: return 'Son 3 Ay';
+            case 180: return 'Son 6 Ay';
+            case 365: return 'Son 1 Yıl';
+            default: return `Son ${days} Gün`;
+        }
+    };
+
+    const getComparisonLabel = () => {
+        if (days <= 14) return { current: 'Bu Hafta', previous: 'Geçen Hafta', type: 'weekly' };
+        if (days <= 60) return { current: 'Bu Ay', previous: 'Geçen Ay', type: 'monthly' };
+        if (days <= 180) return { current: 'Bu Dönem', previous: 'Önceki Dönem', type: 'quarterly' };
+        return { current: 'Bu Yıl', previous: 'Geçen Yıl', type: 'yearly' };
+    };
+
     const StatCardComponent = ({ title, value, icon, color, change }: StatCard) => (
         <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow`}>
             <div className="flex items-center justify-between">
@@ -224,31 +252,91 @@ const AdminStatistics = () => {
             {/* Overview Tab */}
             {activeTab === 'overview' && generalStats && (
                 <>
-                    {/* Özet Kartlar */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        <StatCardComponent
-                            title="Bugün Ziyaretçi"
-                            value={parseInt(generalStats.today?.today_visitors) || 0}
-                            icon={<Users size={24} className="text-white" />}
-                            color="bg-blue-500"
-                            change={comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')
-                                ? getChangePercent(
-                                    parseInt(comparison.weeklyComparison.find((c: any) => c.category === 'visitors').current_week),
-                                    parseInt(comparison.weeklyComparison.find((c: any) => c.category === 'visitors').previous_week)
-                                ) : undefined}
-                        />
-                        <StatCardComponent
-                            title="Bugün Araç"
-                            value={parseInt(generalStats.today?.today_vehicles) || 0}
-                            icon={<Car size={24} className="text-white" />}
-                            color="bg-green-500"
-                        />
-                        <StatCardComponent
-                            title="Bugün Alarm"
-                            value={parseInt(generalStats.today?.today_alarms) || 0}
-                            icon={<Flame size={24} className="text-white" />}
-                            color="bg-red-500"
-                        />
+                    {/* Dönem Bazlı Değişim Kartları */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-blue-700">📅 <strong>{getDaysLabel()}</strong> verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        {/* Ziyaretçi Değişimi */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="p-3 bg-blue-100 rounded-xl">
+                                    <Users size={24} className="text-blue-600" />
+                                </div>
+                                {(() => {
+                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.current_week) || 0;
+                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.previous_week) || 0;
+                                    const change = getChangePercent(current, previous);
+                                    return (
+                                        <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                            {change >= 0 ? '+' : ''}{change}%
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                            <p className="text-2xl font-bold text-gray-800">
+                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.current_week) || 0}
+                            </p>
+                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Ziyaretçi</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.previous_week) || 0}
+                            </p>
+                        </div>
+
+                        {/* Araç Değişimi */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="p-3 bg-green-100 rounded-xl">
+                                    <Car size={24} className="text-green-600" />
+                                </div>
+                                {(() => {
+                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.current_week) || 0;
+                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.previous_week) || 0;
+                                    const change = getChangePercent(current, previous);
+                                    return (
+                                        <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                            {change >= 0 ? '+' : ''}{change}%
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                            <p className="text-2xl font-bold text-gray-800">
+                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.current_week) || 0}
+                            </p>
+                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Araç</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.previous_week) || 0}
+                            </p>
+                        </div>
+
+                        {/* Alarm Değişimi */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="p-3 bg-red-100 rounded-xl">
+                                    <Flame size={24} className="text-red-600" />
+                                </div>
+                                {(() => {
+                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.current_week) || 0;
+                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.previous_week) || 0;
+                                    const change = getChangePercent(current, previous);
+                                    return (
+                                        <span className={`flex items-center text-sm font-medium ${change <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                            {change >= 0 ? '+' : ''}{change}%
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                            <p className="text-2xl font-bold text-gray-800">
+                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.current_week) || 0}
+                            </p>
+                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Alarm</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.previous_week) || 0}
+                            </p>
+                        </div>
                     </div>
 
                     {/* Aktif Durumlar */}
@@ -277,13 +365,15 @@ const AdminStatistics = () => {
 
                     {/* Karşılaştırma Grafikleri */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        {/* Aylık Karşılaştırma */}
+                        {/* Haftalık Karşılaştırma */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Aylık Karşılaştırma</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Haftalık Karşılaştırma</h3>
                             <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={(comparison?.monthlyComparison || []).filter((item: any) =>
-                                    item.category !== 'managers' && item.category !== 'incidents'
-                                )}>
+                                <BarChart data={(comparison?.weeklyComparison || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
+                                    ...item,
+                                    current_week: parseInt(item.current_week) || 0,
+                                    previous_week: parseInt(item.previous_week) || 0
+                                }))}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                                     <XAxis
                                         dataKey="category"
@@ -299,16 +389,56 @@ const AdminStatistics = () => {
                                     <YAxis />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend />
-                                    <Bar dataKey="current_month" name="Bu Ay" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="previous_month" name="Geçen Ay" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="current_week" name={getComparisonLabel().current} fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="previous_week" name={getComparisonLabel().previous} fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
 
-                        {/* Genel Trend */}
+                        {/* Dönemsel Karşılaştırma */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaretçi Trendi</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Dönemsel Karşılaştırma ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={(() => {
+                                    // Eğer 7 gün seçiliyse weekly, diğerleri için monthly kullan
+                                    const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                    const previousKey = days === 7 ? 'previous_week' : 'previous_month';
+
+                                    return (comparisonData || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
+                                        ...item,
+                                        current: parseInt(item[currentKey]) || 0,
+                                        previous: parseInt(item[previousKey]) || 0
+                                    }));
+                                })()}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis
+                                        dataKey="category"
+                                        tickFormatter={(v) => {
+                                            const labels: Record<string, string> = {
+                                                visitors: 'Ziyaretçi',
+                                                vehicles: 'Araç',
+                                                fire_alarms: 'Alarm'
+                                            };
+                                            return labels[v] || v;
+                                        }}
+                                    />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend />
+                                    <Bar dataKey="current" name={getComparisonLabel().current} fill={CHART_COLORS.warning} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="previous" name={getComparisonLabel().previous} fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Tüm Kategoriler Trendi */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        {/* Ziyaretçi Trendi */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Ziyaretçi Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={250}>
                                 <AreaChart data={visitorTrends.trend}>
                                     <defs>
                                         <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
@@ -317,13 +447,13 @@ const AdminStatistics = () => {
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} />
-                                    <YAxis />
+                                    <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
+                                    <YAxis tick={{ fontSize: 10 }} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Area
                                         type="monotone"
-                                        dataKey="count"
-                                        name="Kayıt Sayısı"
+                                        dataKey="total_persons"
+                                        name="Kişi Sayısı"
                                         stroke={CHART_COLORS.primary}
                                         fillOpacity={1}
                                         fill="url(#colorVisitors)"
@@ -331,23 +461,189 @@ const AdminStatistics = () => {
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
+
+                        {/* Araç Trendi */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={250}>
+                                <AreaChart data={vehicleStats.trend}>
+                                    <defs>
+                                        <linearGradient id="colorVehiclesOverview" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
+                                    <YAxis tick={{ fontSize: 10 }} />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Area
+                                        type="monotone"
+                                        dataKey="count"
+                                        name="Kullanım Sayısı"
+                                        stroke={CHART_COLORS.secondary}
+                                        fillOpacity={1}
+                                        fill="url(#colorVehiclesOverview)"
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
 
-                    {/* Bu Ayki Özet */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 Bu Ayki Toplam</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            <div className="text-center p-4 bg-blue-50 rounded-lg">
-                                <p className="text-3xl font-bold text-blue-600">{parseInt(generalStats.month?.month_visitors) || 0}</p>
-                                <p className="text-sm text-gray-600 mt-1">Ziyaretçi</p>
+                    {/* Olay Kategori Dağılımı Pasta Grafiği */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Olay Kategori Dağılımı ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={[
+                                            { name: 'Hırsızlık', value: parseInt(incidentStats?.categoryStats?.theft_total) || 0 },
+                                            { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
+                                            { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
+                                            { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
+                                            { name: 'Kaza', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
+                                            { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
+                                        ].filter(item => item.value > 0)}
+                                        cx="50%"
+                                        cy="50%"
+                                        labelLine={false}
+                                        label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        outerRadius={100}
+                                        dataKey="value"
+                                    >
+                                        <Cell fill="#EF4444" />
+                                        <Cell fill="#F59E0B" />
+                                        <Cell fill="#3B82F6" />
+                                        <Cell fill="#8B5CF6" />
+                                        <Cell fill="#10B981" />
+                                        <Cell fill="#EC4899" />
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Dönem Özeti */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 {getDaysLabel()} Toplam</h3>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="text-center p-4 bg-blue-50 rounded-lg">
+                                    <p className="text-3xl font-bold text-blue-600">
+                                        {(() => {
+                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const visitorData = comparisonData?.find((c: any) => c.category === 'visitors');
+                                            return parseInt(visitorData?.[currentKey]) || 0;
+                                        })()}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">Ziyaretçi</p>
+                                </div>
+                                <div className="text-center p-4 bg-green-50 rounded-lg">
+                                    <p className="text-3xl font-bold text-green-600">
+                                        {(() => {
+                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const vehicleData = comparisonData?.find((c: any) => c.category === 'vehicles');
+                                            return parseInt(vehicleData?.[currentKey]) || 0;
+                                        })()}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">Araç Kullanımı</p>
+                                </div>
+                                <div className="text-center p-4 bg-red-50 rounded-lg">
+                                    <p className="text-3xl font-bold text-red-600">
+                                        {(() => {
+                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const alarmData = comparisonData?.find((c: any) => c.category === 'fire_alarms');
+                                            return parseInt(alarmData?.[currentKey]) || 0;
+                                        })()}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">Yangın Alarmı</p>
+                                </div>
                             </div>
-                            <div className="text-center p-4 bg-green-50 rounded-lg">
-                                <p className="text-3xl font-bold text-green-600">{parseInt(generalStats.month?.month_vehicles) || 0}</p>
-                                <p className="text-sm text-gray-600 mt-1">Araç Kullanımı</p>
-                            </div>
-                            <div className="text-center p-4 bg-red-50 rounded-lg">
-                                <p className="text-3xl font-bold text-red-600">{fireAlarmStats?.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.total), 0) || 0}</p>
-                                <p className="text-sm text-gray-600 mt-1">Yangın Alarmı</p>
+                        </div>
+                    </div>
+
+                    {/* En Yoğun Günler */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Ziyaretçi En Yoğun */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 Ziyaretçi - En Yoğun Günler ({getDaysLabel()})</h3>
+                            {visitorTrends.trend && visitorTrends.trend.length > 0 && (
+                                <div className="space-y-2">
+                                    {[...visitorTrends.trend]
+                                        .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
+                                        .slice(0, 5)
+                                        .map((day: any, index: number) => (
+                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
+                                                        }`}>
+                                                        {index + 1}
+                                                    </span>
+                                                    <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-800">{parseInt(day.total_persons || 0)} kişi</span>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Araç En Yoğun */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç - En Yoğun Günler ({getDaysLabel()})</h3>
+                            {vehicleStats.trend && vehicleStats.trend.length > 0 && (
+                                <div className="space-y-2">
+                                    {[...vehicleStats.trend]
+                                        .sort((a: any, b: any) => parseInt(String(b.count || 0)) - parseInt(String(a.count || 0)))
+                                        .slice(0, 5)
+                                        .map((day: any, index: number) => (
+                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
+                                                        }`}>
+                                                        {index + 1}
+                                                    </span>
+                                                    <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-800">{parseInt(day.count || 0)} araç</span>
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Günlük Ortalamalar */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 {getPeriodLabel()} Ortalamalar</h3>
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                                    <span className="text-gray-600 text-sm">Ziyaretçi</span>
+                                    <span className="text-xl font-bold text-blue-600">
+                                        {visitorTrends.trend && visitorTrends.trend.length > 0
+                                            ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
+                                            : 0}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                    <span className="text-gray-600 text-sm">Araç</span>
+                                    <span className="text-xl font-bold text-green-600">
+                                        {vehicleStats.trend && vehicleStats.trend.length > 0
+                                            ? Math.round(vehicleStats.trend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / vehicleStats.trend.length)
+                                            : 0}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                                    <span className="text-gray-600 text-sm">Alarm</span>
+                                    <span className="text-xl font-bold text-red-600">
+                                        {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0
+                                            ? (fireAlarmStats.dailyTrend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / fireAlarmStats.dailyTrend.length).toFixed(1)
+                                            : 0}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -357,9 +653,14 @@ const AdminStatistics = () => {
             {/* Visitors Tab */}
             {activeTab === 'visitors' && visitorTrends && (
                 <div className="space-y-6">
+                    {/* Dönem Bilgisi Başlık */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                    </div>
+
                     {/* 1. Toplam İnsan Trafiği - Zaman Serisi */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği (Zaman Serisi)</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği ({getDaysLabel()} - {getPeriodLabel()})</h3>
                         <ResponsiveContainer width="100%" height={400}>
                             <AreaChart data={visitorTrends.trend}>
                                 <defs>
@@ -400,7 +701,7 @@ const AdminStatistics = () => {
                     {/* 2. Giriş Saati Yoğunluğu - Isı Haritası */}
                     {visitorTrends.hourlyHeatmap && visitorTrends.hourlyHeatmap.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Giriş Saati Yoğunluğu (Gün x Saat Isı Haritası)</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Giriş Saati Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
                             <div className="overflow-x-auto">
                                 <table className="min-w-full border-collapse">
                                     <thead>
@@ -465,7 +766,7 @@ const AdminStatistics = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* Süre İstatistikleri */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-4">⏱️ Ziyaret Süresi İstatistikleri</h3>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">⏱️ Ziyaret Süresi İstatistikleri ({getDaysLabel()})</h3>
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
                                         <span className="text-gray-700">Ortalama Süre</span>
@@ -500,15 +801,21 @@ const AdminStatistics = () => {
                             {/* Süre Dağılımı */}
                             {visitorTrends.durationDistribution && visitorTrends.durationDistribution.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaret Süresi Dağılımı</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaret Süresi Dağılımı ({getDaysLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={visitorTrends.durationDistribution}>
+                                        <BarChart data={[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
+                                            const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
+                                            return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
+                                        })}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="duration_range" angle={-15} textAnchor="end" height={60} />
+                                            <XAxis dataKey="duration_range" tick={{ fontSize: 12 }} />
                                             <YAxis />
                                             <Tooltip />
                                             <Bar dataKey="count" name="Ziyaret Sayısı" fill={CHART_COLORS.purple} radius={[8, 8, 0, 0]}>
-                                                {visitorTrends.durationDistribution.map((_: any, index: number) => (
+                                                {[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
+                                                    const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
+                                                    return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
+                                                }).map((_: any, index: number) => (
                                                     <Cell key={index} fill={COLORS[index % COLORS.length]} />
                                                 ))}
                                             </Bar>
@@ -524,7 +831,7 @@ const AdminStatistics = () => {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* Host Dağılımı */}
                             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Ziyaret Edilen Kişiler</h3>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Ziyaret Edilen Kişiler ({getDaysLabel()})</h3>
                                 <ResponsiveContainer width="100%" height={350}>
                                     <BarChart data={visitorTrends.hostDistribution} layout="vertical">
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -543,7 +850,7 @@ const AdminStatistics = () => {
                             {/* Kategori Karşılaştırması */}
                             {visitorTrends.categoryComparison && visitorTrends.categoryComparison.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaretçi Kategori Dağılımı</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaretçi Kategori Dağılımı ({getDaysLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={visitorTrends.categoryComparison}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -561,7 +868,7 @@ const AdminStatistics = () => {
                             {/* Elektrik İstasyonu Ziyaretleri */}
                             {visitorTrends.electricStationVisitors && visitorTrends.electricStationVisitors.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()} - {getPeriodLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={visitorTrends.electricStationVisitors}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -578,7 +885,7 @@ const AdminStatistics = () => {
                             {/* Taşeron İşçi Ziyaretleri */}
                             {visitorTrends.subcontractorVisitors && visitorTrends.subcontractorVisitors.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri ({getDaysLabel()} - {getPeriodLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={visitorTrends.subcontractorVisitors}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -597,10 +904,10 @@ const AdminStatistics = () => {
                     {/* Özet Kartlar */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 {getPeriodLabel()} Ortalamalar ({getDaysLabel()})</h3>
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Günlük Ortalama Kayıt</span>
+                                    <span className="text-gray-600 text-sm">{getPeriodLabel()} Ort. Kayıt</span>
                                     <span className="text-xl font-bold text-blue-600">
                                         {visitorTrends.trend && visitorTrends.trend.length > 0
                                             ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) / visitorTrends.trend.length)
@@ -608,7 +915,7 @@ const AdminStatistics = () => {
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Günlük Ort. Kişi</span>
+                                    <span className="text-gray-600 text-sm">{getPeriodLabel()} Ort. Kişi</span>
                                     <span className="text-xl font-bold text-green-600">
                                         {visitorTrends.trend && visitorTrends.trend.length > 0
                                             ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
@@ -619,7 +926,7 @@ const AdminStatistics = () => {
                         </div>
 
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Toplam İstatistikler</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Toplam İstatistikler ({getDaysLabel()})</h3>
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                     <span className="text-gray-600 text-sm">Toplam Kayıt</span>
@@ -637,7 +944,7 @@ const AdminStatistics = () => {
                         </div>
 
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Yoğun Gün</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Yoğun Gün ({getDaysLabel()})</h3>
                             {visitorTrends.trend && visitorTrends.trend.length > 0 && (
                                 <div className="space-y-2">
                                     {[...visitorTrends.trend]
@@ -665,9 +972,14 @@ const AdminStatistics = () => {
             {/* Vehicles Tab */}
             {activeTab === 'vehicles' && vehicleStats && (
                 <div className="space-y-6">
+                    {/* Dönem Bilgisi Başlık */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                    </div>
+
                     {/* Araç Kullanım Trendi */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
                         <ResponsiveContainer width="100%" height={350}>
                             <AreaChart data={vehicleStats.trend}>
                                 <defs>
@@ -695,7 +1007,7 @@ const AdminStatistics = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* En Çok Kullanılan Araçlar */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Çok Kullanılan Araçlar</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Çok Kullanılan Araçlar ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={vehicleStats.topVehicles} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -718,7 +1030,7 @@ const AdminStatistics = () => {
 
                         {/* En Çok Araç Alan Yöneticiler */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Araç Alan Yöneticiler</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Araç Alan Yöneticiler ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={vehicleStats.topManagers} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -743,7 +1055,7 @@ const AdminStatistics = () => {
                     {/* En Çok Gidilen Lokasyonlar */}
                     {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Gidilen Yerler</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Gidilen Yerler ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={vehicleStats.topDestinations} layout="horizontal">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -762,71 +1074,71 @@ const AdminStatistics = () => {
 
                     {/* Gün x Saat Isı Haritası */}
                     {vehicleStats.hourlyHeatmap && vehicleStats.hourlyHeatmap.length > 0 && (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Araç Kullanım Yoğunluğu (Gün x Saat Isı Haritası)</h3>
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full border-collapse">
-                                            <thead>
-                                                <tr>
-                                                    <th className="border border-gray-300 px-4 py-2 bg-gray-50">Gün \\ Saat</th>
-                                                    {Array.from({ length: 24 }, (_, i) => (
-                                                        <th key={i} className="border border-gray-300 px-2 py-2 bg-gray-50 text-xs">{String(i).padStart(2, '0')}</th>
-                                                    ))}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Araç Kullanım Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full border-collapse">
+                                    <thead>
+                                        <tr>
+                                            <th className="border border-gray-300 px-4 py-2 bg-gray-50">Gün \\ Saat</th>
+                                            {Array.from({ length: 24 }, (_, i) => (
+                                                <th key={i} className="border border-gray-300 px-2 py-2 bg-gray-50 text-xs">{String(i).padStart(2, '0')}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
+                                            const dayData = vehicleStats.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
+                                            const maxCount = Math.max(...vehicleStats.hourlyHeatmap.map((h: any) => parseInt(h.count || 0)), 1);
+
+                                            return (
+                                                <tr key={dayIndex}>
+                                                    <td className="border border-gray-300 px-4 py-2 font-medium bg-gray-50">{day}</td>
+                                                    {Array.from({ length: 24 }, (_, hour) => {
+                                                        const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
+                                                        const count = hourData ? parseInt(hourData.count || 0) : 0;
+                                                        const intensity = count / maxCount;
+                                                        const bgColor = count === 0 ? '#f3f4f6' :
+                                                            intensity < 0.25 ? '#d1fae5' :
+                                                                intensity < 0.5 ? '#6ee7b7' :
+                                                                    intensity < 0.75 ? '#10b981' : '#047857';
+                                                        const textColor = intensity > 0.5 ? 'white' : 'black';
+
+                                                        return (
+                                                            <td
+                                                                key={hour}
+                                                                className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                                                                style={{ backgroundColor: bgColor, color: textColor }}
+                                                                title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} araç`}
+                                                            >
+                                                                {count > 0 ? count : ''}
+                                                            </td>
+                                                        );
+                                                    })}
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
-                                                    const dayData = vehicleStats.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
-                                                    const maxCount = Math.max(...vehicleStats.hourlyHeatmap.map((h: any) => parseInt(h.count || 0)), 1);
-
-                                                    return (
-                                                        <tr key={dayIndex}>
-                                                            <td className="border border-gray-300 px-4 py-2 font-medium bg-gray-50">{day}</td>
-                                                            {Array.from({ length: 24 }, (_, hour) => {
-                                                                const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
-                                                                const count = hourData ? parseInt(hourData.count || 0) : 0;
-                                                                const intensity = count / maxCount;
-                                                                const bgColor = count === 0 ? '#f3f4f6' :
-                                                                    intensity < 0.25 ? '#d1fae5' :
-                                                                        intensity < 0.5 ? '#6ee7b7' :
-                                                                            intensity < 0.75 ? '#10b981' : '#047857';
-                                                                const textColor = intensity > 0.5 ? 'white' : 'black';
-
-                                                                return (
-                                                                    <td
-                                                                        key={hour}
-                                                                        className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                                                                        style={{ backgroundColor: bgColor, color: textColor }}
-                                                                        title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} araç`}
-                                                                    >
-                                                                        {count > 0 ? count : ''}
-                                                                    </td>
-                                                                );
-                                                            })}
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-                                        <span>Daha az</span>
-                                        <div className="flex gap-1">
-                                            <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
-                                            <div className="w-4 h-4 border" style={{ backgroundColor: '#d1fae5' }}></div>
-                                            <div className="w-4 h-4 border" style={{ backgroundColor: '#6ee7b7' }}></div>
-                                            <div className="w-4 h-4 border" style={{ backgroundColor: '#10b981' }}></div>
-                                            <div className="w-4 h-4 border" style={{ backgroundColor: '#047857' }}></div>
-                                        </div>
-                                        <span>Daha çok</span>
-                                    </div>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                                <span>Daha az</span>
+                                <div className="flex gap-1">
+                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
+                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#d1fae5' }}></div>
+                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#6ee7b7' }}></div>
+                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#10b981' }}></div>
+                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#047857' }}></div>
                                 </div>
-                            )}
+                                <span>Daha çok</span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Kelime Bulutu - En Çok Gidilen Yerler */}
                     {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Hedef Lokasyonlar (Kelime Bulutu)</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Hedef Lokasyonlar ({getDaysLabel()})</h3>
                             <div className="flex justify-center">
                                 <WordCloud
                                     data={vehicleStats.topDestinations.map((item: any) => ({
@@ -848,14 +1160,19 @@ const AdminStatistics = () => {
             {/* Fire Alarms Tab */}
             {activeTab === 'fire-alarms' && (
                 <div className="space-y-6">
+                    {/* Dönem Bilgisi Başlık */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                    </div>
+
                     {/* Özet Kartlar */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-gray-600 text-sm">Toplam Alarm</p>
+                                    <p className="text-gray-600 text-sm">Toplam Alarm ({getDaysLabel()})</p>
                                     <p className="text-3xl font-bold text-red-600 mt-2">
-                                        {fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.total || 0), 0) || 0}
+                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0}
                                     </p>
                                 </div>
                                 <Flame size={32} className="text-red-500" />
@@ -864,9 +1181,9 @@ const AdminStatistics = () => {
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-gray-600 text-sm">Gerçek Alarm</p>
+                                    <p className="text-gray-600 text-sm">Gerçek Alarm ({getDaysLabel()})</p>
                                     <p className="text-3xl font-bold text-orange-600 mt-2">
-                                        {fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0}
+                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0}
                                     </p>
                                 </div>
                                 <Flame size={32} className="text-orange-500" />
@@ -875,9 +1192,9 @@ const AdminStatistics = () => {
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-gray-600 text-sm">Yanlış Alarm</p>
+                                    <p className="text-gray-600 text-sm">Yanlış Alarm ({getDaysLabel()})</p>
                                     <p className="text-3xl font-bold text-green-600 mt-2">
-                                        {fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.false_alarms || 0), 0) || 0}
+                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.false_alarms || 0), 0) || 0}
                                     </p>
                                 </div>
                                 <Flame size={32} className="text-green-500" />
@@ -886,11 +1203,11 @@ const AdminStatistics = () => {
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-gray-600 text-sm">Doğruluk Oranı</p>
+                                    <p className="text-gray-600 text-sm">Doğruluk Oranı ({getDaysLabel()})</p>
                                     <p className="text-3xl font-bold text-blue-600 mt-2">
                                         {(() => {
-                                            const total = fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.total || 0), 0) || 0;
-                                            const real = fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0;
+                                            const total = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0;
+                                            const real = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0;
                                             return total > 0 ? `${((real / total) * 100).toFixed(0)}%` : '0%';
                                         })()}
                                     </p>
@@ -903,7 +1220,7 @@ const AdminStatistics = () => {
                     {/* Günlük Alarm Sayısı - Bar Chart */}
                     {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Günlük Alarm Sayısı</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 {getPeriodLabel()} Alarm Sayısı ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={350}>
                                 <BarChart data={fireAlarmStats.dailyTrend}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -919,9 +1236,12 @@ const AdminStatistics = () => {
                     {/* Saatlik Alarm Çalma Trendi */}
                     {fireAlarmStats.hourlyTrend && fireAlarmStats.hourlyTrend.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🕔 Saatlik Alarm Çalma Trendi</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🕔 Saatlik Alarm Çalma Trendi ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={350}>
-                                <BarChart data={fireAlarmStats.hourlyTrend}>
+                                <BarChart data={fireAlarmStats.hourlyTrend.map((item: any) => ({
+                                    ...item,
+                                    total: (parseInt(item.real_alarms || 0) + parseInt(item.false_alarms || 0))
+                                }))}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                                     <XAxis
                                         dataKey="hour"
@@ -932,50 +1252,16 @@ const AdminStatistics = () => {
                                         content={<CustomTooltip />}
                                         labelFormatter={(hour) => `Saat: ${hour}:00`}
                                     />
-                                    <Legend />
-                                    <Bar dataKey="real_alarms" name="Gerçek Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="false_alarms" name="Yanlış Alarm" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="total" name="Toplam Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     )}
 
-                    {/* Alarm Türü Dağılımı - Pie Chart */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🧩 Alarm Türü Dağılımı</h3>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                                <Pie
-                                    data={[
-                                        {
-                                            name: 'Gerçek Alarm',
-                                            value: fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0
-                                        },
-                                        {
-                                            name: 'Yanlış Alarm',
-                                            value: fireAlarmStats.monthlyTrend?.reduce((a: number, b: any) => a + parseInt(b.false_alarms || 0), 0) || 0
-                                        }
-                                    ]}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
-                                    outerRadius={100}
-                                    dataKey="value"
-                                >
-                                    <Cell fill={CHART_COLORS.danger} />
-                                    <Cell fill={CHART_COLORS.secondary} />
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-
                     {/* Lokasyon Kelime Bulutu */}
                     {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Alarm Lokasyonları (Kelime Bulutu)</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Alarm Lokasyonları ({getDaysLabel()})</h3>
                             <div className="flex justify-center">
                                 <WordCloud
                                     data={fireAlarmStats.locationDistribution.map((item: any) => ({
@@ -992,7 +1278,7 @@ const AdminStatistics = () => {
                     {/* Lokasyon Bar Chart */}
                     {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Alarm Olan Lokasyonlar</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Alarm Olan Lokasyonlar ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={350}>
                                 <BarChart data={fireAlarmStats.locationDistribution.slice(0, 10)} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -1009,186 +1295,327 @@ const AdminStatistics = () => {
                         </div>
                     )}
 
-                    {/* Aylık Trend - Line Chart */}
-                    {fireAlarmStats.monthlyTrend && fireAlarmStats.monthlyTrend.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📉 Alarm Eğilimi (Aylık)</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={fireAlarmStats.monthlyTrend}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend />
-                                    <Line type="monotone" dataKey="total" name="Toplam Alarm" stroke={CHART_COLORS.danger} strokeWidth={2} dot={{ r: 4 }} />
-                                    <Line type="monotone" dataKey="real_alarms" name="Gerçek" stroke={CHART_COLORS.warning} strokeWidth={2} dot={{ r: 4 }} />
-                                    <Line type="monotone" dataKey="false_alarms" name="Yanlış" stroke={CHART_COLORS.secondary} strokeWidth={2} dot={{ r: 4 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
                 </div>
             )}
 
             {/* Incidents Tab */}
             {activeTab === 'incidents' && (
                 <div className="space-y-6">
+                    {/* Dönem Bilgisi Başlık */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+                    </div>
+
+                    {/* Kategori İstatistikleri - Ana Kartlar */}
+                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-red-100 rounded-lg">
+                                    <span className="text-2xl">🚨</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Hırsızlık</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.theft_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-orange-100 rounded-lg">
+                                    <span className="text-2xl">👊</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Saldırı/Kavga</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.assault_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-yellow-100 rounded-lg">
+                                    <span className="text-2xl">⚕️</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Tıbbi Acil</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.medical_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-purple-100 rounded-lg">
+                                    <span className="text-2xl">🔨</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Vandalizm</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.vandalism_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                    <span className="text-2xl">🚑</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Kaza</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.accident_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-pink-100 rounded-lg">
+                                    <span className="text-2xl">💊</span>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-gray-600">Madde Kullanımı</p>
+                                    <p className="text-2xl font-bold text-gray-900">
+                                        {parseInt(incidentStats?.categoryStats?.substance_total) || 0}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Ana Kategori Dağılımı - Pasta Grafiği */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Kategori Bazlı Olay Dağılımı ({getDaysLabel()})</h3>
+                        <ResponsiveContainer width="100%" height={400}>
+                            <PieChart>
+                                <Pie
+                                    data={[
+                                        { name: 'Hırsızlık', value: parseInt(incidentStats?.categoryStats?.theft_total) || 0 },
+                                        { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
+                                        { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
+                                        { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
+                                        { name: 'Kaza/Yaralanma', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
+                                        { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
+                                    ]}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                    outerRadius={120}
+                                    dataKey="value"
+                                >
+                                    <Cell fill="#EF4444" />
+                                    <Cell fill="#F59E0B" />
+                                    <Cell fill="#3B82F6" />
+                                    <Cell fill="#8B5CF6" />
+                                    <Cell fill="#10B981" />
+                                    <Cell fill="#EC4899" />
+                                </Pie>
+                                <Tooltip />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Olay Trendi */}
+                        {/* Hırsızlık Detayı */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Olay Kaydı Trendi</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Hırsızlık Kategorileri ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
-                                <AreaChart data={incidentStats?.monthlyTrend || []}>
-                                    <defs>
-                                        <linearGradient id="colorIncidents" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor={CHART_COLORS.purple} stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor={CHART_COLORS.purple} stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
+                                <BarChart data={[
+                                    { name: 'Misafir Eşyası', count: parseInt(incidentStats?.categoryStats?.theft_guest_property) || 0 },
+                                    { name: 'Otel Mülkiyeti', count: parseInt(incidentStats?.categoryStats?.theft_hotel_property) || 0 },
+                                    { name: 'Personel Hırsızlığı', count: parseInt(incidentStats?.categoryStats?.theft_personnel) || 0 }
+                                ]}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} />
+                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
                                     <YAxis />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="count"
-                                        name="Olay Sayısı"
-                                        stroke={CHART_COLORS.purple}
-                                        fillOpacity={1}
-                                        fill="url(#colorIncidents)"
-                                    />
-                                </AreaChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Yangın Alarmı Trendi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Yangın Alarmı Trendi</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={fireAlarmStats?.monthlyTrend || []}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend />
-                                    <Bar dataKey="real_alarms" name="Gerçek Alarm" fill={CHART_COLORS.danger} stackId="a" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="false_alarms" name="Yanlış Alarm" fill={CHART_COLORS.warning} stackId="a" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="count" name="Olay Sayısı" fill="#EF4444" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Olay Türü Dağılımı */}
+                        {/* Saldırı/Kavga Detayı */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Olay Türü Dağılımı</h3>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie
-                                        data={incidentStats?.typeDistribution || []}
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={80}
-                                        dataKey="count"
-                                        nameKey="type"
-                                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
-                                    >
-                                        {(incidentStats?.typeDistribution || []).map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Ciddiyet Dağılımı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">⚠️ Ciddiyet Dağılımı</h3>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie
-                                        data={(incidentStats?.severityDistribution || []).map((s: any) => ({
-                                            ...s,
-                                            name: {
-                                                'low': 'Düşük',
-                                                'medium': 'Orta',
-                                                'high': 'Yüksek',
-                                                'critical': 'Kritik'
-                                            }[s.severity] || s.severity
-                                        }))}
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={80}
-                                        dataKey="count"
-                                        nameKey="name"
-                                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
-                                    >
-                                        {(incidentStats?.severityDistribution || []).map((s: any, index: number) => (
-                                            <Cell
-                                                key={index}
-                                                fill={
-                                                    s.severity === 'critical' ? '#EF4444' :
-                                                        s.severity === 'high' ? '#F59E0B' :
-                                                            s.severity === 'medium' ? '#3B82F6' :
-                                                                '#10B981'
-                                                }
-                                            />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Vardiya Dağılımı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🕐 Vardiya Dağılımı</h3>
-                            <ResponsiveContainer width="100%" height={250}>
-                                <PieChart>
-                                    <Pie
-                                        data={incidentStats?.shiftDistribution || []}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={40}
-                                        outerRadius={80}
-                                        paddingAngle={5}
-                                        dataKey="count"
-                                        nameKey="shift"
-                                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
-                                    >
-                                        {(incidentStats?.shiftDistribution || []).map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Alarm Lokasyon Dağılımı */}
-                    {fireAlarmStats?.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 Alarm Lokasyonları</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👊 Saldırı & Kavga Kategorileri ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={fireAlarmStats.locationDistribution}>
+                                <BarChart data={[
+                                    { name: 'Fiziksel Saldırı', count: parseInt(incidentStats?.categoryStats?.assault_physical) || 0 },
+                                    { name: 'Sözlü Taciz', count: parseInt(incidentStats?.categoryStats?.assault_verbal) || 0 },
+                                    { name: 'Toplu Kavga', count: parseInt(incidentStats?.categoryStats?.assault_mass_fight) || 0 }
+                                ]}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="location" />
+                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
                                     <YAxis />
                                     <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Alarm Sayısı" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]}>
-                                        {fireAlarmStats.locationDistribution.map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Bar>
+                                    <Bar dataKey="count" name="Olay Sayısı" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
-                    )}
+
+                        {/* Tıbbi Acil Detayı */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">⚕️ Tıbbi Acil Kategorileri ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={[
+                                            { name: 'Ciddi Tıbbi Durum', value: parseInt(incidentStats?.categoryStats?.medical_serious) || 0 },
+                                            { name: 'İlk Yardım', value: parseInt(incidentStats?.categoryStats?.medical_first_aid) || 0 },
+                                            { name: 'Ambulans Çağrısı', value: parseInt(incidentStats?.categoryStats?.medical_ambulance) || 0 }
+                                        ]}
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={100}
+                                        dataKey="value"
+                                        labelLine={false}
+                                        label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                    >
+                                        <Cell fill="#3B82F6" />
+                                        <Cell fill="#10B981" />
+                                        <Cell fill="#F59E0B" />
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Vandalizm Kategorileri */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔨 Vandalizm & Hasar Kategorileri ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={[
+                                    { name: 'Oda Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_room) || 0 },
+                                    { name: 'Ortak Alan Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0 }
+                                ]}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Bar dataKey="count" name="Olay Sayısı" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Madde Kullanımı Kategorileri */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">💊 Madde Kullanımı Kategorileri ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={[
+                                            { name: 'Personel (Görevde)', value: parseInt(incidentStats?.categoryStats?.substance_personnel) || 0 },
+                                            { name: 'Mülkte Bulunma', value: parseInt(incidentStats?.categoryStats?.substance_property) || 0 }
+                                        ]}
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={100}
+                                        dataKey="value"
+                                        labelLine={false}
+                                        label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                    >
+                                        <Cell fill="#EC4899" />
+                                        <Cell fill="#F472B6" />
+                                    </Pie>
+                                    <Tooltip />
+                                    <Legend />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Kaza/Yaralanma Detayı */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚑 Kaza & Yaralanma Kategorileri ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={[
+                                    { name: 'Kayma/Düşme', count: parseInt(incidentStats?.categoryStats?.accident_slip_fall) || 0 },
+                                    { name: 'Ekipman Kazası', count: parseInt(incidentStats?.categoryStats?.accident_equipment) || 0 },
+                                    { name: 'İş Kazası', count: parseInt(incidentStats?.categoryStats?.accident_work) || 0 }
+                                ]}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Bar dataKey="count" name="Olay Sayısı" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Diğer Kategoriler */}
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Diğer Kategoriler ({getDaysLabel()})</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">💊</span>
+                                        <span className="text-sm font-medium text-gray-700">Madde (Personel)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_personnel) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">💊</span>
+                                        <span className="text-sm font-medium text-gray-700">Madde (Mülk)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_property) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🔨</span>
+                                        <span className="text-sm font-medium text-gray-700">Vandalizm (Oda)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_room) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🔨</span>
+                                        <span className="text-sm font-medium text-gray-700">Vandalizm (Alan)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🚪</span>
+                                        <span className="text-sm font-medium text-gray-700">İzinsiz Giriş (Oda)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_room) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🚪</span>
+                                        <span className="text-sm font-medium text-gray-700">İzinsiz (Kısıtlı)</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_restricted_area) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">📹</span>
+                                        <span className="text-sm font-medium text-gray-700">CCTV Arızası</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-blue-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.security_cctv_malfunction) || 0}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">📝</span>
+                                        <span className="text-sm font-medium text-gray-700">Diğer</span>
+                                    </div>
+                                    <span className="text-lg font-bold text-gray-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.other) || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
