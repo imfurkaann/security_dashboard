@@ -6,8 +6,7 @@ import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
-import type { VehicleUsage, Vehicle } from '../types';
-
+import type { VehicleUsage, Vehicle } from '../types'; import { API_URL } from '../constants';
 const { RangePicker } = DatePicker;
 
 export default function AdminVehicleRecords() {
@@ -42,8 +41,8 @@ export default function AdminVehicleRecords() {
                 };
 
                 const [recordsRes, vehiclesRes] = await Promise.all([
-                    axios.get(`${import.meta.env.VITE_API_URL}/vehicles/records`, config),
-                    axios.get(`${import.meta.env.VITE_API_URL}/vehicles`, config)
+                    axios.get(`${API_URL}/vehicles/records`, config),
+                    axios.get(`${API_URL}/vehicles`, config)
                 ]);
                 setRecords(recordsRes.data || []);
                 setVehicles(vehiclesRes.data || []);

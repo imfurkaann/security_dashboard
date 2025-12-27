@@ -7,6 +7,7 @@ import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
+import { API_URL } from '../constants';
 
 const { RangePicker } = DatePicker;
 
@@ -37,7 +38,7 @@ export default function AdminManagerRecords() {
                         Authorization: `Bearer ${adminToken}`
                     }
                 };
-                const res = await axios.get(`${import.meta.env.VITE_API_URL}/managers/records`, config);
+                const res = await axios.get(`${API_URL}/managers/records`, config);
                 setRecords(res.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);

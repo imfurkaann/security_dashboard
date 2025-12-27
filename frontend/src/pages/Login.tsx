@@ -51,22 +51,16 @@ export default function Login() {
             // Check user role and use appropriate login endpoint
             if (user.role === 'admin') {
                 // Admin users: Use admin login endpoint to get proper admin token
-                console.log('Admin user detected, calling admin login...');
                 const adminResponse = await api.post('/admin/login', {
                     username: username.trim(),
                     password
                 });
 
-                console.log('Admin login response:', adminResponse.data);
                 const { token: adminToken } = adminResponse.data.data;
-                console.log('Admin token received:', adminToken ? 'yes' : 'no');
-                console.log('Admin token length:', adminToken?.length);
 
                 // Save admin token ONLY to admin-specific keys (not to shared token key)
                 localStorage.setItem('adminToken', adminToken);
                 localStorage.setItem('adminUser', JSON.stringify({ ...user, isAdmin: true }));
-
-                console.log('LocalStorage adminToken:', localStorage.getItem('adminToken'));
 
                 // Small delay to ensure localStorage is saved before navigation
                 setTimeout(() => {

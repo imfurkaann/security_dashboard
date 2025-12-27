@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { Vehicle } from '../types';
+import { API_URL } from '../constants';
 
 interface VehicleFormData {
     plate: string;
@@ -28,7 +29,7 @@ export default function AdminManageVehicles() {
                     Authorization: `Bearer ${adminToken}`
                 }
             };
-            const response = await axios.get(`${import.meta.env.VITE_API_URL}/vehicles`, config);
+            const response = await axios.get(`${API_URL}/vehicles`, config);
             setVehicles(response.data || []);
         } catch (error) {
             console.error('Araçlar yüklenemedi:', error);
@@ -78,14 +79,14 @@ export default function AdminManageVehicles() {
             if (editingVehicle) {
                 // Update existing vehicle
                 await axios.put(
-                    `${import.meta.env.VITE_API_URL}/vehicles/${editingVehicle.id}`,
+                    `${API_URL}/vehicles/${editingVehicle.id}`,
                     vehicleData,
                     config
                 );
             } else {
                 // Create new vehicle
                 await axios.post(
-                    `${import.meta.env.VITE_API_URL}/vehicles`,
+                    `${API_URL}/vehicles`,
                     vehicleData,
                     config
                 );
@@ -114,7 +115,7 @@ export default function AdminManageVehicles() {
             };
 
             await axios.delete(
-                `${import.meta.env.VITE_API_URL}/vehicles/${id}`,
+                `${API_URL}/vehicles/${id}`,
                 config
             );
 
