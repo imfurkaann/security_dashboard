@@ -66,6 +66,31 @@ export default function Incidents() {
     const [existingReportId, setExistingReportId] = useState<string | null>(null);
     const [shiftReports, setShiftReports] = useState<Record<string, any>>({});
     const [reportContent, setReportContent] = useState('');
+    const [categories, setCategories] = useState<Record<string, boolean>>({
+        theft_guest_property: false,
+        theft_hotel_property: false,
+        theft_personnel: false,
+        assault_physical: false,
+        assault_verbal: false,
+        assault_mass_fight: false,
+        substance_personnel: false,
+        substance_property: false,
+        vandalism_room: false,
+        vandalism_common_area: false,
+        unauthorized_room: false,
+        unauthorized_restricted_area: false,
+        accident_slip_fall: false,
+        accident_equipment: false,
+        accident_work: false,
+        medical_serious: false,
+        medical_first_aid: false,
+        medical_ambulance: false,
+        fire_real: false,
+        fire_false_alarm: false,
+        fire_evacuation: false,
+        security_cctv_malfunction: false,
+        other: false
+    });
     const navigate = useNavigate();
 
     // Bugünkü vardiya raporlarını yükle
@@ -108,6 +133,7 @@ export default function Incidents() {
                 // Güncelleme
                 await api.put(`/incidents/reports/${reportId}`, {
                     report_content: reportContent,
+                    categories: categories
                 });
                 alert('Rapor başarıyla güncellendi ve yeni Word dosyası oluşturuldu');
             } else {
@@ -115,6 +141,7 @@ export default function Incidents() {
                 await api.post('/incidents/reports', {
                     shift_label: selectedShift,
                     report_content: reportContent,
+                    categories: categories
                 });
                 alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
             }
@@ -122,12 +149,38 @@ export default function Incidents() {
             setShowReportModal(false);
             setExistingReportId(null);
             setReportContent('');
+            // Kategorileri sıfırla
+            setCategories({
+                theft_guest_property: false,
+                theft_hotel_property: false,
+                theft_personnel: false,
+                assault_physical: false,
+                assault_verbal: false,
+                assault_mass_fight: false,
+                substance_personnel: false,
+                substance_property: false,
+                vandalism_room: false,
+                vandalism_common_area: false,
+                unauthorized_room: false,
+                unauthorized_restricted_area: false,
+                accident_slip_fall: false,
+                accident_equipment: false,
+                accident_work: false,
+                medical_serious: false,
+                medical_first_aid: false,
+                medical_ambulance: false,
+                fire_real: false,
+                fire_false_alarm: false,
+                fire_evacuation: false,
+                security_cctv_malfunction: false,
+                other: false
+            });
             loadShiftReports();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Rapor kaydı başarısız');
         }
-    }, [selectedShift, reportContent, existingReportId, shiftReports, loadShiftReports]);
+    }, [selectedShift, reportContent, existingReportId, shiftReports, loadShiftReports, categories]);
 
     // Rapor modal aç (yeni veya düzenle)
     const openReportModal = useCallback((shiftLabel: string, isEdit: boolean = false) => {
@@ -137,9 +190,64 @@ export default function Incidents() {
             const report = shiftReports[shiftLabel];
             setExistingReportId(report.id);
             setReportContent(report.report_content || '');
+
+            // Kategorileri yükle
+            if (report.categories) {
+                setCategories({
+                    theft_guest_property: report.categories.theft_guest_property || false,
+                    theft_hotel_property: report.categories.theft_hotel_property || false,
+                    theft_personnel: report.categories.theft_personnel || false,
+                    assault_physical: report.categories.assault_physical || false,
+                    assault_verbal: report.categories.assault_verbal || false,
+                    assault_mass_fight: report.categories.assault_mass_fight || false,
+                    substance_personnel: report.categories.substance_personnel || false,
+                    substance_property: report.categories.substance_property || false,
+                    vandalism_room: report.categories.vandalism_room || false,
+                    vandalism_common_area: report.categories.vandalism_common_area || false,
+                    unauthorized_room: report.categories.unauthorized_room || false,
+                    unauthorized_restricted_area: report.categories.unauthorized_restricted_area || false,
+                    accident_slip_fall: report.categories.accident_slip_fall || false,
+                    accident_equipment: report.categories.accident_equipment || false,
+                    accident_work: report.categories.accident_work || false,
+                    medical_serious: report.categories.medical_serious || false,
+                    medical_first_aid: report.categories.medical_first_aid || false,
+                    medical_ambulance: report.categories.medical_ambulance || false,
+                    fire_real: report.categories.fire_real || false,
+                    fire_false_alarm: report.categories.fire_false_alarm || false,
+                    fire_evacuation: report.categories.fire_evacuation || false,
+                    security_cctv_malfunction: report.categories.security_cctv_malfunction || false,
+                    other: report.categories.other || false
+                });
+            }
         } else {
             setExistingReportId(null);
             setReportContent('');
+            // Kategorileri sıfırla
+            setCategories({
+                theft_guest_property: false,
+                theft_hotel_property: false,
+                theft_personnel: false,
+                assault_physical: false,
+                assault_verbal: false,
+                assault_mass_fight: false,
+                substance_personnel: false,
+                substance_property: false,
+                vandalism_room: false,
+                vandalism_common_area: false,
+                unauthorized_room: false,
+                unauthorized_restricted_area: false,
+                accident_slip_fall: false,
+                accident_equipment: false,
+                accident_work: false,
+                medical_serious: false,
+                medical_first_aid: false,
+                medical_ambulance: false,
+                fire_real: false,
+                fire_false_alarm: false,
+                fire_evacuation: false,
+                security_cctv_malfunction: false,
+                other: false
+            });
         }
 
         setShowReportModal(true);
@@ -279,6 +387,291 @@ export default function Incidents() {
                                 <p className="text-sm text-gray-500 mt-2">
                                     {reportContent.length} / 50000 karakter
                                 </p>
+                            </div>
+
+                            {/* Olay Kategorileri */}
+                            <div className="mb-6">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">Olay Kategorileri</h3>
+                                <p className="text-sm text-gray-600 mb-4">Raporda bahsettiğiniz olayları aşağıdan işaretleyin:</p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* HIRSIZLIK */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">HIRSIZLIK</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.theft_guest_property}
+                                                    onChange={(e) => setCategories({ ...categories, theft_guest_property: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Misafir Eşyası Çalınması</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.theft_hotel_property}
+                                                    onChange={(e) => setCategories({ ...categories, theft_hotel_property: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Otel Mülkiyeti Çalınması</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.theft_personnel}
+                                                    onChange={(e) => setCategories({ ...categories, theft_personnel: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Personel Hırsızlığı</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Saldırı & KAVGA */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">Saldırı & KAVGA</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.assault_physical}
+                                                    onChange={(e) => setCategories({ ...categories, assault_physical: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Fiziksel Saldırı</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.assault_verbal}
+                                                    onChange={(e) => setCategories({ ...categories, assault_verbal: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Sözlü/Davranışsal Taciz</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.assault_mass_fight}
+                                                    onChange={(e) => setCategories({ ...categories, assault_mass_fight: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Toplu Kavga/İzdiham</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* MADDE KULLANIMI */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">MADDE KULLANIMI</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.substance_personnel}
+                                                    onChange={(e) => setCategories({ ...categories, substance_personnel: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Personelin Görevde Alkol/Uyuşturucu Kullanımı</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.substance_property}
+                                                    onChange={(e) => setCategories({ ...categories, substance_property: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Mülkte Yasak Madde Bulunması</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* VANDALİZM & HASAR */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">VANDALİZM & HASAR</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.vandalism_room}
+                                                    onChange={(e) => setCategories({ ...categories, vandalism_room: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Misafirin Oda Eşyalara Kasıtlı Zarar Vermesi</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.vandalism_common_area}
+                                                    onChange={(e) => setCategories({ ...categories, vandalism_common_area: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Misafirin Ortak Alan Eşyalarına Kasıtlı Zarar Vermesi</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* İZİNSİZ GİRİŞ */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">İZİNSİZ GİRİŞ</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.unauthorized_room}
+                                                    onChange={(e) => setCategories({ ...categories, unauthorized_room: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Yetkisiz Oda Girişi</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.unauthorized_restricted_area}
+                                                    onChange={(e) => setCategories({ ...categories, unauthorized_restricted_area: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Kısıtlı Alan İhlali</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* KAZA & YARALANMA */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">KAZA & YARALANMA</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.accident_slip_fall}
+                                                    onChange={(e) => setCategories({ ...categories, accident_slip_fall: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Kayma/Düşme Kazası</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.accident_equipment}
+                                                    onChange={(e) => setCategories({ ...categories, accident_equipment: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Ekipman/Cihaz Kazası</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.accident_work}
+                                                    onChange={(e) => setCategories({ ...categories, accident_work: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">İş Kazası</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* TIBBİ ACİL */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">TIBBİ ACİL</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.medical_serious}
+                                                    onChange={(e) => setCategories({ ...categories, medical_serious: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Ciddi Tıbbi Durum</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.medical_first_aid}
+                                                    onChange={(e) => setCategories({ ...categories, medical_first_aid: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">İlk Yardım Müdahalesi</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.medical_ambulance}
+                                                    onChange={(e) => setCategories({ ...categories, medical_ambulance: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Ambulans</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* YANGIN & TAHLİYE */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">YANGIN & TAHLİYE</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.fire_real}
+                                                    onChange={(e) => setCategories({ ...categories, fire_real: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Gerçek Yangın Olayı</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.fire_false_alarm}
+                                                    onChange={(e) => setCategories({ ...categories, fire_false_alarm: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Hatalı Yangın Alarmı</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.fire_evacuation}
+                                                    onChange={(e) => setCategories({ ...categories, fire_evacuation: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Tahliye Gerektiren Durum</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* GÜVENLİK TEKNİK */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">GÜVENLİK TEKNİK</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.security_cctv_malfunction}
+                                                    onChange={(e) => setCategories({ ...categories, security_cctv_malfunction: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">CCTV Arızası/Kayıt Kesintisi</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Diğer (Güvenlik) */}
+                                    <div className="border border-gray-200 rounded-lg p-4">
+                                        <h4 className="font-semibold text-gray-700 mb-3">Diğer (Güvenlik)</h4>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={categories.other}
+                                                    onChange={(e) => setCategories({ ...categories, other: e.target.checked })}
+                                                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <span className="text-sm text-gray-700">Diğer</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Actions */}

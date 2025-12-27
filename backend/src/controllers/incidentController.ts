@@ -190,7 +190,7 @@ export const updateIncidentStatus = async (req: Request, res: Response) => {
 // Vardiya raporu kaydı oluştur
 export const createShiftReport = async (req: Request, res: Response) => {
     try {
-        const { shift_label, report_content } = req.body;
+        const { shift_label, report_content, categories } = req.body;
         const userId = req.user?.userId;
         const clientIp = getClientIp(req);
 
@@ -279,6 +279,24 @@ export const createShiftReport = async (req: Request, res: Response) => {
             clientIp
         );
 
+        // Kategorileri kaydet
+        if (categories && Object.keys(categories).length > 0) {
+            try {
+                const categoryColumns = Object.keys(categories).join(', ');
+                const categoryValues = Object.values(categories).map(v => v ? 'true' : 'false').join(', ');
+
+                await pool.query(
+                    `INSERT INTO incident_categories (
+                        shift_report_id, ${categoryColumns}
+                    ) VALUES ($1, ${categoryValues})`,
+                    [id]
+                );
+            } catch (categoryError) {
+                console.error('Kategori kaydetme hatası:', categoryError);
+                // Kategori kaydedilemese bile rapor kaydedildi, uyarı ver ama hata döndürme
+            }
+        }
+
         res.status(201).json({
             success: true,
             data: result.rows[0],
@@ -297,13 +315,13 @@ export const getShiftReport = async (req: Request, res: Response) => {
 
         // Bugünkü tarihe göre rapor ara
         const result = await pool.query(
-            `SELECT id, shift_label, report_content, report_date, report_file_path, 
-                    created_at, recorded_by
-             FROM incidents 
-             WHERE shift_label = $1 
-               AND report_date = CURRENT_DATE 
-               AND deleted_at IS NULL
-             ORDER BY created_at DESC 
+            `SELECT i.id, i.shift_label, i.report_content, i.report_date, i.report_file_path, 
+                    i.created_at, i.recorded_by
+             FROM incidents i
+             WHERE i.shift_label = $1 
+               AND i.report_date = CURRENT_DATE 
+               AND i.deleted_at IS NULL
+             ORDER BY i.created_at DESC 
              LIMIT 1`,
             [shift_label]
         );
@@ -312,7 +330,18 @@ export const getShiftReport = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Rapor bulunamadı' });
         }
 
-        res.json({ success: true, data: result.rows[0] });
+        // Kategorileri de getir
+        const categoryResult = await pool.query(
+            'SELECT * FROM incident_categories WHERE shift_report_id = $1',
+            [result.rows[0].id]
+        );
+
+        const responseData = {
+            ...result.rows[0],
+            categories: categoryResult.rows.length > 0 ? categoryResult.rows[0] : null
+        };
+
+        res.json({ success: true, data: responseData });
     } catch (error) {
         console.error('Get shift report error:', error);
         res.status(500).json({ success: false, message: 'Rapor alınamadı' });
@@ -323,7 +352,7 @@ export const getShiftReport = async (req: Request, res: Response) => {
 export const updateShiftReport = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { report_content } = req.body;
+        const { report_content, categories } = req.body;
         const userId = req.user?.userId;
         const clientIp = getClientIp(req);
 
@@ -399,6 +428,43 @@ export const updateShiftReport = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        // Kategorileri güncelle veya ekle
+        if (categories && Object.keys(categories).length > 0) {
+            try {
+                // Önce mevcut kategori kaydını kontrol et
+                const existingCategory = await pool.query(
+                    'SELECT id FROM incident_categories WHERE shift_report_id = $1',
+                    [id]
+                );
+
+                if (existingCategory.rows.length > 0) {
+                    // Güncelle
+                    const updateFields = Object.keys(categories)
+                        .map((key, index) => `${key} = $${index + 2}`)
+                        .join(', ');
+                    const updateValues = Object.values(categories).map(v => v ? true : false);
+
+                    await pool.query(
+                        `UPDATE incident_categories SET ${updateFields}, updated_at = NOW() WHERE shift_report_id = $1`,
+                        [id, ...updateValues]
+                    );
+                } else {
+                    // Yeni kayıt ekle
+                    const categoryColumns = Object.keys(categories).join(', ');
+                    const categoryPlaceholders = Object.keys(categories).map((_, i) => `$${i + 2}`).join(', ');
+                    const categoryValues = Object.values(categories).map(v => v ? true : false);
+
+                    await pool.query(
+                        `INSERT INTO incident_categories (shift_report_id, ${categoryColumns}) VALUES ($1, ${categoryPlaceholders})`,
+                        [id, ...categoryValues]
+                    );
+                }
+            } catch (categoryError) {
+                console.error('Kategori güncelleme hatası:', categoryError);
+                // Kategori güncellenemese bile rapor güncellendi
+            }
+        }
 
         res.json({
             success: true,

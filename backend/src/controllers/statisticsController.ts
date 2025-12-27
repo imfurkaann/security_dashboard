@@ -627,12 +627,80 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                 ORDER BY count DESC
             `, [days]);
 
+            // Kategori bazlı istatistikler
+            const categoryStats = await client.query(`
+                SELECT 
+                    -- Alt kategoriler
+                    SUM(CASE WHEN theft_guest_property THEN 1 ELSE 0 END) as theft_guest_property,
+                    SUM(CASE WHEN theft_hotel_property THEN 1 ELSE 0 END) as theft_hotel_property,
+                    SUM(CASE WHEN theft_personnel THEN 1 ELSE 0 END) as theft_personnel,
+                    SUM(CASE WHEN assault_physical THEN 1 ELSE 0 END) as assault_physical,
+                    SUM(CASE WHEN assault_verbal THEN 1 ELSE 0 END) as assault_verbal,
+                    SUM(CASE WHEN assault_mass_fight THEN 1 ELSE 0 END) as assault_mass_fight,
+                    SUM(CASE WHEN substance_personnel THEN 1 ELSE 0 END) as substance_personnel,
+                    SUM(CASE WHEN substance_property THEN 1 ELSE 0 END) as substance_property,
+                    SUM(CASE WHEN vandalism_room THEN 1 ELSE 0 END) as vandalism_room,
+                    SUM(CASE WHEN vandalism_common_area THEN 1 ELSE 0 END) as vandalism_common_area,
+                    SUM(CASE WHEN unauthorized_room THEN 1 ELSE 0 END) as unauthorized_room,
+                    SUM(CASE WHEN unauthorized_restricted_area THEN 1 ELSE 0 END) as unauthorized_restricted_area,
+                    SUM(CASE WHEN accident_slip_fall THEN 1 ELSE 0 END) as accident_slip_fall,
+                    SUM(CASE WHEN accident_equipment THEN 1 ELSE 0 END) as accident_equipment,
+                    SUM(CASE WHEN accident_work THEN 1 ELSE 0 END) as accident_work,
+                    SUM(CASE WHEN medical_serious THEN 1 ELSE 0 END) as medical_serious,
+                    SUM(CASE WHEN medical_first_aid THEN 1 ELSE 0 END) as medical_first_aid,
+                    SUM(CASE WHEN medical_ambulance THEN 1 ELSE 0 END) as medical_ambulance,
+                    SUM(CASE WHEN fire_real THEN 1 ELSE 0 END) as fire_real,
+                    SUM(CASE WHEN fire_false_alarm THEN 1 ELSE 0 END) as fire_false_alarm,
+                    SUM(CASE WHEN fire_evacuation THEN 1 ELSE 0 END) as fire_evacuation,
+                    SUM(CASE WHEN security_cctv_malfunction THEN 1 ELSE 0 END) as security_cctv_malfunction,
+                    SUM(CASE WHEN other THEN 1 ELSE 0 END) as other,
+                    -- Ana kategori toplamları
+                    COUNT(DISTINCT CASE WHEN (theft_guest_property OR theft_hotel_property OR theft_personnel) THEN ic.incident_id END) as theft_total,
+                    COUNT(DISTINCT CASE WHEN (assault_physical OR assault_verbal OR assault_mass_fight) THEN ic.incident_id END) as assault_total,
+                    COUNT(DISTINCT CASE WHEN (substance_personnel OR substance_property) THEN ic.incident_id END) as substance_total,
+                    COUNT(DISTINCT CASE WHEN (vandalism_room OR vandalism_common_area) THEN ic.incident_id END) as vandalism_total,
+                    COUNT(DISTINCT CASE WHEN (unauthorized_room OR unauthorized_restricted_area) THEN ic.incident_id END) as unauthorized_total,
+                    COUNT(DISTINCT CASE WHEN (accident_slip_fall OR accident_equipment OR accident_work) THEN ic.incident_id END) as accident_total,
+                    COUNT(DISTINCT CASE WHEN (medical_serious OR medical_first_aid OR medical_ambulance) THEN ic.incident_id END) as medical_total,
+                    COUNT(DISTINCT CASE WHEN (fire_real OR fire_false_alarm OR fire_evacuation) THEN ic.incident_id END) as fire_total,
+                    COUNT(DISTINCT CASE WHEN security_cctv_malfunction THEN ic.incident_id END) as security_total,
+                    COUNT(DISTINCT CASE WHEN other THEN ic.incident_id END) as other_total
+                FROM incident_categories ic
+                INNER JOIN incidents i ON ic.incident_id = i.id
+                WHERE i.incident_time::date >= CURRENT_DATE - $1::integer
+                  AND i.deleted_at IS NULL
+            `, [days]);
+
+            // Zaman bazlı kategori trendi (aylık)
+            const categoryTrend = await client.query(`
+                SELECT 
+                    TO_CHAR(i.incident_time::date, 'YYYY-MM') as date,
+                    SUM(CASE WHEN theft_guest_property OR theft_hotel_property OR theft_personnel THEN 1 ELSE 0 END) as theft_count,
+                    SUM(CASE WHEN assault_physical OR assault_verbal OR assault_mass_fight THEN 1 ELSE 0 END) as assault_count,
+                    SUM(CASE WHEN substance_personnel OR substance_property THEN 1 ELSE 0 END) as substance_count,
+                    SUM(CASE WHEN vandalism_room OR vandalism_common_area THEN 1 ELSE 0 END) as vandalism_count,
+                    SUM(CASE WHEN unauthorized_room OR unauthorized_restricted_area THEN 1 ELSE 0 END) as unauthorized_count,
+                    SUM(CASE WHEN accident_slip_fall OR accident_equipment OR accident_work THEN 1 ELSE 0 END) as accident_count,
+                    SUM(CASE WHEN medical_serious OR medical_first_aid OR medical_ambulance THEN 1 ELSE 0 END) as medical_count,
+                    SUM(CASE WHEN fire_real OR fire_false_alarm OR fire_evacuation THEN 1 ELSE 0 END) as fire_count,
+                    SUM(CASE WHEN security_cctv_malfunction THEN 1 ELSE 0 END) as security_count,
+                    SUM(CASE WHEN other THEN 1 ELSE 0 END) as other_count
+                FROM incident_categories ic
+                INNER JOIN incidents i ON ic.incident_id = i.id
+                WHERE i.incident_time::date >= CURRENT_DATE - $1::integer
+                  AND i.deleted_at IS NULL
+                GROUP BY TO_CHAR(i.incident_time::date, 'YYYY-MM')
+                ORDER BY date ASC
+            `, [days]);
+
             res.json({
                 success: true,
                 data: {
                     monthlyTrend: monthlyTrend.rows,
                     typeDistribution: typeDistribution.rows,
-                    severityDistribution: severityDistribution.rows
+                    severityDistribution: severityDistribution.rows,
+                    categoryStats: categoryStats.rows[0] || {},
+                    categoryTrend: categoryTrend.rows
                 }
             });
         } finally {
@@ -694,6 +762,11 @@ export const getComparativeAnalysis = async (req: Request, res: Response) => {
                     'managers' as category,
                     (SELECT COUNT(*) FROM managers_records WHERE entry_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
                     (SELECT COUNT(*) FROM managers_records WHERE entry_date >= CURRENT_DATE - 14 AND entry_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
+                UNION ALL
+                SELECT 
+                    'fire_alarms' as category,
+                    (SELECT COUNT(*) FROM fire_alarms WHERE DATE(alarm_time) >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
+                    (SELECT COUNT(*) FROM fire_alarms WHERE DATE(alarm_time) >= CURRENT_DATE - 14 AND DATE(alarm_time) < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
             `);
 
             res.json({
