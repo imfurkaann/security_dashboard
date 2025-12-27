@@ -203,6 +203,12 @@ const startServer = async () => {
         // Migration'ları çalıştır
         await runMigrations();
 
+        // Test ortamında sunucuyu başlatma (Jest supertest kendi yönetiyor)
+        if (process.env.NODE_ENV === 'test') {
+            console.log('🧪 Test ortamı - sunucu supertest tarafından yönetiliyor');
+            return;
+        }
+
         // Sunucuyu başlat
         app.listen(PORT, () => {
             console.log(`🚀 Server is running on port ${PORT}`);

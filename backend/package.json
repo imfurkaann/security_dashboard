@@ -8,8 +8,19 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "health": "node healthcheck.js",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch"
+    "test": "jest --coverage --forceExit --detectOpenHandles",
+    "test:watch": "jest --watch",
+    "test:auth": "jest --testPathPattern=auth.test.ts --forceExit",
+    "test:visitors": "jest --testPathPattern=visitors.test.ts --forceExit",
+    "test:vehicles": "jest --testPathPattern=vehicleRecords.test.ts --forceExit",
+    "test:fire": "jest --testPathPattern=fireAlarms.test.ts --forceExit",
+    "test:incidents": "jest --testPathPattern=incidents.test.ts --forceExit",
+    "test:statistics": "jest --testPathPattern=statistics.test.ts --forceExit",
+    "test:security": "jest --testPathPattern=security.test.ts --forceExit",
+    "test:admin": "jest --testPathPattern=admin.test.ts --forceExit",
+    "test:validation": "jest --testPathPattern=validation.test.ts --forceExit",
+    "test:all": "node tests/runAllTests.js",
+    "test:coverage": "jest --coverage --forceExit --detectOpenHandles --coverageReporters=text --coverageReporters=html"
   },
   "keywords": [
     "security",
