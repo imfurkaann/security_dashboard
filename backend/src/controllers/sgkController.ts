@@ -373,8 +373,9 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
         // Dosyayı gönder
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-        // X-Frame-Options'ı kaldır - iframe içinde görüntülenebilmesi için
+        // iframe içinde görüntülenebilmesi için güvenlik başlıklarını kaldır
         res.removeHeader('X-Frame-Options');
+        res.removeHeader('Content-Security-Policy');
         res.sendFile(filePath);
     } catch (error) {
         console.error('Get SGK file error:', error);
