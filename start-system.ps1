@@ -305,7 +305,8 @@ services:
     ports:
       - "${backendPort}:5000"
     environment:
-      - CORS_ORIGIN=http://${hostIP}:${frontendPort}
+      # Yerel ag paylasimi icin tum originlere izin ver
+      - CORS_ORIGIN=*
 "@
 
 Set-Content -Path "docker-compose.override.yml" -Value $overrideContent -Encoding UTF8
@@ -390,6 +391,25 @@ Write-Host "  Sistemi durdurmak: docker compose down" -ForegroundColor Gray
 Write-Host "  Loglari gormek:    docker compose logs -f" -ForegroundColor Gray
 Write-Host "  -----------------------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
+
+# Erisim bilgilerini dosyaya kaydet
+$accessInfo = @"
+Guvenlik Sistemi Erisim Bilgileri
+==================================
+Tarih: $(Get-Date -Format "yyyy-MM-dd HH:mm")
+
+Bu Bilgisayar: $localUrl
+Ag Erisimi: $networkUrl
+
+Frontend Port: $frontendPort
+Backend Port: $backendPort
+Host IP: $hostIP
+
+Ayni WiFi agindaki cihazlar $networkUrl adresinden erisebilir.
+"@
+
+Set-Content -Path "ERISIM_BILGILERI.txt" -Value $accessInfo -Encoding UTF8
+Write-INF "Erisim bilgileri ERISIM_BILGILERI.txt dosyasina kaydedildi"
 
 # Tarayici ac
 Start-Process $localUrl

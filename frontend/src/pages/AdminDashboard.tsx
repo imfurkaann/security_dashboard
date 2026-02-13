@@ -3,6 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../constants';
 
+// Logout Loading Overlay Component
+function LogoutOverlay() {
+    return (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-gray-800 rounded-xl p-8 shadow-2xl flex flex-col items-center gap-4 border border-gray-700">
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
+                <div className="text-white text-lg font-medium">Veriler kaydediliyor...</div>
+                <div className="text-gray-400 text-sm">Lütfen bekleyin</div>
+            </div>
+        </div>
+    );
+}
+
 interface AdminUser {
     id: number;
     username: string;
@@ -186,7 +199,10 @@ export default function AdminDashboard() {
         fetchAllData();
     }, [fetchAllData]);
 
+    const [logoutLoading, setLogoutLoading] = useState(false);
+
     const handleLogout = async () => {
+        setLogoutLoading(true);
         const adminToken = localStorage.getItem('adminToken');
 
         try {
@@ -228,6 +244,7 @@ export default function AdminDashboard() {
 
     return (
         <div className="min-h-screen bg-gray-900">
+            {logoutLoading && <LogoutOverlay />}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Header */}
                 <div className="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">

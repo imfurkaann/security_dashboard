@@ -31,6 +31,12 @@ Thumbs.db
 *.sql.backup
 *.dump
 
+# Yedekler (gizlilik için Git'e eklenmez)
+backups/*.sql
+backups/*.sql.zip
+backups/*.sql.gz
+!backups/.gitkeep
+
 # Docker (auto-generated)
 docker-compose.override.yml
 ERISIM_BILGILERI.txt

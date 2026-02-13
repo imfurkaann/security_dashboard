@@ -1,13 +1,13 @@
 -- Migration: Create SGK records table with document management
 -- Date: 2025-12-19
 
--- Drop existing table if exists (for clean migration)
-DROP TABLE IF EXISTS sgk_records CASCADE;
+-- GÜVENLİK: DROP TABLE kaldırıldı - Veri kaybını önlemek için
+-- Tablo zaten varsa CREATE TABLE hata verir ve migration sistemi bunu tolere eder
 
--- Create sgk_records table for document management
-CREATE TABLE sgk_records (
+-- Create sgk_records table for document management (IF NOT EXISTS ile güvenli)
+CREATE TABLE IF NOT EXISTS sgk_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    hashed_tc VARCHAR(255) UNIQUE NOT NULL,
+    hashed_tc VARCHAR(255) UNIQUE,
     full_name VARCHAR(100) NOT NULL,
     company_name VARCHAR(100),
     file_path VARCHAR(500) NOT NULL,
