@@ -115,10 +115,79 @@ function Find-AvailablePort {
     return $null
 }
 
-function Get-HostIPAddress {
-    $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+function Test-IsAdmin {
+    $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Add-FirewallRulesIfNeeded {
+    param([int]$FrontendPort, [int]$BackendPort)
     
-    foreach ($adapter in $adapters) {
+    $isAdmin = Test-IsAdmin
+    
+    # Frontend kuralini kontrol et
+    $frontendRule = Get-NetFirewallRule -DisplayName "Guvenlik Sistemi Frontend ($FrontendPort)" -ErrorAction SilentlyContinue
+    $backendRule = Get-NetFirewallRule -DisplayName "Guvenlik Sistemi Backend ($BackendPort)" -ErrorAction SilentlyContinue
+    
+    if ($frontendRule -and $backendRule) {
+        return @{ Success = $true; Message = "Firewall kurallari zaten mevcut" }
+    }
+    
+    if (-not $isAdmin) {
+        return @{ 
+            Success  = $false
+            Message  = "Firewall kurallari icin yonetici yetkisi gerekli"
+            Commands = @(
+                "New-NetFirewallRule -DisplayName `"Guvenlik Sistemi Frontend ($FrontendPort)`" -Direction Inbound -Protocol TCP -LocalPort $FrontendPort -Action Allow -Profile Any"
+                "New-NetFirewallRule -DisplayName `"Guvenlik Sistemi Backend ($BackendPort)`" -Direction Inbound -Protocol TCP -LocalPort $BackendPort -Action Allow -Profile Any"
+            )
+        }
+    }
+    
+    try {
+        if (-not $frontendRule) {
+            New-NetFirewallRule -DisplayName "Guvenlik Sistemi Frontend ($FrontendPort)" -Direction Inbound -Protocol TCP -LocalPort $FrontendPort -Action Allow -Profile Any | Out-Null
+        }
+        if (-not $backendRule) {
+            New-NetFirewallRule -DisplayName "Guvenlik Sistemi Backend ($BackendPort)" -Direction Inbound -Protocol TCP -LocalPort $BackendPort -Action Allow -Profile Any | Out-Null
+        }
+        return @{ Success = $true; Message = "Firewall kurallari eklendi" }
+    }
+    catch {
+        return @{ Success = $false; Message = "Firewall kurali eklenemedi: $_" }
+    }
+}
+
+function Get-HostIPAddress {
+    # Oncelik sirasi: Fiziksel adaptorler (Wi-Fi, Ethernet) > Sanal adaptorler
+    # Docker/WSL/Hyper-V sanal adaptorlerini (vEthernet) atla
+    $physicalAdapters = Get-NetAdapter | Where-Object { 
+        $_.Status -eq 'Up' -and 
+        $_.Name -notlike 'vEthernet*' -and 
+        $_.Name -notlike 'Docker*' -and
+        $_.Name -notlike 'WSL*' -and
+        $_.InterfaceDescription -notlike '*Virtual*' -and
+        $_.InterfaceDescription -notlike '*Hyper-V*'
+    }
+    
+    # Once fiziksel adaptorlerden IP bul
+    foreach ($adapter in $physicalAdapters) {
+        $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        
+        foreach ($ip in $ipConfig) {
+            if ($ip.IPAddress -ne "127.0.0.1" -and $ip.IPAddress -notlike "169.254.*") {
+                return @{
+                    IP            = $ip.IPAddress
+                    Adapter       = $adapter.Name
+                    InCameraRange = Test-IPInCameraRange $ip.IPAddress
+                }
+            }
+        }
+    }
+    
+    # Fiziksel bulunamazsa tum adaptorlerden dene (eski davranis)
+    $allAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+    foreach ($adapter in $allAdapters) {
         $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         
         foreach ($ip in $ipConfig) {
