@@ -1050,7 +1050,7 @@ INSERT INTO public.personnel VALUES ('372a1bb5-c71f-4199-bfab-13e602964243', 'Ad
 --
 
 INSERT INTO public.vehicles VALUES ('24381b26-2db2-45b9-abba-9ace5ee99d29', 'Otokar Atlas', '07BEE763', 'available', true, '2025-12-16 18:36:49.427817', '2025-12-16 18:36:49.427817', NULL);
-INSERT INTO public.vehicles VALUES ('8b038c93-3084-4540-8991-1e00a1994d9b', 'Opel Vivaro', '07CCU63', 'available', true, '2025-12-16 18:36:49.432213', '2025-12-16 18:36:49.432213', NULL);
+INSERT INTO public.vehicles VALUES ('8b038c93-3084-4540-8991-1e00a1994d9b', 'Opel Vivaro', '07CCU163', 'available', true, '2025-12-16 18:36:49.432213', '2025-12-16 18:36:49.432213', NULL);
 INSERT INTO public.vehicles VALUES ('38a6939e-6e08-48ce-9066-4ac6e0021818', 'Ford Transit', '07AEN693', 'available', true, '2025-12-16 18:36:49.43085', '2025-12-19 12:08:50.785521', NULL);
 INSERT INTO public.vehicles VALUES ('7aff358c-7e15-4ab0-8e88-175e9d8b8b43', 'Fiat Doblo', '07ABJ290', 'available', true, '2025-12-16 18:36:49.431586', '2025-12-19 12:09:36.694653', NULL);
 

@@ -94,7 +94,8 @@ function Test-PortAvailable {
         $listener.Start()
         $listener.Stop()
         return $true
-    } catch {
+    }
+    catch {
         return $false
     }
 }
@@ -123,8 +124,8 @@ function Get-HostIPAddress {
         foreach ($ip in $ipConfig) {
             if ($ip.IPAddress -ne "127.0.0.1" -and $ip.IPAddress -notlike "169.254.*") {
                 return @{
-                    IP = $ip.IPAddress
-                    Adapter = $adapter.Name
+                    IP            = $ip.IPAddress
+                    Adapter       = $adapter.Name
                     InCameraRange = Test-IPInCameraRange $ip.IPAddress
                 }
             }
@@ -151,17 +152,8 @@ $dockerInstalled = $false
 try {
     $null = Get-Command docker -ErrorAction Stop
     $dockerInstalled = $true
-} catch { }
-
-if (-not $dockerInstalled) {
-    Write-ERR "Docker kurulu degil!"
-    Write-INF "Docker Desktop indirin: https://docker.com/products/docker-desktop"
-    Start-Process "https://docker.com/products/docker-desktop"
-    Write-Host ""
-    Read-Host "  Cikmak icin Enter"
-    exit 1
 }
-Write-OK "Docker kurulu"
+catch { }
 
 # Docker calisiyir mu?
 $dockerRunning = $false
@@ -170,10 +162,11 @@ try {
     if ($LASTEXITCODE -eq 0) {
         $dockerRunning = $true
     }
-} catch { }
+}
+catch { }
 
 if (-not $dockerRunning) {
-    Write-WARN "Docker Desktop calismiyorbaslatiliyor..."
+    Write-WARN "Docker Desktop calismiyor baslatiliyor..."
     
     $dockerPaths = @(
         "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
@@ -194,7 +187,7 @@ if (-not $dockerRunning) {
         Start-Process $dockerExe
     }
     
-    Write-INF "Docker baslamasi bekleniyor (max 90 saniye)..."
+    Write-INF "Docker baslamasi bekleniyor"
     
     $maxWait = 90
     $waited = 0
@@ -209,7 +202,8 @@ if (-not $dockerRunning) {
                 $dockerRunning = $true
                 break
             }
-        } catch { }
+        }
+        catch { }
         
         Write-Host "." -NoNewline
     }
@@ -240,11 +234,13 @@ if ($networkInfo) {
     if ($networkInfo.InCameraRange) {
         Write-WARN "IP ($hostIP) guvenlik kamerasi araliginda olabilir!"
         Write-INF "Sistem calisacak ama IP cakismasi riski var"
-    } else {
+    }
+    else {
         Write-OK "Guvenli IP bulundu: $hostIP"
     }
     Write-INF "Adaptor: $($networkInfo.Adapter)"
-} else {
+}
+else {
     Write-WARN "Ag baglantisi bulunamadi - sadece localhost"
 }
 
@@ -282,10 +278,12 @@ if ($isAdmin) {
         New-NetFirewallRule -DisplayName "GuvenlikSistemi-BE" -Direction Inbound -Protocol TCP -LocalPort $backendPort -Action Allow -Profile Any | Out-Null
         
         Write-OK "Firewall kurallari eklendi (ag erisimi aktif)"
-    } catch {
+    }
+    catch {
         Write-WARN "Firewall ayarlanamadi: $_"
     }
-} else {
+}
+else {
     Write-WARN "Yonetici yetkisi yok - ag erisimi kisitli olabilir"
     Write-INF "Ag erisimi icin: Sag tikla > Yonetici olarak calistir"
 }
@@ -313,12 +311,11 @@ services:
 Set-Content -Path "docker-compose.override.yml" -Value $overrideContent -Encoding UTF8
 
 # Mevcut containerlari durdur
-docker compose down 2>$null
+# docker compose down 2>$null
 
-# Eski build cache'ini temizle ve yeniden baslat
-Write-INF "Eski cache temizleniyor ve yeniden build ediliyor..."
-docker compose build --no-cache
-docker compose up -d
+# Kod degisikliklerini uygula ve baslat
+Write-INF "Sistem calistiriliyor..."
+docker compose up -d --build
 
 if ($LASTEXITCODE -ne 0) {
     Write-ERR "Docker baslatma hatasi!"
@@ -348,7 +345,8 @@ while ($retryCount -lt $maxRetries -and -not $systemReady) {
         if ($response.StatusCode -eq 200) {
             $systemReady = $true
         }
-    } catch {
+    }
+    catch {
         Write-Host "." -NoNewline
     }
 }
@@ -356,7 +354,8 @@ Write-Host ""
 
 if ($systemReady) {
     Write-OK "Sistem hazir!"
-} else {
+}
+else {
     Write-WARN "Sistem hala basliyor olabilir, birka saniye bekleyin"
 }
 
@@ -392,25 +391,6 @@ Write-Host "  Loglari gormek:    docker compose logs -f" -ForegroundColor Gray
 Write-Host "  -----------------------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
 
-# Erisim bilgilerini dosyaya kaydet
-$accessInfo = @"
-Guvenlik Sistemi Erisim Bilgileri
-==================================
-Tarih: $(Get-Date -Format "yyyy-MM-dd HH:mm")
-
-Bu Bilgisayar: $localUrl
-Ag Erisimi: $networkUrl
-
-Frontend Port: $frontendPort
-Backend Port: $backendPort
-Host IP: $hostIP
-
-Ayni WiFi agindaki cihazlar $networkUrl adresinden erisebilir.
-"@
-
-Set-Content -Path "ERISIM_BILGILERI.txt" -Value $accessInfo -Encoding UTF8
-Write-INF "Erisim bilgileri ERISIM_BILGILERI.txt dosyasina kaydedildi"
-
 # Tarayici ac
 Start-Process $localUrl
 
@@ -419,5 +399,5 @@ Write-Host "  Tarayici acildi." -ForegroundColor Green
 Write-Host ""
 
 # 3 saniye bekle ve otomatik kapat
-Write-Host "  Pencere 3 saniye icinde kapanacak..." -ForegroundColor DarkGray
-Start-Sleep -Seconds 3
+Write-Host "  Pencere 1 saniye icinde kapanacak..." -ForegroundColor DarkGray
+Start-Sleep -Seconds 1
