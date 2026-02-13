@@ -296,12 +296,7 @@ export default function Sgk() {
             return;
         }
 
-        // En az birinin girilmiş olması gerekir
-        if (!formData.tc_no?.trim() && !formData.passport_no?.trim()) {
-            alert('TC Kimlik No veya Pasaport Numarası zorunludur');
-            return;
-        }
-
+        // TC veya Pasaport girilmişse format kontrolü yap (zorunlu değil)
         // TC kontrolü
         if (formData.tc_no?.trim()) {
             const cleanTC = formData.tc_no.replace(/\D/g, '');
