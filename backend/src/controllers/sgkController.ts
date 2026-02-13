@@ -338,18 +338,28 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
         const result = await pool.query(query, [id]);
 
         if (result.rows.length === 0) {
+            console.error(`[SGK File] Kayıt bulunamadı: ${id}`);
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
             return;
         }
 
         const fileName = result.rows[0].file_path;
+
+        if (!fileName) {
+            console.error(`[SGK File] Dosya yolu boş: ${id}`);
+            res.status(404).json({ success: false, message: 'Dosya yolu bulunamadı' });
+            return;
+        }
+
         const filePath = getFilePath(fileName);
+        console.log(`[SGK File] Dosya istendi: ${fileName}, Tam yol: ${filePath}`);
 
         // Dosya var mı kontrol et
         const fs = require('fs');
         const path = require('path');
         if (!fs.existsSync(filePath)) {
-            res.status(404).json({ success: false, message: 'Dosya bulunamadı' });
+            console.error(`[SGK File] Dosya mevcut değil: ${filePath}`);
+            res.status(404).json({ success: false, message: `Dosya bulunamadı: ${fileName}` });
             return;
         }
 
@@ -376,9 +386,19 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
         // iframe içinde görüntülenebilmesi için güvenlik başlıklarını kaldır
         res.removeHeader('X-Frame-Options');
         res.removeHeader('Content-Security-Policy');
-        res.sendFile(filePath);
+
+        // sendFile ile dosyayı gönder (absolute path gerekli)
+        res.sendFile(filePath, (err) => {
+            if (err) {
+                console.error(`[SGK File] sendFile hatası: ${filePath}`, err);
+                // Header gönderilmemişse hata döndür
+                if (!res.headersSent) {
+                    res.status(500).json({ success: false, message: 'Dosya gönderilirken hata oluştu' });
+                }
+            }
+        });
     } catch (error) {
-        console.error('Get SGK file error:', error);
+        console.error('[SGK File] Beklenmeyen hata:', error);
         res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
     }
 };

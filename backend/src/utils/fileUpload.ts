@@ -143,10 +143,10 @@ export const sgkUpload = multer({
 });
 
 /**
- * Dosya yolunu al
+ * Dosya yolunu al (absolute path garantili)
  */
 export const getFilePath = (fileName: string): string => {
-    return path.join(UPLOAD_DIR, fileName);
+    return path.resolve(UPLOAD_DIR, fileName);
 };
 
 /**
