@@ -382,7 +382,9 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
 
         // Dosyayı gönder
         res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+        // Türkçe karakterler için RFC 5987 uyumlu encoding
+        const encodedFileName = encodeURIComponent(fileName).replace(/['()]/g, escape);
+        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
         // iframe içinde görüntülenebilmesi için güvenlik başlıklarını kaldır
         res.removeHeader('X-Frame-Options');
         res.removeHeader('Content-Security-Policy');
