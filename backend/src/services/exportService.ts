@@ -151,6 +151,169 @@ export async function getRecordCounts(startDate: string, endDate: string): Promi
     }
 }
 
+// ============== ÇIKIŞ YAPARKEN OTOMATİK EXPORT ==============
+
+/**
+ * Kullanıcı çıkış yaparken günün kayıtlarını masaüstüne export eder
+ * Aynı gün birden fazla çıkış yapılırsa dosyaları günceller (üzerine yazar)
+ * Klasör yapısı: Yıl/Ay/Gün şeklinde (Admin panel ile aynı)
+ */
+export async function generateLogoutExport(userId: string): Promise<{ success: boolean; exportPath?: string; error?: string }> {
+    const client = await pool.connect();
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = TURKISH_MONTHS[today.getMonth()];
+    const day = String(today.getDate()).padStart(2, '0');
+    const monthNum = String(today.getMonth() + 1).padStart(2, '0');
+    const dateStr = `${year}-${monthNum}-${day}`;
+    const fileDateStr = `${day}-${monthNum}-${year}`;
+
+    // Export klasörü: /app/daily_exports/Yıl/Ay/Gün/ (Admin panel yapısı ile aynı)
+    const exportDir = `/app/daily_exports/${year}/${month}/${day}`;
+    const vardiyaDir = `${exportDir}/Vardiya_Raporlari`;
+
+    try {
+        // Klasörleri oluştur (yoksa)
+        if (!fs.existsSync(exportDir)) {
+            fs.mkdirSync(exportDir, { recursive: true });
+        }
+        if (!fs.existsSync(vardiyaDir)) {
+            fs.mkdirSync(vardiyaDir, { recursive: true });
+        }
+
+        console.log(`[Logout Export] Kullanıcı ${userId} çıkış yapıyor, kayıtlar ${exportDir} klasörüne kaydedilecek`);
+
+        // Müdür kayıtları
+        const managersResult = await client.query(
+            `SELECT mr.*, 
+                    m.first_name as manager_first_name, 
+                    m.last_name as manager_last_name,
+                    m.title as manager_title,
+                    COALESCE(mr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                    COALESCE(mr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+             FROM managers_records mr
+             LEFT JOIN managers m ON mr.manager_id = m.id
+             LEFT JOIN personnel p1 ON mr.entry_by = p1.id
+             LEFT JOIN personnel p2 ON mr.exit_by = p2.id
+             WHERE mr.entry_date = $1::date
+               AND mr.deleted_at IS NULL
+             ORDER BY mr.entry_date ASC, mr.entry_time ASC`,
+            [dateStr]
+        );
+
+        if (managersResult.rows.length > 0) {
+            const workbook = await createManagersExcel(managersResult.rows, dateStr);
+            const filePath = `${exportDir}/Mudur_Kayitlari_${fileDateStr}.xlsx`;
+            await workbook.xlsx.writeFile(filePath);
+            console.log(`[Logout Export] Müdür kayıtları: ${managersResult.rows.length} kayıt`);
+        }
+
+        // Araç kayıtları
+        const vehiclesResult = await client.query(
+            `SELECT vr.*,
+                    v.brand as vehicle_brand,
+                    v.plate as vehicle_plate,
+                    COALESCE(vr.given_by_name, p1.first_name || ' ' || p1.last_name) as given_personnel_name,
+                    COALESCE(vr.returned_by_name, p2.first_name || ' ' || p2.last_name) as returned_personnel_name
+             FROM vehicle_records vr
+             LEFT JOIN vehicles v ON vr.vehicle_id = v.id
+             LEFT JOIN personnel p1 ON vr.given_by = p1.id
+             LEFT JOIN personnel p2 ON vr.returned_by = p2.id
+             WHERE vr.given_date = $1::date
+               AND vr.deleted_at IS NULL
+             ORDER BY vr.given_date ASC, vr.given_time ASC`,
+            [dateStr]
+        );
+
+        if (vehiclesResult.rows.length > 0) {
+            const workbook = await createVehiclesExcel(vehiclesResult.rows, dateStr);
+            const filePath = `${exportDir}/Arac_Kayitlari_${fileDateStr}.xlsx`;
+            await workbook.xlsx.writeFile(filePath);
+            console.log(`[Logout Export] Araç kayıtları: ${vehiclesResult.rows.length} kayıt`);
+        }
+
+        // Ziyaretçi kayıtları
+        const visitorsResult = await client.query(
+            `SELECT vr.*,
+                    COALESCE(vr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                    COALESCE(vr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+             FROM visitor_records vr
+             LEFT JOIN personnel p1 ON vr.entry_by = p1.id
+             LEFT JOIN personnel p2 ON vr.exit_by = p2.id
+             WHERE vr.entry_date = $1::date
+               AND vr.deleted_at IS NULL
+             ORDER BY vr.entry_date ASC, vr.entry_time ASC`,
+            [dateStr]
+        );
+
+        if (visitorsResult.rows.length > 0) {
+            const workbook = await createVisitorsExcel(visitorsResult.rows, dateStr);
+            const filePath = `${exportDir}/Ziyaretci_Kayitlari_${fileDateStr}.xlsx`;
+            await workbook.xlsx.writeFile(filePath);
+            console.log(`[Logout Export] Ziyaretçi kayıtları: ${visitorsResult.rows.length} kayıt`);
+        }
+
+        // Yangın alarm kayıtları
+        const fireAlarmsResult = await client.query(
+            `SELECT fa.*,
+                    COALESCE(fa.recorded_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                    COALESCE(fa.resolved_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+             FROM fire_alarms fa
+             LEFT JOIN personnel p1 ON fa.recorded_by = p1.id
+             LEFT JOIN personnel p2 ON fa.resolved_by = p2.id
+             WHERE fa.alarm_time::date = $1::date
+               AND fa.deleted_at IS NULL
+             ORDER BY fa.alarm_time ASC`,
+            [dateStr]
+        );
+
+        if (fireAlarmsResult.rows.length > 0) {
+            const workbook = await createFireAlarmsExcel(fireAlarmsResult.rows, dateStr);
+            const filePath = `${exportDir}/Yangin_Alarm_Kayitlari_${fileDateStr}.xlsx`;
+            await workbook.xlsx.writeFile(filePath);
+            console.log(`[Logout Export] Yangın alarm kayıtları: ${fireAlarmsResult.rows.length} kayıt`);
+        }
+
+        // Vardiya Raporları (Word dosyaları)
+        const incidentsResult = await client.query(
+            `SELECT i.*, i.report_file_path,
+                    p.first_name || ' ' || p.last_name as personnel_name
+             FROM incidents i
+             LEFT JOIN personnel p ON i.recorded_by = p.id
+             WHERE i.report_date = $1::date
+               AND i.deleted_at IS NULL
+             ORDER BY i.created_at ASC`,
+            [dateStr]
+        );
+
+        let vardiyaCount = 0;
+        if (incidentsResult.rows.length > 0) {
+            for (const record of incidentsResult.rows) {
+                if (record.report_file_path && fs.existsSync(record.report_file_path)) {
+                    const shiftLabel = record.shift_label ? record.shift_label.replace(/:/g, '-') : '00-08';
+                    const destPath = `${vardiyaDir}/${shiftLabel}_${fileDateStr}.docx`;
+                    fs.copyFileSync(record.report_file_path, destPath);
+                    vardiyaCount++;
+                }
+            }
+            console.log(`[Logout Export] Vardiya raporları: ${vardiyaCount} dosya`);
+        }
+
+        const totalRecords = managersResult.rows.length + vehiclesResult.rows.length +
+            visitorsResult.rows.length + fireAlarmsResult.rows.length + vardiyaCount;
+
+        console.log(`[Logout Export] Toplam ${totalRecords} kayıt ${exportDir} klasörüne kaydedildi`);
+
+        return { success: true, exportPath: exportDir };
+
+    } catch (error) {
+        console.error('[Logout Export] Export hatası:', error);
+        return { success: false, error: String(error) };
+    } finally {
+        client.release();
+    }
+}
+
 // Müdür kayıtlarını Excel'e yaz
 async function createManagersExcel(records: any[], date: string): Promise<ExcelJS.Workbook> {
     const workbook = new ExcelJS.Workbook();

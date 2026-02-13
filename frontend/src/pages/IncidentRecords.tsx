@@ -4,6 +4,7 @@ import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
+import DOMPurify from 'dompurify';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 
@@ -439,7 +440,7 @@ export default function IncidentRecords() {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Rapor İçeriği</label>
                                 <div
                                     className="bg-gray-50 rounded-lg p-4 border border-gray-200 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: selectedReport.report_content || '<p class="text-gray-500">Rapor içeriği bulunamadı</p>' }}
+                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedReport.report_content || '<p class="text-gray-500">Rapor içeriği bulunamadı</p>') }}
                                 />
                             </div>
 

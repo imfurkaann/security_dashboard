@@ -49,6 +49,8 @@ services:
       - ./backend/sgk_kayitlari:/app/sgk_kayitlari # SGK dosyalarının silinmemesi için local klasöre bağladık
       # Migration dosyaları - backend başlarken otomatik çalıştırılır
       - ./database/migrations:/app/migrations:ro
+      # Çıkış yaparken günlük export klasörü - Masaüstüne kayıt
+      - ${USERPROFILE}/Desktop/Guvenlik_Kayitlari:/app/daily_exports
     ports:
       - "5000:5000"
     depends_on:
@@ -87,6 +89,14 @@ services:
 volumes:
   postgres_data:
     driver: local
+    # VERİTABANI KORUMASI: Bu volume silinirse tüm veriler kaybolur!
+    # ASLA "docker compose down -v" kullanmayın!
+    # ASLA "docker volume rm security_postgres_data" kullanmayın!
+    name: security_postgres_data
+    labels:
+      - "com.security.backup=required"
+      - "com.security.critical=true"
+      - "com.security.description=Güvenlik sistemi ana veritabanı - SİLMEYİN!"
 
 networks:
   security_network:

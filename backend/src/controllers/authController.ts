@@ -7,6 +7,7 @@ import { recordFailedAttempt, clearAttempts } from '../middleware/auth';
 import { logLoginAttempt, logLogout } from '../utils/auditLog';
 import { sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
+import { generateLogoutExport } from '../services/exportService';
 
 /**
  * Login validation rules
@@ -178,6 +179,20 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     const clientIp = getClientIp(req);
 
     if (userId) {
+        // Önce günlük kayıtları masaüstüne export et
+        try {
+            console.log(`[Logout] Kullanıcı ${userId} için günlük kayıtlar export ediliyor...`);
+            const exportResult = await generateLogoutExport(userId);
+            if (exportResult.success) {
+                console.log(`[Logout] Export başarılı: ${exportResult.exportPath}`);
+            } else {
+                console.error(`[Logout] Export hatası: ${exportResult.error}`);
+            }
+        } catch (error) {
+            console.error('[Logout] Export sırasında hata:', error);
+            // Export hatası çıkışı engellememelidir
+        }
+
         await logLogout(userId, clientIp);
 
         // Update personnel_record with logout time

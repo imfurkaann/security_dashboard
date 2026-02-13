@@ -1,0 +1,4 @@
+# Bu klasör veritabanı yedeklerini içerir
+# Yedekler .gitignore ile hariç tutulmuştur (gizlilik)
+# Manuel yedekleme: ..\YEDEKLE.bat
+# Otomatik yedekleme kurulumu: ..\scripts\setup-auto-backup.ps1
