@@ -339,18 +339,18 @@ export default function Managers() {
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className="hover:bg-gray-50">
                                                 {/* İşlem */}
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="inline-flex items-center gap-3">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <div className="flex items-center gap-3">
                                                         <button
                                                             onClick={() => openModalForEdit(rec)}
-                                                            className="px-3 py-1.5 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition"
+                                                            className="text-blue-600 hover:text-blue-800 transition"
                                                         >
                                                             Düzenle
                                                         </button>
                                                         {rec.status === 'inside' && (
                                                             <button
                                                                 onClick={() => handleExit(rec.id)}
-                                                                className="px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition"
+                                                                className="text-green-600 hover:text-green-800 transition"
                                                             >
                                                                 Çıkış Yap
                                                             </button>

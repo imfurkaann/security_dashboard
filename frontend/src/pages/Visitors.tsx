@@ -16,7 +16,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     notes: '',
     subcontractor_worker: false,
     for_electric_station: false,
-    send_whatsapp: false,
+    send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
 };
@@ -312,23 +312,23 @@ export default function Visitors() {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="inline-flex items-center gap-3">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <div className="flex items-center gap-3">
+                                                        <button
+                                                            onClick={() => openModalForEdit(rec)}
+                                                            className="text-blue-600 hover:text-blue-800 transition"
+                                                        >
+                                                            Düzenle
+                                                        </button>
                                                         {rec.status === 'inside' && (
                                                             <button
                                                                 onClick={() => handleExit(rec.id)}
-                                                                className="px-3 py-1.5 border border-green-200 text-green-600 bg-green-50 rounded-md hover:bg-green-100 transition"
+                                                                className="text-green-600 hover:text-green-800 transition"
                                                                 title="Çıkış Yap"
                                                             >
                                                                 Çıkış Yap
                                                             </button>
                                                         )}
-                                                        <button
-                                                            onClick={() => openModalForEdit(rec)}
-                                                            className="px-3 py-1.5 border border-blue-200 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition"
-                                                        >
-                                                            Düzenle
-                                                        </button>
                                                     </div>
                                                 </td>
 
