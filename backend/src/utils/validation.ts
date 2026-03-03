@@ -216,6 +216,33 @@ export const validateFields = (
     };
 };
 
+/**
+ * Düz metin sanitizasyonu - HTML escape YAPMAZ
+ * Textarea gibi düz metin alanları için kullanılır (XSS riski yok çünkü innerHTML ile render edilmez)
+ * Sadece trim + uzunluk kontrolü + tehlikeli script pattern temizliği yapar
+ */
+export const sanitizePlainText = (
+    input: string | null | undefined,
+    maxLength: number = 1000
+): string | null => {
+    if (!input) return null;
+
+    let sanitized = String(input).trim();
+
+    // Maksimum uzunluk kontrolü
+    if (sanitized.length > maxLength) {
+        sanitized = sanitized.substring(0, maxLength);
+    }
+
+    // Sadece script etiketlerini temizle (XSS vektörleri)
+    sanitized = sanitized
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/javascript:/gi, '')
+        .replace(/on\w+\s*=/gi, '');
+
+    return sanitized;
+};
+
 export default {
     isValidUUID,
     isValidPhone,
@@ -224,6 +251,7 @@ export default {
     escapeHtml,
     sanitizeSqlInput,
     sanitizeInput,
+    sanitizePlainText,
     isValidNumber,
     isValidDate,
     isValidEnum,

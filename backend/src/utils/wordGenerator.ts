@@ -101,7 +101,7 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
  */
 function htmlToPlainText(html: string): string {
     let text = html;
-    // HTML entity'lerini temizle
+    // HTML entity'lerini temizle (hem decimal hem hex formatları)
     for (let i = 0; i < 3; i++) {
         text = text
             .replace(/&amp;/gi, '&')
@@ -109,8 +109,11 @@ function htmlToPlainText(html: string): string {
             .replace(/&gt;/gi, '>')
             .replace(/&quot;/gi, '"')
             .replace(/&#39;/gi, "'")
+            .replace(/&#x27;/gi, "'")
+            .replace(/&#x2F;/gi, '/')
             .replace(/&nbsp;/gi, ' ')
-            .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(dec));
+            .replace(/&#(\d+);/g, (_, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+            .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
     }
 
     // HTML etiketlerini temizle
