@@ -326,20 +326,18 @@ export default function Vehicles() {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredUsages.map((usage) => (
                                             <tr key={usage.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="flex gap-2">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <div className="flex items-center gap-3">
                                                         <button
                                                             onClick={() => openEditModal(usage)}
-                                                            className="text-blue-600 hover:text-blue-900 transition font-medium"
-                                                            title="Kaydı Düzenle"
+                                                            className="text-blue-600 hover:text-blue-800 transition"
                                                         >
                                                             Düzenle
                                                         </button>
                                                         {usage.status === 'in_use' && (
                                                             <button
                                                                 onClick={() => handleReturn(usage.id)}
-                                                                className="text-green-600 hover:text-green-900 transition font-medium"
-                                                                title="Aracı Teslim Al"
+                                                                className="text-green-600 hover:text-green-800 transition"
                                                             >
                                                                 Teslim Al
                                                             </button>

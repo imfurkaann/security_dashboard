@@ -211,7 +211,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                     entryDate,
                     entryTime,
                     vehiclePlate: normalizedPlate || undefined,
-                    personCount: personCountValue || undefined,
+                    personCount: personCountToInsert,
                     phone: normalizedPhone || undefined,
                     subcontractorWorker: Boolean(subcontractor_worker),
                     forElectricStation: Boolean(for_electric_station),
