@@ -138,13 +138,30 @@ export default function Incidents() {
                 alert('Rapor başarıyla güncellendi ve yeni Word dosyası oluşturuldu');
             } else {
                 // Yeni kayıt
-                await api.post('/incidents/reports', {
-                    shift_label: selectedShift,
-                    report_content: reportContent,
-                    categories: categories
-                });
-                alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
+                try {
+                    await api.post('/incidents/reports', {
+                        shift_label: selectedShift,
+                        report_content: reportContent,
+                        categories: categories
+                    });
+                    alert('Rapor başarıyla kaydedildi ve Word dosyası oluşturuldu');
+                } catch (postError) {
+                    // 409 Conflict: Rapor zaten var, güncelleme yap
+                    const postErr = postError as { response?: { status?: number; data?: { existingId?: string; message?: string } } };
+                    if (postErr?.response?.status === 409 && postErr?.response?.data?.existingId) {
+                        await api.put(`/incidents/reports/${postErr.response.data.existingId}`, {
+                            report_content: reportContent,
+                            categories: categories
+                        });
+                        alert('Rapor başarıyla güncellendi ve yeni Word dosyası oluşturuldu');
+                    } else {
+                        throw postError;
+                    }
+                }
             }
+
+            // Önce raporları yeniden yükle, ardından modalı kapat ve state'i sıfırla
+            await loadShiftReports();
 
             setShowReportModal(false);
             setExistingReportId(null);
@@ -175,7 +192,6 @@ export default function Incidents() {
                 security_cctv_malfunction: false,
                 other: false
             });
-            loadShiftReports();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'Rapor kaydı başarısız');
@@ -183,46 +199,105 @@ export default function Incidents() {
     }, [selectedShift, reportContent, existingReportId, shiftReports, loadShiftReports, categories]);
 
     // Rapor modal aç (yeni veya düzenle)
-    const openReportModal = useCallback((shiftLabel: string, isEdit: boolean = false) => {
+    const openReportModal = useCallback(async (shiftLabel: string, _isEdit: boolean = false) => {
         setSelectedShift(shiftLabel);
 
-        if (shiftReports[shiftLabel]) {
-            const report = shiftReports[shiftLabel];
-            setExistingReportId(report.id);
-            setReportContent(report.report_content || '');
+        // Her zaman API'den güncel veriyi çek
+        try {
+            const res = await api.get(`/incidents/reports/${shiftLabel}`);
+            if (res.data?.success && res.data?.data) {
+                const report = res.data.data;
+                setExistingReportId(report.id);
+                setReportContent(report.report_content || '');
 
-            // Kategorileri yükle
-            if (report.categories) {
+                // Kategorileri yükle
+                if (report.categories) {
+                    setCategories({
+                        theft_guest_property: report.categories.theft_guest_property || false,
+                        theft_hotel_property: report.categories.theft_hotel_property || false,
+                        theft_personnel: report.categories.theft_personnel || false,
+                        assault_physical: report.categories.assault_physical || false,
+                        assault_verbal: report.categories.assault_verbal || false,
+                        assault_mass_fight: report.categories.assault_mass_fight || false,
+                        substance_personnel: report.categories.substance_personnel || false,
+                        substance_property: report.categories.substance_property || false,
+                        vandalism_room: report.categories.vandalism_room || false,
+                        vandalism_common_area: report.categories.vandalism_common_area || false,
+                        unauthorized_room: report.categories.unauthorized_room || false,
+                        unauthorized_restricted_area: report.categories.unauthorized_restricted_area || false,
+                        accident_slip_fall: report.categories.accident_slip_fall || false,
+                        accident_equipment: report.categories.accident_equipment || false,
+                        accident_work: report.categories.accident_work || false,
+                        medical_serious: report.categories.medical_serious || false,
+                        medical_first_aid: report.categories.medical_first_aid || false,
+                        medical_ambulance: report.categories.medical_ambulance || false,
+                        fire_real: report.categories.fire_real || false,
+                        fire_false_alarm: report.categories.fire_false_alarm || false,
+                        fire_evacuation: report.categories.fire_evacuation || false,
+                        security_cctv_malfunction: report.categories.security_cctv_malfunction || false,
+                        other: report.categories.other || false
+                    });
+                } else {
+                    setCategories({
+                        theft_guest_property: false,
+                        theft_hotel_property: false,
+                        theft_personnel: false,
+                        assault_physical: false,
+                        assault_verbal: false,
+                        assault_mass_fight: false,
+                        substance_personnel: false,
+                        substance_property: false,
+                        vandalism_room: false,
+                        vandalism_common_area: false,
+                        unauthorized_room: false,
+                        unauthorized_restricted_area: false,
+                        accident_slip_fall: false,
+                        accident_equipment: false,
+                        accident_work: false,
+                        medical_serious: false,
+                        medical_first_aid: false,
+                        medical_ambulance: false,
+                        fire_real: false,
+                        fire_false_alarm: false,
+                        fire_evacuation: false,
+                        security_cctv_malfunction: false,
+                        other: false
+                    });
+                }
+            } else {
+                // API'den veri gelmedi - yeni rapor
+                setExistingReportId(null);
+                setReportContent('');
                 setCategories({
-                    theft_guest_property: report.categories.theft_guest_property || false,
-                    theft_hotel_property: report.categories.theft_hotel_property || false,
-                    theft_personnel: report.categories.theft_personnel || false,
-                    assault_physical: report.categories.assault_physical || false,
-                    assault_verbal: report.categories.assault_verbal || false,
-                    assault_mass_fight: report.categories.assault_mass_fight || false,
-                    substance_personnel: report.categories.substance_personnel || false,
-                    substance_property: report.categories.substance_property || false,
-                    vandalism_room: report.categories.vandalism_room || false,
-                    vandalism_common_area: report.categories.vandalism_common_area || false,
-                    unauthorized_room: report.categories.unauthorized_room || false,
-                    unauthorized_restricted_area: report.categories.unauthorized_restricted_area || false,
-                    accident_slip_fall: report.categories.accident_slip_fall || false,
-                    accident_equipment: report.categories.accident_equipment || false,
-                    accident_work: report.categories.accident_work || false,
-                    medical_serious: report.categories.medical_serious || false,
-                    medical_first_aid: report.categories.medical_first_aid || false,
-                    medical_ambulance: report.categories.medical_ambulance || false,
-                    fire_real: report.categories.fire_real || false,
-                    fire_false_alarm: report.categories.fire_false_alarm || false,
-                    fire_evacuation: report.categories.fire_evacuation || false,
-                    security_cctv_malfunction: report.categories.security_cctv_malfunction || false,
-                    other: report.categories.other || false
+                    theft_guest_property: false,
+                    theft_hotel_property: false,
+                    theft_personnel: false,
+                    assault_physical: false,
+                    assault_verbal: false,
+                    assault_mass_fight: false,
+                    substance_personnel: false,
+                    substance_property: false,
+                    vandalism_room: false,
+                    vandalism_common_area: false,
+                    unauthorized_room: false,
+                    unauthorized_restricted_area: false,
+                    accident_slip_fall: false,
+                    accident_equipment: false,
+                    accident_work: false,
+                    medical_serious: false,
+                    medical_first_aid: false,
+                    medical_ambulance: false,
+                    fire_real: false,
+                    fire_false_alarm: false,
+                    fire_evacuation: false,
+                    security_cctv_malfunction: false,
+                    other: false
                 });
             }
-        } else {
+        } catch {
+            // 404 veya hata - yeni rapor olarak aç
             setExistingReportId(null);
             setReportContent('');
-            // Kategorileri sıfırla
             setCategories({
                 theft_guest_property: false,
                 theft_hotel_property: false,
@@ -251,7 +326,7 @@ export default function Incidents() {
         }
 
         setShowReportModal(true);
-    }, [shiftReports]);
+    }, []);
 
     return (
         <div className="min-h-screen bg-gray-50">
