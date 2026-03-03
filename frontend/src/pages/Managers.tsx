@@ -327,17 +327,37 @@ export default function Managers() {
                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className="hover:bg-gray-50">
+                                                {/* İşlem */}
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="inline-flex items-center gap-3">
+                                                        <button
+                                                            onClick={() => openModalForEdit(rec)}
+                                                            className="px-3 py-1.5 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition"
+                                                        >
+                                                            Düzenle
+                                                        </button>
+                                                        {rec.status === 'inside' && (
+                                                            <button
+                                                                onClick={() => handleExit(rec.id)}
+                                                                className="px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition"
+                                                            >
+                                                                Çıkış Yap
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+
                                                 {/* İsim Soyisim */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm font-bold text-gray-900">{rec.manager || '-'}</div>
@@ -370,26 +390,6 @@ export default function Managers() {
                                                 {/* Çıkış Yapan */}
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{rec.exit_by || '-'}</div>
-                                                </td>
-
-                                                {/* İşlem */}
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="inline-flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => openModalForEdit(rec)}
-                                                            className="px-3 py-1.5 border border-indigo-200 text-indigo-600 bg-indigo-50 rounded-md hover:bg-indigo-100 transition"
-                                                        >
-                                                            Düzenle
-                                                        </button>
-                                                        {rec.status === 'inside' && (
-                                                            <button
-                                                                onClick={() => handleExit(rec.id)}
-                                                                className="px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition"
-                                                            >
-                                                                Çıkış Yap
-                                                            </button>
-                                                        )}
-                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
