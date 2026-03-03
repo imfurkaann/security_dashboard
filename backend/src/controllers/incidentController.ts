@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
-import { isValidUUID, sanitizeInput, isValidEnum, isValidLength } from '../utils/validation';
+import { isValidUUID, sanitizeInput, sanitizePlainText, isValidEnum, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createWordFromHtml } from '../utils/wordGenerator';
 
@@ -209,7 +209,8 @@ export const createShiftReport = async (req: Request, res: Response) => {
 
         // GÜVENLİK: Input validasyonu ve sanitizasyonu
         const sanitizedShiftLabel = sanitizeInput(shift_label, 100);
-        const sanitizedReportContent = sanitizeInput(report_content, 50000); // HTML için daha büyük limit
+        // Rapor içeriği düz metindir, HTML escape yapılmaz (textarea'da gösterilir, innerHTML ile render edilmez)
+        const sanitizedReportContent = sanitizePlainText(report_content, 50000);
 
         // Null kontrolü
         if (!sanitizedShiftLabel || !sanitizedReportContent) {
@@ -393,8 +394,8 @@ export const updateShiftReport = async (req: Request, res: Response) => {
 
         const shiftLabel = existing.rows[0].shift_label;
 
-        // Input sanitizasyonu
-        const sanitizedReportContent = sanitizeInput(report_content, 50000);
+        // Input sanitizasyonu - düz metin olduğu için HTML escape yapılmaz
+        const sanitizedReportContent = sanitizePlainText(report_content, 50000);
 
         if (!sanitizedReportContent) {
             return res.status(400).json({ success: false, message: 'Geçersiz giriş verisi' });
