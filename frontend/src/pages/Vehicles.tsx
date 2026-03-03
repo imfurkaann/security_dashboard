@@ -313,6 +313,7 @@ export default function Vehicles() {
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Edilme Tarihi</th>
@@ -320,12 +321,31 @@ export default function Vehicles() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredUsages.map((usage) => (
                                             <tr key={usage.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => openEditModal(usage)}
+                                                            className="text-blue-600 hover:text-blue-900 transition font-medium"
+                                                            title="Kaydı Düzenle"
+                                                        >
+                                                            Düzenle
+                                                        </button>
+                                                        {usage.status === 'in_use' && (
+                                                            <button
+                                                                onClick={() => handleReturn(usage.id)}
+                                                                className="text-green-600 hover:text-green-900 transition font-medium"
+                                                                title="Aracı Teslim Al"
+                                                            >
+                                                                Teslim Al
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center">
                                                         <div className="p-2 bg-blue-100 rounded">
@@ -365,26 +385,6 @@ export default function Vehicles() {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{usage.returned_by || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => openEditModal(usage)}
-                                                            className="text-blue-600 hover:text-blue-900 transition font-medium"
-                                                            title="Kaydı Düzenle"
-                                                        >
-                                                            Düzenle
-                                                        </button>
-                                                        {usage.status === 'in_use' && (
-                                                            <button
-                                                                onClick={() => handleReturn(usage.id)}
-                                                                className="text-green-600 hover:text-green-900 transition font-medium"
-                                                                title="Aracı Teslim Al"
-                                                            >
-                                                                Teslim Al
-                                                            </button>
-                                                        )}
-                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

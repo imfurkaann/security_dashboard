@@ -385,7 +385,7 @@ Set-Content -Path "docker-compose.override.yml" -Value $overrideContent -Encodin
 
 # Kod degisikliklerini uygula ve baslat
 Write-INF "Sistem calistiriliyor..."
-docker compose up -d --build
+docker compose up -d 
 
 if ($LASTEXITCODE -ne 0) {
     Write-ERR "Docker baslatma hatasi!"

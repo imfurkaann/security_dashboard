@@ -294,6 +294,7 @@ export default function Visitors() {
                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
@@ -306,12 +307,31 @@ export default function Visitors() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className="hover:bg-gray-50">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    <div className="inline-flex items-center gap-3">
+                                                        {rec.status === 'inside' && (
+                                                            <button
+                                                                onClick={() => handleExit(rec.id)}
+                                                                className="px-3 py-1.5 border border-green-200 text-green-600 bg-green-50 rounded-md hover:bg-green-100 transition"
+                                                                title="Çıkış Yap"
+                                                            >
+                                                                Çıkış Yap
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => openModalForEdit(rec)}
+                                                            className="px-3 py-1.5 border border-blue-200 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition"
+                                                        >
+                                                            Düzenle
+                                                        </button>
+                                                    </div>
+                                                </td>
+
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-blue-100 rounded">
@@ -379,26 +399,6 @@ export default function Visitors() {
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{rec.exit_by || '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    <div className="inline-flex items-center gap-3">
-                                                        {rec.status === 'inside' && (
-                                                            <button
-                                                                onClick={() => handleExit(rec.id)}
-                                                                className="px-3 py-1.5 border border-green-200 text-green-600 bg-green-50 rounded-md hover:bg-green-100 transition"
-                                                                title="Çıkış Yap"
-                                                            >
-                                                                Çıkış Yap
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            onClick={() => openModalForEdit(rec)}
-                                                            className="px-3 py-1.5 border border-blue-200 text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition"
-                                                        >
-                                                            Düzenle
-                                                        </button>
-                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
