@@ -397,27 +397,28 @@ export default function Incidents() {
 
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => openReportModal(shift.label, false)}
+                                        onClick={() => openReportModal(shift.label, !!shiftReports[shift.label])}
                                         disabled={!access.accessible}
-                                        className={`flex-1 py-3 px-4 rounded-lg font-medium transition ${access.accessible
-                                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
-                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        className={`flex-1 py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${!access.accessible
+                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                : shiftReports[shift.label]
+                                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
+                                                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
                                             }`}
                                     >
-                                        {access.accessible ? 'Rapor Yaz' : `${access.hoursUntil} saat kaldı`}
+                                        {!access.accessible ? (
+                                            `${access.hoursUntil} saat kaldı`
+                                        ) : shiftReports[shift.label] ? (
+                                            <>
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                                Raporu Düzenle
+                                            </>
+                                        ) : (
+                                            'Rapor Yaz'
+                                        )}
                                     </button>
-
-                                    {shiftReports[shift.label] && (
-                                        <button
-                                            onClick={() => openReportModal(shift.label, true)}
-                                            className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition shadow-lg hover:shadow-xl"
-                                            title="Raporu Düzenle"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                         );
