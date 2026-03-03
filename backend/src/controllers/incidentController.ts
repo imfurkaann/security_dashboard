@@ -227,6 +227,23 @@ export const createShiftReport = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Rapor içeriği 50000 karakteri geçemez' });
         }
 
+        // Aynı vardiya ve tarih için mevcut rapor var mı kontrol et
+        const existingReport = await pool.query(
+            `SELECT id FROM incidents 
+             WHERE shift_label = $1 AND report_date = CURRENT_DATE AND deleted_at IS NULL 
+             LIMIT 1`,
+            [sanitizedShiftLabel]
+        );
+
+        if (existingReport.rows.length > 0) {
+            // Mevcut rapor varsa güncellemeye yönlendir (PUT endpoint kullanılmalı)
+            return res.status(409).json({
+                success: false,
+                message: 'Bu vardiya için bugün zaten bir rapor mevcut. Lütfen güncelleme yapın.',
+                existingId: existingReport.rows[0].id
+            });
+        }
+
         // Raporu kaydeden kişinin bilgisini al
         const userResult = await pool.query(
             'SELECT first_name, last_name FROM personnel WHERE id = $1',
@@ -287,7 +304,7 @@ export const createShiftReport = async (req: Request, res: Response) => {
 
                 await pool.query(
                     `INSERT INTO incident_categories (
-                        shift_report_id, ${categoryColumns}
+                        incident_id, ${categoryColumns}
                     ) VALUES ($1, ${categoryValues})`,
                     [id]
                 );
@@ -332,7 +349,7 @@ export const getShiftReport = async (req: Request, res: Response) => {
 
         // Kategorileri de getir
         const categoryResult = await pool.query(
-            'SELECT * FROM incident_categories WHERE shift_report_id = $1',
+            'SELECT * FROM incident_categories WHERE incident_id = $1',
             [result.rows[0].id]
         );
 
@@ -434,7 +451,7 @@ export const updateShiftReport = async (req: Request, res: Response) => {
             try {
                 // Önce mevcut kategori kaydını kontrol et
                 const existingCategory = await pool.query(
-                    'SELECT id FROM incident_categories WHERE shift_report_id = $1',
+                    'SELECT id FROM incident_categories WHERE incident_id = $1',
                     [id]
                 );
 
@@ -446,7 +463,7 @@ export const updateShiftReport = async (req: Request, res: Response) => {
                     const updateValues = Object.values(categories).map(v => v ? true : false);
 
                     await pool.query(
-                        `UPDATE incident_categories SET ${updateFields}, updated_at = NOW() WHERE shift_report_id = $1`,
+                        `UPDATE incident_categories SET ${updateFields}, updated_at = NOW() WHERE incident_id = $1`,
                         [id, ...updateValues]
                     );
                 } else {
@@ -456,7 +473,7 @@ export const updateShiftReport = async (req: Request, res: Response) => {
                     const categoryValues = Object.values(categories).map(v => v ? true : false);
 
                     await pool.query(
-                        `INSERT INTO incident_categories (shift_report_id, ${categoryColumns}) VALUES ($1, ${categoryPlaceholders})`,
+                        `INSERT INTO incident_categories (incident_id, ${categoryColumns}) VALUES ($1, ${categoryPlaceholders})`,
                         [id, ...categoryValues]
                     );
                 }
