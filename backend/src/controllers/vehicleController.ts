@@ -56,8 +56,12 @@ export const getManagers = async (_req: Request, res: Response): Promise<void> =
  * Get all vehicle records with joins
  * GET /api/vehicles/records
  */
-export const getVehicleRecords = async (_req: Request, res: Response): Promise<void> => {
+export const getVehicleRecords = async (req: Request, res: Response): Promise<void> => {
     try {
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
+        const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
+
         const query = `
             SELECT 
                 vr.id,
@@ -70,6 +74,7 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
                 vr.status,
                 vr.notes,
                 vr.created_at,
+                ${deletedAtSelect}
                 v.brand as vehicle_brand,
                 v.plate as vehicle_plate,
                 m.first_name as manager_first_name,
@@ -84,7 +89,7 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
             LEFT JOIN managers m ON vr.manager_id = m.id
             INNER JOIN personnel pg ON vr.given_by = pg.id
             LEFT JOIN personnel pr ON vr.returned_by = pr.id
-            WHERE vr.deleted_at IS NULL
+            ${deletedAtFilter}
             ORDER BY vr.given_date DESC, vr.given_time DESC
             LIMIT 1000
         `;
@@ -107,6 +112,7 @@ export const getVehicleRecords = async (_req: Request, res: Response): Promise<v
             destination: row.destination,
             status: row.status,
             notes: row.notes,
+            deleted_at: row.deleted_at || null,
             created_at: row.created_at
         }));
 
@@ -730,6 +736,146 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
         res.status(500).json({
             success: false,
             message: 'Araç iadesi kaydedilirken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Soft delete vehicle record
+ * DELETE /api/vehicles/records/:id
+ */
+export const deleteVehicleRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kayıt ID formatı'
+            });
+            return;
+        }
+
+        const existing = await pool.query(
+            'SELECT id, deleted_at FROM vehicle_records WHERE id = $1',
+            [id]
+        );
+
+        if (existing.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Kayıt bulunamadı'
+            });
+            return;
+        }
+
+        if (existing.rows[0].deleted_at) {
+            res.status(400).json({
+                success: false,
+                message: 'Kayıt zaten silinmiş'
+            });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE vehicle_records
+             SET deleted_at = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'SOFT_DELETE',
+            { deleted_at: null },
+            { deleted_at: 'CURRENT_TIMESTAMP' },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Kayıt silindi'
+        });
+    } catch (error) {
+        console.error('Delete vehicle record error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Kayıt silinirken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Restore soft deleted vehicle record
+ * POST /api/vehicles/records/:id/restore
+ */
+export const restoreVehicleRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kayıt ID formatı'
+            });
+            return;
+        }
+
+        const existing = await pool.query(
+            'SELECT id, deleted_at FROM vehicle_records WHERE id = $1',
+            [id]
+        );
+
+        if (existing.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Kayıt bulunamadı'
+            });
+            return;
+        }
+
+        if (!existing.rows[0].deleted_at) {
+            res.status(400).json({
+                success: false,
+                message: 'Kayıt zaten aktif'
+            });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE vehicle_records
+             SET deleted_at = NULL,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'UPDATE',
+            { deleted_at: 'TIMESTAMP' },
+            { deleted_at: null },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Kayıt geri alındı'
+        });
+    } catch (error) {
+        console.error('Restore vehicle record error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Kayıt geri alınırken hata oluştu'
         });
     }
 };

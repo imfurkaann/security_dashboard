@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getFireAlarms, createFireAlarm, updateFireAlarm, resolveFireAlarm } from '../controllers/fireAlarmController';
+import { getFireAlarms, createFireAlarm, updateFireAlarm, resolveFireAlarm, deleteFireAlarm, restoreFireAlarm } from '../controllers/fireAlarmController';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
@@ -18,5 +18,11 @@ router.put('/records/:id', updateFireAlarm);
 
 // Yangın alarmını çözümle
 router.post('/records/:id/resolve', resolveFireAlarm);
+
+// Yangın alarm kaydını soft-delete yap
+router.delete('/records/:id', deleteFireAlarm);
+
+// Yangın alarm kaydını geri al
+router.post('/records/:id/restore', restoreFireAlarm);
 
 export default router;

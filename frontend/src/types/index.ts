@@ -48,6 +48,7 @@ export interface VehicleUsage {
     return_time: string | null;
     status: 'in_use' | 'returned';
     notes: string | null;
+    deleted_at?: string | null;
     created_at: string;
 }
 
@@ -70,6 +71,7 @@ export interface VisitorRecord {
     status: 'inside' | 'exited';
     entry_by: string | null;  // Girişi kaydeden personel
     exit_by: string | null;  // Çıkışı kaydeden personel
+    deleted_at?: string | null;
     created_at: string | null;
 }
 
@@ -95,6 +97,7 @@ export interface ManagerRecord {
     status: 'inside' | 'exited';
     entry_by: string | null;  // Girişi kaydeden personel
     exit_by: string | null;  // Çıkışı kaydeden personel
+    deleted_at?: string | null;
     notes?: string | null;
     created_at?: string | null;
 }

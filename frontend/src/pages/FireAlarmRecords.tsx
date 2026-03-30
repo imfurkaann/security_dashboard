@@ -6,6 +6,7 @@ import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -20,6 +21,7 @@ interface FireAlarmRecord {
     false_alarm: boolean;
     recorded_by_name: string;
     resolved_by_name: string | null;
+    deleted_at?: string | null;
     created_at: string;
 }
 
@@ -46,7 +48,7 @@ export default function FireAlarmRecords() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const res = await api.get('/fire-alarms/records');
+                const res = await api.get('/fire-alarms/records?includeDeleted=true');
                 setRecords(res.data?.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);
@@ -206,6 +208,28 @@ export default function FireAlarmRecords() {
         setAlarmDateEnd('');
         setResolutionDateStart('');
         setResolutionDateEnd('');
+    };
+
+    const handleDeleteRecord = async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            await api.delete(`/fire-alarms/records/${id}`);
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+        } catch (error) {
+            console.error('Kayıt silinemedi:', error);
+            alert('Kayıt silinirken bir hata oluştu');
+        }
+    };
+
+    const handleRestoreRecord = async (id: string) => {
+        try {
+            await api.post(`/fire-alarms/records/${id}/restore`);
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+        } catch (error) {
+            console.error('Kayıt geri alınamadı:', error);
+            alert('Kayıt geri alınırken bir hata oluştu');
+        }
     };
 
     return (
@@ -372,6 +396,7 @@ export default function FireAlarmRecords() {
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -384,7 +409,14 @@ export default function FireAlarmRecords() {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {sortedFilteredRecords.map(record => (
-                                        <tr key={record.id} className="hover:bg-gray-50">
+                                        <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {record.deleted_at ? (
+                                                    <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                ) : (
+                                                    <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                             </td>
@@ -444,6 +476,7 @@ export default function FireAlarmRecords() {
                                                 <table className="min-w-full">
                                                     <thead className="bg-gray-50">
                                                         <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -456,7 +489,14 @@ export default function FireAlarmRecords() {
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {groupedRecords[monthKey][dayKey].map(record => (
-                                                            <tr key={record.id} className="hover:bg-gray-50">
+                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    {record.deleted_at ? (
+                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                                    ) : (
+                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                                 </td>

@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateVisitorForm, normalizePlate, normalizePhone } from '../utils/validation';
 import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
+import ActionButton from '../components/ActionButton';
 
 // Initial form state
 const INITIAL_FORM_DATA: VisitorFormData = {
@@ -36,7 +37,7 @@ export default function Visitors() {
     // Fetch visitor records
     const fetchData = useCallback(async () => {
         try {
-            const res = await api.get('/visitors/records');
+            const res = await api.get('/visitors/records?includeDeleted=true');
             setRecords(res.data || []);
         } catch (err) {
             console.error('Ziyaretçi verisi yüklenemedi', err);
@@ -151,6 +152,28 @@ export default function Visitors() {
             alert(err?.response?.data?.message || 'Çıkış kaydı başarısız');
         }
     }, [fetchData]);
+
+    const handleDeleteRecord = useCallback(async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            await api.delete(`/visitors/records/${id}`);
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Kayıt silinemedi');
+        }
+    }, []);
+
+    const handleRestoreRecord = useCallback(async (id: string) => {
+        try {
+            await api.post(`/visitors/records/${id}/restore`);
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Kayıt geri alınamadı');
+        }
+    }, []);
 
     // Memoized statistics
     const stats = useMemo(() => ({
@@ -311,23 +334,25 @@ export default function Visitors() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
-                                            <tr key={rec.id} className="hover:bg-gray-50">
+                                            <tr key={rec.id} className={`hover:bg-gray-50 ${rec.deleted_at ? 'opacity-60' : ''}`}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                     <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => openModalForEdit(rec)}
-                                                            className="text-blue-600 hover:text-blue-800 transition"
-                                                        >
-                                                            Düzenle
-                                                        </button>
-                                                        {rec.status === 'inside' && (
-                                                            <button
-                                                                onClick={() => handleExit(rec.id)}
-                                                                className="text-green-600 hover:text-green-800 transition"
-                                                                title="Çıkış Yap"
-                                                            >
-                                                                Çıkış Yap
-                                                            </button>
+                                                        {rec.deleted_at ? (
+                                                            <ActionButton onClick={() => handleRestoreRecord(rec.id)} variant="success">Geri Al</ActionButton>
+                                                        ) : (
+                                                            <>
+                                                                <ActionButton onClick={() => openModalForEdit(rec)} variant="primary">Düzenle</ActionButton>
+                                                                {rec.status === 'inside' && (
+                                                                    <ActionButton
+                                                                        onClick={() => handleExit(rec.id)}
+                                                                        variant="success"
+                                                                        title="Çıkış Yap"
+                                                                    >
+                                                                        Çıkış Yap
+                                                                    </ActionButton>
+                                                                )}
+                                                                <ActionButton onClick={() => handleDeleteRecord(rec.id)} variant="danger">Sil</ActionButton>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>

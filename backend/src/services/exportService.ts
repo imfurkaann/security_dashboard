@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import archiver from 'archiver';
 import { Response } from 'express';
+import type { PoolClient } from 'pg';
 import pool from '../config/database';
 import * as fs from 'fs';
 
@@ -43,6 +44,48 @@ interface WrittenCounts {
     visitors: number;
     fireAlarms: number;
     incidents: number;
+}
+
+interface VehicleExportRow {
+    id: string;
+    return_date?: string | null;
+    return_time?: string | null;
+    status?: string | null;
+    returned_by?: string | null;
+    returned_by_name?: string | null;
+    returned_personnel_name?: string | null;
+    [key: string]: any;
+}
+
+interface ManagerExportRow {
+    id: string;
+    exit_date?: string | null;
+    exit_time?: string | null;
+    exit_by?: string | null;
+    exit_by_name?: string | null;
+    exit_personnel_name?: string | null;
+    [key: string]: any;
+}
+
+interface VisitorExportRow {
+    id: string;
+    exit_date?: string | null;
+    exit_time?: string | null;
+    status?: string | null;
+    exit_by?: string | null;
+    exit_by_name?: string | null;
+    exit_personnel_name?: string | null;
+    [key: string]: any;
+}
+
+interface FireAlarmExportRow {
+    id: string;
+    resolution_time?: string | null;
+    status?: string | null;
+    resolved_by?: string | null;
+    resolved_by_name?: string | null;
+    exit_personnel_name?: string | null;
+    [key: string]: any;
 }
 
 // Tarih formatlama fonksiyonları
@@ -94,6 +137,215 @@ function getDataStyle(): Partial<ExcelJS.Style> {
     };
 }
 
+function mergeVehicleRowsWithSafeBackfill(rows: VehicleExportRow[]): VehicleExportRow[] {
+    const byId = new Map<string, VehicleExportRow>();
+
+    for (const row of rows) {
+        const existing = byId.get(row.id);
+        if (!existing) {
+            byId.set(row.id, { ...row });
+            continue;
+        }
+
+        // Sadece acik/eksik kayitlari backfill et, dolu teslim alma alanlarini asla override etme.
+        const existingHasReturnDate = Boolean(existing.return_date);
+        if (!existingHasReturnDate && row.return_date) {
+            existing.return_date = row.return_date;
+            if (!existing.return_time && row.return_time) existing.return_time = row.return_time;
+            if (!existing.returned_by && row.returned_by) existing.returned_by = row.returned_by;
+            if (!existing.returned_by_name && row.returned_by_name) existing.returned_by_name = row.returned_by_name;
+            if (!existing.returned_personnel_name && row.returned_personnel_name) {
+                existing.returned_personnel_name = row.returned_personnel_name;
+            }
+            if ((!existing.status || existing.status === 'in_use') && row.status === 'returned') {
+                existing.status = row.status;
+            }
+        }
+    }
+
+    return Array.from(byId.values());
+}
+
+function mergeManagerRowsWithSafeBackfill(rows: ManagerExportRow[]): ManagerExportRow[] {
+    const byId = new Map<string, ManagerExportRow>();
+
+    for (const row of rows) {
+        const existing = byId.get(row.id);
+        if (!existing) {
+            byId.set(row.id, { ...row });
+            continue;
+        }
+
+        const existingHasExitDate = Boolean(existing.exit_date);
+        if (!existingHasExitDate && row.exit_date) {
+            existing.exit_date = row.exit_date;
+            if (!existing.exit_time && row.exit_time) existing.exit_time = row.exit_time;
+            if (!existing.exit_by && row.exit_by) existing.exit_by = row.exit_by;
+            if (!existing.exit_by_name && row.exit_by_name) existing.exit_by_name = row.exit_by_name;
+            if (!existing.exit_personnel_name && row.exit_personnel_name) {
+                existing.exit_personnel_name = row.exit_personnel_name;
+            }
+        }
+    }
+
+    return Array.from(byId.values());
+}
+
+function mergeVisitorRowsWithSafeBackfill(rows: VisitorExportRow[]): VisitorExportRow[] {
+    const byId = new Map<string, VisitorExportRow>();
+
+    for (const row of rows) {
+        const existing = byId.get(row.id);
+        if (!existing) {
+            byId.set(row.id, { ...row });
+            continue;
+        }
+
+        const existingHasExitDate = Boolean(existing.exit_date);
+        if (!existingHasExitDate && row.exit_date) {
+            existing.exit_date = row.exit_date;
+            if (!existing.exit_time && row.exit_time) existing.exit_time = row.exit_time;
+            if (!existing.exit_by && row.exit_by) existing.exit_by = row.exit_by;
+            if (!existing.exit_by_name && row.exit_by_name) existing.exit_by_name = row.exit_by_name;
+            if (!existing.exit_personnel_name && row.exit_personnel_name) {
+                existing.exit_personnel_name = row.exit_personnel_name;
+            }
+            if ((!existing.status || existing.status === 'inside') && row.status === 'exited') {
+                existing.status = row.status;
+            }
+        }
+    }
+
+    return Array.from(byId.values());
+}
+
+function mergeFireAlarmRowsWithSafeBackfill(rows: FireAlarmExportRow[]): FireAlarmExportRow[] {
+    const byId = new Map<string, FireAlarmExportRow>();
+
+    for (const row of rows) {
+        const existing = byId.get(row.id);
+        if (!existing) {
+            byId.set(row.id, { ...row });
+            continue;
+        }
+
+        const existingHasResetTime = Boolean(existing.resolution_time);
+        if (!existingHasResetTime && row.resolution_time) {
+            existing.resolution_time = row.resolution_time;
+            if (!existing.resolved_by && row.resolved_by) existing.resolved_by = row.resolved_by;
+            if (!existing.resolved_by_name && row.resolved_by_name) existing.resolved_by_name = row.resolved_by_name;
+            if (!existing.exit_personnel_name && row.exit_personnel_name) {
+                existing.exit_personnel_name = row.exit_personnel_name;
+            }
+            if ((!existing.status || existing.status === 'active') && row.status) {
+                existing.status = row.status;
+            }
+        }
+    }
+
+    return Array.from(byId.values());
+}
+
+async function getManagerRecordsForExport(client: PoolClient, dateStr: string): Promise<ManagerExportRow[]> {
+    const result = await client.query(
+        `SELECT mr.*, 
+                m.first_name as manager_first_name,
+                m.last_name as manager_last_name,
+                m.title as manager_title,
+                COALESCE(mr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                COALESCE(mr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+         FROM managers_records mr
+         LEFT JOIN managers m ON mr.manager_id = m.id
+         LEFT JOIN personnel p1 ON mr.entry_by = p1.id
+         LEFT JOIN personnel p2 ON mr.exit_by = p2.id
+         WHERE mr.deleted_at IS NULL
+           AND (
+                mr.entry_date = $1::date
+                OR (
+                    mr.exit_date = $1::date
+                    AND mr.entry_date < $1::date
+                )
+           )
+         ORDER BY mr.entry_date ASC, mr.entry_time ASC`,
+        [dateStr]
+    );
+
+    return mergeManagerRowsWithSafeBackfill(result.rows as ManagerExportRow[]);
+}
+
+async function getVehicleRecordsForExport(client: PoolClient, dateStr: string): Promise<VehicleExportRow[]> {
+    const result = await client.query(
+        `SELECT vr.*, 
+                v.brand as vehicle_brand,
+                v.plate as vehicle_plate,
+                COALESCE(vr.given_by_name, p1.first_name || ' ' || p1.last_name) as given_personnel_name,
+                COALESCE(vr.returned_by_name, p2.first_name || ' ' || p2.last_name) as returned_personnel_name
+         FROM vehicle_records vr
+         LEFT JOIN vehicles v ON vr.vehicle_id = v.id
+         LEFT JOIN personnel p1 ON vr.given_by = p1.id
+         LEFT JOIN personnel p2 ON vr.returned_by = p2.id
+         WHERE vr.deleted_at IS NULL
+           AND (
+                vr.given_date = $1::date
+                OR (
+                    vr.return_date = $1::date
+                    AND vr.given_date < $1::date
+                )
+           )
+         ORDER BY vr.given_date ASC, vr.given_time ASC`,
+        [dateStr]
+    );
+
+    return mergeVehicleRowsWithSafeBackfill(result.rows as VehicleExportRow[]);
+}
+
+async function getVisitorRecordsForExport(client: PoolClient, dateStr: string): Promise<VisitorExportRow[]> {
+    const result = await client.query(
+        `SELECT vr.*,
+                COALESCE(vr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                COALESCE(vr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+         FROM visitor_records vr
+         LEFT JOIN personnel p1 ON vr.entry_by = p1.id
+         LEFT JOIN personnel p2 ON vr.exit_by = p2.id
+         WHERE vr.deleted_at IS NULL
+           AND (
+                vr.entry_date = $1::date
+                OR (
+                    vr.exit_date = $1::date
+                    AND vr.entry_date < $1::date
+                )
+           )
+         ORDER BY vr.entry_date ASC, vr.entry_time ASC`,
+        [dateStr]
+    );
+
+    return mergeVisitorRowsWithSafeBackfill(result.rows as VisitorExportRow[]);
+}
+
+async function getFireAlarmRecordsForExport(client: PoolClient, dateStr: string): Promise<FireAlarmExportRow[]> {
+    const result = await client.query(
+        `SELECT fa.*,
+                COALESCE(fa.recorded_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
+                COALESCE(fa.resolved_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
+         FROM fire_alarms fa
+         LEFT JOIN personnel p1 ON fa.recorded_by = p1.id
+         LEFT JOIN personnel p2 ON fa.resolved_by = p2.id
+         WHERE fa.deleted_at IS NULL
+           AND (
+                fa.alarm_time::date = $1::date
+                OR (
+                    fa.resolution_time IS NOT NULL
+                    AND fa.resolution_time::date = $1::date
+                    AND fa.alarm_time::date < $1::date
+                )
+           )
+         ORDER BY fa.alarm_time ASC`,
+        [dateStr]
+    );
+
+    return mergeFireAlarmRowsWithSafeBackfill(result.rows as FireAlarmExportRow[]);
+}
+
 // Kayıt sayılarını getir
 export async function getRecordCounts(startDate: string, endDate: string): Promise<RecordCounts> {
     const client = await pool.connect();
@@ -104,27 +356,56 @@ export async function getRecordCounts(startDate: string, endDate: string): Promi
 
         const [managersResult, vehiclesResult, visitorsResult, fireAlarmsResult, incidentsResult] = await Promise.all([
             client.query(
-                `SELECT COUNT(*) as count FROM managers_records 
-                 WHERE entry_date >= $1::date AND entry_date <= $2::date
-                   AND deleted_at IS NULL`,
+                                `SELECT (
+                                        (SELECT COUNT(*) FROM managers_records
+                                         WHERE entry_date >= $1::date AND entry_date <= $2::date
+                                             AND deleted_at IS NULL)
+                                        +
+                                        (SELECT COUNT(*) FROM managers_records
+                                         WHERE exit_date >= $1::date AND exit_date <= $2::date
+                                             AND entry_date < exit_date
+                                             AND deleted_at IS NULL)
+                                ) as count`,
                 [startDate, endDate]
             ),
             client.query(
-                `SELECT COUNT(*) as count FROM vehicle_records 
-                 WHERE given_date >= $1::date AND given_date <= $2::date
-                   AND deleted_at IS NULL`,
+                                `SELECT (
+                                        (SELECT COUNT(*) FROM vehicle_records
+                                         WHERE given_date >= $1::date AND given_date <= $2::date
+                                             AND deleted_at IS NULL)
+                                        +
+                                        (SELECT COUNT(*) FROM vehicle_records
+                                         WHERE return_date >= $1::date AND return_date <= $2::date
+                                             AND given_date < return_date
+                                             AND deleted_at IS NULL)
+                                ) as count`,
                 [startDate, endDate]
             ),
             client.query(
-                `SELECT COUNT(*) as count FROM visitor_records 
-                 WHERE entry_date >= $1::date AND entry_date <= $2::date
-                   AND deleted_at IS NULL`,
+                                `SELECT (
+                                        (SELECT COUNT(*) FROM visitor_records
+                                         WHERE entry_date >= $1::date AND entry_date <= $2::date
+                                             AND deleted_at IS NULL)
+                                        +
+                                        (SELECT COUNT(*) FROM visitor_records
+                                         WHERE exit_date >= $1::date AND exit_date <= $2::date
+                                             AND entry_date < exit_date
+                                             AND deleted_at IS NULL)
+                                ) as count`,
                 [startDate, endDate]
             ),
             client.query(
-                `SELECT COUNT(*) as count FROM fire_alarms 
-                 WHERE alarm_time::date >= $1::date AND alarm_time::date <= $2::date
-                   AND deleted_at IS NULL`,
+                                `SELECT (
+                                        (SELECT COUNT(*) FROM fire_alarms
+                                         WHERE alarm_time::date >= $1::date AND alarm_time::date <= $2::date
+                                             AND deleted_at IS NULL)
+                                        +
+                                        (SELECT COUNT(*) FROM fire_alarms
+                                         WHERE resolution_time IS NOT NULL
+                                             AND resolution_time::date >= $1::date AND resolution_time::date <= $2::date
+                                             AND alarm_time::date < resolution_time::date
+                                             AND deleted_at IS NULL)
+                                ) as count`,
                 [startDate, endDate]
             ),
             client.query(
@@ -184,94 +465,43 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
         console.log(`[Logout Export] Kullanıcı ${userId} çıkış yapıyor, kayıtlar ${exportDir} klasörüne kaydedilecek`);
 
         // Müdür kayıtları
-        const managersResult = await client.query(
-            `SELECT mr.*, 
-                    m.first_name as manager_first_name, 
-                    m.last_name as manager_last_name,
-                    m.title as manager_title,
-                    COALESCE(mr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                    COALESCE(mr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-             FROM managers_records mr
-             LEFT JOIN managers m ON mr.manager_id = m.id
-             LEFT JOIN personnel p1 ON mr.entry_by = p1.id
-             LEFT JOIN personnel p2 ON mr.exit_by = p2.id
-             WHERE mr.entry_date = $1::date
-               AND mr.deleted_at IS NULL
-             ORDER BY mr.entry_date ASC, mr.entry_time ASC`,
-            [dateStr]
-        );
+        const managerRows = await getManagerRecordsForExport(client, dateStr);
 
-        if (managersResult.rows.length > 0) {
-            const workbook = await createManagersExcel(managersResult.rows, dateStr);
+        if (managerRows.length > 0) {
+            const workbook = await createManagersExcel(managerRows, dateStr);
             const filePath = `${exportDir}/Mudur_Kayitlari_${fileDateStr}.xlsx`;
             await workbook.xlsx.writeFile(filePath);
-            console.log(`[Logout Export] Müdür kayıtları: ${managersResult.rows.length} kayıt`);
+            console.log(`[Logout Export] Müdür kayıtları: ${managerRows.length} kayıt`);
         }
 
         // Araç kayıtları
-        const vehiclesResult = await client.query(
-            `SELECT vr.*,
-                    v.brand as vehicle_brand,
-                    v.plate as vehicle_plate,
-                    COALESCE(vr.given_by_name, p1.first_name || ' ' || p1.last_name) as given_personnel_name,
-                    COALESCE(vr.returned_by_name, p2.first_name || ' ' || p2.last_name) as returned_personnel_name
-             FROM vehicle_records vr
-             LEFT JOIN vehicles v ON vr.vehicle_id = v.id
-             LEFT JOIN personnel p1 ON vr.given_by = p1.id
-             LEFT JOIN personnel p2 ON vr.returned_by = p2.id
-             WHERE vr.given_date = $1::date
-               AND vr.deleted_at IS NULL
-             ORDER BY vr.given_date ASC, vr.given_time ASC`,
-            [dateStr]
-        );
+        const vehicleRows = await getVehicleRecordsForExport(client, dateStr);
 
-        if (vehiclesResult.rows.length > 0) {
-            const workbook = await createVehiclesExcel(vehiclesResult.rows, dateStr);
+        if (vehicleRows.length > 0) {
+            const workbook = await createVehiclesExcel(vehicleRows, dateStr);
             const filePath = `${exportDir}/Arac_Kayitlari_${fileDateStr}.xlsx`;
             await workbook.xlsx.writeFile(filePath);
-            console.log(`[Logout Export] Araç kayıtları: ${vehiclesResult.rows.length} kayıt`);
+            console.log(`[Logout Export] Araç kayıtları: ${vehicleRows.length} kayıt`);
         }
 
         // Ziyaretçi kayıtları
-        const visitorsResult = await client.query(
-            `SELECT vr.*,
-                    COALESCE(vr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                    COALESCE(vr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-             FROM visitor_records vr
-             LEFT JOIN personnel p1 ON vr.entry_by = p1.id
-             LEFT JOIN personnel p2 ON vr.exit_by = p2.id
-             WHERE vr.entry_date = $1::date
-               AND vr.deleted_at IS NULL
-             ORDER BY vr.entry_date ASC, vr.entry_time ASC`,
-            [dateStr]
-        );
+        const visitorRows = await getVisitorRecordsForExport(client, dateStr);
 
-        if (visitorsResult.rows.length > 0) {
-            const workbook = await createVisitorsExcel(visitorsResult.rows, dateStr);
+        if (visitorRows.length > 0) {
+            const workbook = await createVisitorsExcel(visitorRows, dateStr);
             const filePath = `${exportDir}/Ziyaretci_Kayitlari_${fileDateStr}.xlsx`;
             await workbook.xlsx.writeFile(filePath);
-            console.log(`[Logout Export] Ziyaretçi kayıtları: ${visitorsResult.rows.length} kayıt`);
+            console.log(`[Logout Export] Ziyaretçi kayıtları: ${visitorRows.length} kayıt`);
         }
 
         // Yangın alarm kayıtları
-        const fireAlarmsResult = await client.query(
-            `SELECT fa.*,
-                    COALESCE(fa.recorded_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                    COALESCE(fa.resolved_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-             FROM fire_alarms fa
-             LEFT JOIN personnel p1 ON fa.recorded_by = p1.id
-             LEFT JOIN personnel p2 ON fa.resolved_by = p2.id
-             WHERE fa.alarm_time::date = $1::date
-               AND fa.deleted_at IS NULL
-             ORDER BY fa.alarm_time ASC`,
-            [dateStr]
-        );
+        const fireAlarmRows = await getFireAlarmRecordsForExport(client, dateStr);
 
-        if (fireAlarmsResult.rows.length > 0) {
-            const workbook = await createFireAlarmsExcel(fireAlarmsResult.rows, dateStr);
+        if (fireAlarmRows.length > 0) {
+            const workbook = await createFireAlarmsExcel(fireAlarmRows, dateStr);
             const filePath = `${exportDir}/Yangin_Alarm_Kayitlari_${fileDateStr}.xlsx`;
             await workbook.xlsx.writeFile(filePath);
-            console.log(`[Logout Export] Yangın alarm kayıtları: ${fireAlarmsResult.rows.length} kayıt`);
+            console.log(`[Logout Export] Yangın alarm kayıtları: ${fireAlarmRows.length} kayıt`);
         }
 
         // Vardiya Raporları (Word dosyaları)
@@ -299,8 +529,8 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
             console.log(`[Logout Export] Vardiya raporları: ${vardiyaCount} dosya`);
         }
 
-        const totalRecords = managersResult.rows.length + vehiclesResult.rows.length +
-            visitorsResult.rows.length + fireAlarmsResult.rows.length + vardiyaCount;
+        const totalRecords = managerRows.length + vehicleRows.length +
+            visitorRows.length + fireAlarmRows.length + vardiyaCount;
 
         console.log(`[Logout Export] Toplam ${totalRecords} kayıt ${exportDir} klasörüne kaydedildi`);
 
@@ -534,8 +764,8 @@ async function createFireAlarmsExcel(records: any[], date: string): Promise<Exce
             location: record.location || '-',
             alarmDate: formatDate(record.alarm_time),
             alarmTime: formatTime(record.alarm_time),
-            resolveDate: formatDate(record.reset_time),
-            resolveTime: formatTime(record.reset_time),
+            resolveDate: formatDate(record.resolution_time),
+            resolveTime: formatTime(record.resolution_time),
             description: record.description || '-',
             openedBy: record.entry_personnel_name || record.personnel_name || '-',
             closedBy: record.exit_personnel_name || '-'
@@ -750,102 +980,51 @@ export async function generateExportZip(
 
             // Müdür kayıtları
             if (options.reports.managers) {
-                const result = await client.query(
-                    `SELECT mr.*, 
-                            m.first_name as manager_first_name, 
-                            m.last_name as manager_last_name,
-                            m.title as manager_title,
-                            COALESCE(mr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                            COALESCE(mr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-                     FROM managers_records mr
-                     LEFT JOIN managers m ON mr.manager_id = m.id
-                     LEFT JOIN personnel p1 ON mr.entry_by = p1.id
-                     LEFT JOIN personnel p2 ON mr.exit_by = p2.id
-                     WHERE mr.entry_date = $1::date
-                       AND mr.deleted_at IS NULL
-                     ORDER BY mr.entry_date ASC, mr.entry_time ASC`,
-                    [dateStr]
-                );
+                const managerRows = await getManagerRecordsForExport(client, dateStr);
 
-                console.log(`Managers for ${dateStr}: ${result.rows.length} records`);
+                console.log(`Managers for ${dateStr}: ${managerRows.length} records`);
 
-                if (result.rows.length > 0) {
-                    const workbook = await createManagersExcel(result.rows, dateStr);
+                if (managerRows.length > 0) {
+                    const workbook = await createManagersExcel(managerRows, dateStr);
                     const buffer = await workbook.xlsx.writeBuffer();
                     archive.append(Buffer.from(buffer), { name: `${folderPath}/Mudur_Kayitlari_${fileDateStr}.xlsx` });
-                    writtenCounts.managers += result.rows.length;
+                    writtenCounts.managers += managerRows.length;
                 }
             }
 
             // Araç kayıtları
             if (options.reports.vehicles) {
-                const result = await client.query(
-                    `SELECT vr.*,
-                            v.brand as vehicle_brand,
-                            v.plate as vehicle_plate,
-                            COALESCE(vr.given_by_name, p1.first_name || ' ' || p1.last_name) as given_personnel_name,
-                            COALESCE(vr.returned_by_name, p2.first_name || ' ' || p2.last_name) as returned_personnel_name
-                     FROM vehicle_records vr
-                     LEFT JOIN vehicles v ON vr.vehicle_id = v.id
-                     LEFT JOIN personnel p1 ON vr.given_by = p1.id
-                     LEFT JOIN personnel p2 ON vr.returned_by = p2.id
-                     WHERE vr.given_date = $1::date
-                       AND vr.deleted_at IS NULL
-                     ORDER BY vr.given_date ASC, vr.given_time ASC`,
-                    [dateStr]
-                );
+                const vehicleRows = await getVehicleRecordsForExport(client, dateStr);
 
-                if (result.rows.length > 0) {
-                    const workbook = await createVehiclesExcel(result.rows, dateStr);
+                if (vehicleRows.length > 0) {
+                    const workbook = await createVehiclesExcel(vehicleRows, dateStr);
                     const buffer = await workbook.xlsx.writeBuffer();
                     archive.append(Buffer.from(buffer), { name: `${folderPath}/Arac_Kayitlari_${fileDateStr}.xlsx` });
-                    writtenCounts.vehicles += result.rows.length;
+                    writtenCounts.vehicles += vehicleRows.length;
                 }
             }
 
             // Ziyaretçi kayıtları
             if (options.reports.visitors) {
-                const result = await client.query(
-                    `SELECT vr.*,
-                            COALESCE(vr.entry_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                            COALESCE(vr.exit_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-                     FROM visitor_records vr
-                     LEFT JOIN personnel p1 ON vr.entry_by = p1.id
-                     LEFT JOIN personnel p2 ON vr.exit_by = p2.id
-                     WHERE vr.entry_date = $1::date
-                       AND vr.deleted_at IS NULL
-                     ORDER BY vr.entry_date ASC, vr.entry_time ASC`,
-                    [dateStr]
-                );
+                const visitorRows = await getVisitorRecordsForExport(client, dateStr);
 
-                if (result.rows.length > 0) {
-                    const workbook = await createVisitorsExcel(result.rows, dateStr);
+                if (visitorRows.length > 0) {
+                    const workbook = await createVisitorsExcel(visitorRows, dateStr);
                     const buffer = await workbook.xlsx.writeBuffer();
                     archive.append(Buffer.from(buffer), { name: `${folderPath}/Ziyaretci_Kayitlari_${fileDateStr}.xlsx` });
-                    writtenCounts.visitors += result.rows.length;
+                    writtenCounts.visitors += visitorRows.length;
                 }
             }
 
             // Yangın alarm kayıtları
             if (options.reports.fireAlarms) {
-                const result = await client.query(
-                    `SELECT fa.*,
-                            COALESCE(fa.recorded_by_name, p1.first_name || ' ' || p1.last_name) as entry_personnel_name,
-                            COALESCE(fa.resolved_by_name, p2.first_name || ' ' || p2.last_name) as exit_personnel_name
-                     FROM fire_alarms fa
-                     LEFT JOIN personnel p1 ON fa.recorded_by = p1.id
-                     LEFT JOIN personnel p2 ON fa.resolved_by = p2.id
-                     WHERE fa.alarm_time::date = $1::date
-                       AND fa.deleted_at IS NULL
-                     ORDER BY fa.alarm_time ASC`,
-                    [dateStr]
-                );
+                const fireAlarmRows = await getFireAlarmRecordsForExport(client, dateStr);
 
-                if (result.rows.length > 0) {
-                    const workbook = await createFireAlarmsExcel(result.rows, dateStr);
+                if (fireAlarmRows.length > 0) {
+                    const workbook = await createFireAlarmsExcel(fireAlarmRows, dateStr);
                     const buffer = await workbook.xlsx.writeBuffer();
                     archive.append(Buffer.from(buffer), { name: `${folderPath}/Yangin_Alarm_Kayitlari_${fileDateStr}.xlsx` });
-                    writtenCounts.fireAlarms += result.rows.length;
+                    writtenCounts.fireAlarms += fireAlarmRows.length;
                 }
             }
 

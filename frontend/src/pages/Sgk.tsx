@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData } from '../types';
+import ActionButton from '../components/ActionButton';
 
 // Initial form states
 const INITIAL_FORM_DATA: SgkFormData = {
@@ -14,6 +15,8 @@ const INITIAL_FORM_DATA: SgkFormData = {
     pdf_file: null
 };
 
+const ZOOM_STEPS: number[] = [1, 2, 4, 8];
+
 export default function Sgk() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -24,7 +27,41 @@ export default function Sgk() {
     const [allRecords, setAllRecords] = useState<SgkRecord[]>([]);
     const [previewRecord, setPreviewRecord] = useState<SgkRecord | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string>('');
+    const [imageZoom, setImageZoom] = useState(1);
+    const [zoomOrigin, setZoomOrigin] = useState('50% 50%');
     const navigate = useNavigate();
+
+    const handleImageWheel = useCallback((e: React.WheelEvent<HTMLImageElement>) => {
+        e.preventDefault();
+
+        const imgRect = e.currentTarget.getBoundingClientRect();
+        const xPercent = ((e.clientX - imgRect.left) / imgRect.width) * 100;
+        const yPercent = ((e.clientY - imgRect.top) / imgRect.height) * 100;
+
+        setZoomOrigin(`${xPercent}% ${yPercent}%`);
+        setImageZoom((currentZoom) => {
+            const currentIndex = ZOOM_STEPS.indexOf(currentZoom);
+
+            if (e.deltaY < 0) {
+                if (currentIndex === -1) return 2;
+                return ZOOM_STEPS[Math.min(currentIndex + 1, ZOOM_STEPS.length - 1)];
+            }
+
+            if (e.deltaY > 0) {
+                if (currentIndex <= 0) return 1;
+                return ZOOM_STEPS[currentIndex - 1];
+            }
+
+            return currentZoom;
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!showPreviewModal || !previewRecord || !previewRecord.file_path.match(/\.(jpg|jpeg|png)$/i)) {
+            setImageZoom(1);
+            setZoomOrigin('50% 50%');
+        }
+    }, [showPreviewModal, previewRecord]);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -546,24 +583,24 @@ export default function Sgk() {
                                                 </div>
                                             </div>
                                             <div className="flex-shrink-0 flex items-center gap-3">
-                                                <button
+                                                <ActionButton
                                                     onClick={() => handleEdit(record)}
-                                                    className="text-blue-600 hover:text-blue-800 transition"
+                                                    variant="primary"
                                                 >
                                                     Düzenle
-                                                </button>
-                                                <button
+                                                </ActionButton>
+                                                <ActionButton
                                                     onClick={() => handlePreview(record)}
-                                                    className="text-green-600 hover:text-green-800 transition"
+                                                    variant="success"
                                                 >
                                                     Görüntüle
-                                                </button>
-                                                <button
+                                                </ActionButton>
+                                                <ActionButton
                                                     onClick={() => handleDelete(record)}
-                                                    className="text-red-600 hover:text-red-800 transition"
+                                                    variant="danger"
                                                 >
                                                     Sil
-                                                </button>
+                                                </ActionButton>
                                             </div>
                                         </div>
                                         {record.notes && (
@@ -700,12 +737,12 @@ export default function Sgk() {
                                 </div>
 
                                 <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white py-3 rounded-lg font-medium transition">
+                                    <ActionButton type="submit" variant="primary" className="flex-1 py-3 text-sm">
                                         Kaydet
-                                    </button>
-                                    <button type="button" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">
+                                    </ActionButton>
+                                    <ActionButton type="button" variant="neutral" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 py-3 text-sm">
                                         İptal
-                                    </button>
+                                    </ActionButton>
                                 </div>
                             </form>
                         </div>
@@ -825,20 +862,22 @@ export default function Sgk() {
                                 </div>
 
                                 <div className="flex gap-3 pt-4">
-                                    <button
+                                    <ActionButton
                                         type="submit"
+                                        variant="primary"
                                         disabled={loading}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 rounded-lg font-medium transition"
+                                        className="flex-1 py-3 text-sm"
                                     >
                                         {loading ? 'Güncelleniyor...' : 'Güncelle'}
-                                    </button>
-                                    <button
+                                    </ActionButton>
+                                    <ActionButton
                                         type="button"
+                                        variant="neutral"
                                         onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }}
-                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                        className="flex-1 py-3 text-sm"
                                     >
                                         İptal
-                                    </button>
+                                    </ActionButton>
                                 </div>
                             </form>
                         </div>
@@ -872,7 +911,13 @@ export default function Sgk() {
                                 <img
                                     src={pdfUrl}
                                     alt={previewRecord.full_name}
-                                    className="max-w-full max-h-full object-contain"
+                                    onWheel={handleImageWheel}
+                                    className="max-w-full max-h-full object-contain select-none transition-transform duration-200"
+                                    style={{
+                                        transform: `scale(${imageZoom})`,
+                                        transformOrigin: zoomOrigin,
+                                        cursor: imageZoom > 1 ? 'zoom-out' : 'zoom-in'
+                                    }}
                                 />
                             ) : (
                                 // PDF için iframe kullan

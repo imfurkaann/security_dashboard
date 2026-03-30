@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateFireAlarmForm, isValidLength } from '../utils/validation';
+import ActionButton from '../components/ActionButton';
 
 interface FireAlarm {
     id: string;
@@ -14,6 +15,7 @@ interface FireAlarm {
     resolution_notes: string | null;
     false_alarm: boolean;
     recorded_by_name: string;
+    deleted_at?: string | null;
     created_at: string;
 }
 
@@ -30,6 +32,7 @@ export default function FireAlarms() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [resolvingId, setResolvingId] = useState<string | null>(null);
     const [filter, setFilter] = useState<FilterType>('today');
+    const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const [alarmNumber, setAlarmNumber] = useState('');
     const [location, setLocation] = useState('');
     const [alarmTime, setAlarmTime] = useState('');
@@ -41,7 +44,7 @@ export default function FireAlarms() {
     // Fetch fire alarm records
     const fetchData = useCallback(async () => {
         try {
-            const res = await api.get('/fire-alarms/records');
+            const res = await api.get('/fire-alarms/records?includeDeleted=true');
             setRecords(res.data?.data || []);
         } catch (err) {
             console.error('Yangın alarm verisi yüklenemedi', err);
@@ -177,6 +180,28 @@ export default function FireAlarms() {
         }
     }, [resolvingId, resolutionNotes, falseAlarm, fetchData]);
 
+    const handleDelete = useCallback(async (id: string) => {
+        if (!confirm('Bu alarm kaydını silmek istediğinizden emin misiniz?')) return;
+
+        try {
+            await api.delete(`/fire-alarms/records/${id}`);
+            fetchData();
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Silme işlemi başarısız');
+        }
+    }, [fetchData]);
+
+    const handleRestore = useCallback(async (id: string) => {
+        try {
+            await api.post(`/fire-alarms/records/${id}/restore`);
+            fetchData();
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Geri alma işlemi başarısız');
+        }
+    }, [fetchData]);
+
     // Statistics
     const stats = useMemo(() => {
         const today = records.filter(r => isToday(r.alarm_time));
@@ -194,12 +219,16 @@ export default function FireAlarms() {
     // Filtered records
     const filteredRecords = useMemo(() => {
         return records.filter(r => {
+            const isDeleted = Boolean(r.deleted_at);
+            if (recordVisibility === 'active' && isDeleted) return false;
+            if (recordVisibility === 'deleted' && !isDeleted) return false;
+
             if (filter === 'today') return isToday(r.alarm_time);
             if (filter === 'active') return !r.resolved;
             if (filter === 'resolved') return r.resolved;
             return true;
         });
-    }, [records, filter]);
+    }, [records, filter, recordVisibility]);
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -308,6 +337,15 @@ export default function FireAlarms() {
                         <button onClick={() => setFilter('resolved')} className={`px-4 py-2 rounded-lg transition ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Çözülen Alarmlar ({records.filter(r => r.resolved).length})
                         </button>
+                        <button onClick={() => setRecordVisibility('all')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'all' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            Aktif + Silinen
+                        </button>
+                        <button onClick={() => setRecordVisibility('active')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'active' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            Sadece Aktif
+                        </button>
+                        <button onClick={() => setRecordVisibility('deleted')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'deleted' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            Sadece Silinen
+                        </button>
                     </div>
                 </div>
 
@@ -338,22 +376,28 @@ export default function FireAlarms() {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {filteredRecords.map(record => (
-                                        <tr key={record.id} className="hover:bg-gray-50">
+                                        <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                 <div className="flex items-center gap-3">
-                                                    <button
+                                                    <ActionButton
                                                         onClick={() => openModalForEdit(record)}
-                                                        className="text-blue-600 hover:text-blue-800 transition"
+                                                        variant="primary"
+                                                        disabled={Boolean(record.deleted_at)}
                                                     >
                                                         Düzenle
-                                                    </button>
-                                                    {!record.resolved && (
-                                                        <button
+                                                    </ActionButton>
+                                                    {!record.resolved && !record.deleted_at && (
+                                                        <ActionButton
                                                             onClick={() => openResolveModal(record.id)}
-                                                            className="text-green-600 hover:text-green-800 transition"
+                                                            variant="success"
                                                         >
                                                             Çözümle
-                                                        </button>
+                                                        </ActionButton>
+                                                    )}
+                                                    {record.deleted_at ? (
+                                                        <ActionButton onClick={() => handleRestore(record.id)} variant="success">Geri Al</ActionButton>
+                                                    ) : (
+                                                        <ActionButton onClick={() => handleDelete(record.id)} variant="danger">Sil</ActionButton>
                                                     )}
                                                 </div>
                                             </td>

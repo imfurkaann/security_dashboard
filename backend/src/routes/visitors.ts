@@ -3,7 +3,9 @@ import {
     getVisitorRecords,
     createVisitorRecord,
     updateVisitorRecord,
-    exitVisitor
+    exitVisitor,
+    deleteVisitorRecord,
+    restoreVisitorRecord
 } from '../controllers/visitorController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -23,5 +25,11 @@ router.put('/records/:id', updateVisitorRecord);
 
 // Exit visitor
 router.post('/records/:id/exit', exitVisitor);
+
+// Soft delete visitor record
+router.delete('/records/:id', deleteVisitorRecord);
+
+// Restore visitor record
+router.post('/records/:id/restore', restoreVisitorRecord);
 
 export default router;

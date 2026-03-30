@@ -7,6 +7,7 @@ import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { API_URL } from '../constants';
+import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -21,6 +22,7 @@ interface FireAlarmRecord {
     false_alarm: boolean;
     recorded_by_name: string;
     resolved_by_name: string | null;
+    deleted_at?: string | null;
     created_at: string;
 }
 
@@ -48,7 +50,7 @@ export default function AdminFireAlarmRecords() {
         const fetchData = async () => {
             try {
                 const token = localStorage.getItem('adminToken');
-                const res = await axios.get(`${API_URL}/fire-alarms/records`, {
+                const res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setRecords(res.data?.data || []);
@@ -210,6 +212,34 @@ export default function AdminFireAlarmRecords() {
         setAlarmDateEnd('');
         setResolutionDateStart('');
         setResolutionDateEnd('');
+    };
+
+    const handleDeleteRecord = async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            const token = localStorage.getItem('adminToken');
+            await axios.delete(`${API_URL}/fire-alarms/records/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+        } catch (error) {
+            console.error('Kayıt silinemedi:', error);
+            alert('Kayıt silinirken bir hata oluştu');
+        }
+    };
+
+    const handleRestoreRecord = async (id: string) => {
+        try {
+            const token = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/fire-alarms/records/${id}/restore`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+        } catch (error) {
+            console.error('Kayıt geri alınamadı:', error);
+            alert('Kayıt geri alınırken bir hata oluştu');
+        }
     };
 
     return (
@@ -376,6 +406,7 @@ export default function AdminFireAlarmRecords() {
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -388,7 +419,14 @@ export default function AdminFireAlarmRecords() {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {sortedFilteredRecords.map(record => (
-                                        <tr key={record.id} className="hover:bg-gray-50">
+                                        <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {record.deleted_at ? (
+                                                    <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                ) : (
+                                                    <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                             </td>
@@ -448,6 +486,7 @@ export default function AdminFireAlarmRecords() {
                                                 <table className="min-w-full">
                                                     <thead className="bg-gray-50">
                                                         <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -460,7 +499,14 @@ export default function AdminFireAlarmRecords() {
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {groupedRecords[monthKey][dayKey].map(record => (
-                                                            <tr key={record.id} className="hover:bg-gray-50">
+                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    {record.deleted_at ? (
+                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                                    ) : (
+                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                                 </td>

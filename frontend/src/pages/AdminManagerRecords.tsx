@@ -8,6 +8,7 @@ import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
 import { API_URL } from '../constants';
+import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -38,7 +39,7 @@ export default function AdminManagerRecords() {
                         Authorization: `Bearer ${adminToken}`
                     }
                 };
-                const res = await axios.get(`${API_URL}/managers/records`, config);
+                const res = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, config);
                 setRecords(res.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);
@@ -183,6 +184,34 @@ export default function AdminManagerRecords() {
             exitDateStart: '',
             exitDateEnd: ''
         });
+    };
+
+    const handleDeleteRecord = async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.delete(`${API_URL}/managers/records/${id}`, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+        } catch (error) {
+            console.error('Kayıt silinemedi:', error);
+            alert('Kayıt silinirken bir hata oluştu');
+        }
+    };
+
+    const handleRestoreRecord = async (id: string) => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/managers/records/${id}/restore`, {}, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+        } catch (error) {
+            console.error('Kayıt geri alınamadı:', error);
+            alert('Kayıt geri alınırken bir hata oluştu');
+        }
     };
 
     // Handle date range change for entry dates
@@ -407,6 +436,7 @@ export default function AdminManagerRecords() {
                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -417,7 +447,14 @@ export default function AdminManagerRecords() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {sortedFilteredRecords.map((record) => (
-                                            <tr key={record.id} className="hover:bg-gray-50">
+                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {record.deleted_at ? (
+                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                    ) : (
+                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-indigo-100 rounded">
@@ -496,6 +533,7 @@ export default function AdminManagerRecords() {
                                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50">
                                                         <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -506,7 +544,14 @@ export default function AdminManagerRecords() {
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {dayGroup.records.map((record) => (
-                                                            <tr key={record.id} className="hover:bg-gray-50">
+                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    {record.deleted_at ? (
+                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                                    ) : (
+                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="p-2 bg-indigo-100 rounded">

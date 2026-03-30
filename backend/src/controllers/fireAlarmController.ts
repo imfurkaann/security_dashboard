@@ -7,8 +7,12 @@ import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
 
 // Tüm yangın alarm kayıtlarını getir
-export const getFireAlarms = async (_req: Request, res: Response) => {
+export const getFireAlarms = async (req: Request, res: Response) => {
     try {
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const deletedAtSelect = includeDeleted ? 'fa.deleted_at,' : '';
+        const deletedAtFilter = includeDeleted ? '' : 'WHERE fa.deleted_at IS NULL';
+
         const result = await pool.query(`
             SELECT 
                 fa.id,
@@ -20,12 +24,13 @@ export const getFireAlarms = async (_req: Request, res: Response) => {
                 fa.resolution_notes,
                 fa.false_alarm,
                 fa.created_at,
+                ${deletedAtSelect}
                 pr.first_name || ' ' || pr.last_name as recorded_by_name,
                 ps.first_name || ' ' || ps.last_name as resolved_by_name
             FROM fire_alarms fa
             LEFT JOIN personnel pr ON fa.recorded_by = pr.id
             LEFT JOIN personnel ps ON fa.resolved_by = ps.id
-            WHERE fa.deleted_at IS NULL 
+            ${deletedAtFilter}
             ORDER BY fa.created_at DESC
             LIMIT 1000
         `);
@@ -262,5 +267,95 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Resolve fire alarm error:', error);
         res.status(500).json({ success: false, message: 'Yangın alarm çözümlenemedi' });
+    }
+};
+
+// Yangın alarm kaydını soft-delete yap
+export const deleteFireAlarm = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM fire_alarms WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+        }
+
+        if (existing.rows[0].deleted_at) {
+            return res.status(400).json({ success: false, message: 'Kayıt zaten silinmiş' });
+        }
+
+        await pool.query(
+            `UPDATE fire_alarms
+             SET deleted_at = CURRENT_TIMESTAMP,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'fire_alarms',
+            id,
+            'SOFT_DELETE',
+            { deleted_at: null },
+            { deleted_at: 'CURRENT_TIMESTAMP' },
+            userId,
+            clientIp
+        );
+
+        return res.status(200).json({ success: true, message: 'Kayıt silindi' });
+    } catch (error) {
+        console.error('Delete fire alarm error:', error);
+        return res.status(500).json({ success: false, message: 'Kayıt silinirken hata oluştu' });
+    }
+};
+
+// Yangın alarm kaydını geri al
+export const restoreFireAlarm = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM fire_alarms WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+        }
+
+        if (!existing.rows[0].deleted_at) {
+            return res.status(400).json({ success: false, message: 'Kayıt zaten aktif' });
+        }
+
+        await pool.query(
+            `UPDATE fire_alarms
+             SET deleted_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'fire_alarms',
+            id,
+            'UPDATE',
+            { deleted_at: 'TIMESTAMP' },
+            { deleted_at: null },
+            userId,
+            clientIp
+        );
+
+        return res.status(200).json({ success: true, message: 'Kayıt geri alındı' });
+    } catch (error) {
+        console.error('Restore fire alarm error:', error);
+        return res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });
     }
 };

@@ -5,6 +5,7 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import dayjs from '../utils/dayjsConfig';
 import { isValidLength } from '../utils/validation';
 import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
+import ActionButton from '../components/ActionButton';
 
 // Personnel type for manager list
 interface Personnel {
@@ -30,12 +31,13 @@ export default function Managers() {
     const [entryTime, setEntryTime] = useState('');
     const [exitTime, setExitTime] = useState('');
     const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
+    const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const navigate = useNavigate();
 
     // Fetch manager records
     const fetchData = useCallback(async () => {
         try {
-            const res = await api.get('/managers/records');
+            const res = await api.get('/managers/records?includeDeleted=true');
             setRecords(res.data || []);
         } catch (err) {
             console.error('Müdür verisi yüklenemedi', err);
@@ -141,6 +143,28 @@ export default function Managers() {
         }
     }, [fetchData]);
 
+    const handleDelete = useCallback(async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            await api.delete(`/managers/records/${id}`);
+            fetchData();
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Silme işlemi başarısız');
+        }
+    }, [fetchData]);
+
+    const handleRestore = useCallback(async (id: string) => {
+        try {
+            await api.post(`/managers/records/${id}/restore`);
+            fetchData();
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Geri alma işlemi başarısız');
+        }
+    }, [fetchData]);
+
     // Memoized statistics
     const stats = useMemo(() => {
         const today = dayjs().format('YYYY-MM-DD');
@@ -165,6 +189,10 @@ export default function Managers() {
     const filteredRecords = useMemo(() => {
         const today = dayjs().format('YYYY-MM-DD');
         return records.filter(r => {
+            const isDeleted = Boolean(r.deleted_at);
+            if (recordVisibility === 'active' && isDeleted) return false;
+            if (recordVisibility === 'deleted' && !isDeleted) return false;
+
             if (filterMode === 'all') {
                 // Bugünün kayıtları: bugün giriş yapan veya bugün çıkış yapan
                 const entryDate = r.entry_date ? dayjs(r.entry_date).format('YYYY-MM-DD') : null;
@@ -179,7 +207,7 @@ export default function Managers() {
             }
             return true;
         });
-    }, [records, filterMode]);
+    }, [records, filterMode, recordVisibility]);
 
     // Memoized available managers for select
     const selectManagers = useMemo(() => {
@@ -311,6 +339,27 @@ export default function Managers() {
                             >
                                 Bugün Çıkış Yapanlar ({stats.todayExitCount})
                             </button>
+
+                            <button
+                                onClick={() => setRecordVisibility('all')}
+                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'all' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                Aktif + Silinen
+                            </button>
+
+                            <button
+                                onClick={() => setRecordVisibility('active')}
+                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'active' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                Sadece Aktif
+                            </button>
+
+                            <button
+                                onClick={() => setRecordVisibility('deleted')}
+                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'deleted' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                            >
+                                Sadece Silinen
+                            </button>
                         </div>
                     </div>
                     {loading ? (
@@ -337,23 +386,29 @@ export default function Managers() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
-                                            <tr key={rec.id} className="hover:bg-gray-50">
+                                            <tr key={rec.id} className={`hover:bg-gray-50 ${rec.deleted_at ? 'opacity-60' : ''}`}>
                                                 {/* İşlem */}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                     <div className="flex items-center gap-3">
-                                                        <button
+                                                        <ActionButton
                                                             onClick={() => openModalForEdit(rec)}
-                                                            className="text-blue-600 hover:text-blue-800 transition"
+                                                            variant="primary"
+                                                            disabled={Boolean(rec.deleted_at)}
                                                         >
                                                             Düzenle
-                                                        </button>
-                                                        {rec.status === 'inside' && (
-                                                            <button
+                                                        </ActionButton>
+                                                        {rec.status === 'inside' && !rec.deleted_at && (
+                                                            <ActionButton
                                                                 onClick={() => handleExit(rec.id)}
-                                                                className="text-green-600 hover:text-green-800 transition"
+                                                                variant="success"
                                                             >
                                                                 Çıkış Yap
-                                                            </button>
+                                                            </ActionButton>
+                                                        )}
+                                                        {rec.deleted_at ? (
+                                                            <ActionButton onClick={() => handleRestore(rec.id)} variant="success">Geri Al</ActionButton>
+                                                        ) : (
+                                                            <ActionButton onClick={() => handleDelete(rec.id)} variant="danger">Sil</ActionButton>
                                                         )}
                                                     </div>
                                                 </td>

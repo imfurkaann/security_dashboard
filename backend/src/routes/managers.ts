@@ -7,7 +7,9 @@ import {
     getManagerRecords,
     createManagerRecord,
     updateManagerRecord,
-    exitManager
+    exitManager,
+    deleteManagerRecord,
+    restoreManagerRecord
 } from '../controllers/managerController';
 import { authMiddleware } from '../middleware/auth';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
@@ -34,5 +36,11 @@ router.put('/records/:id', updateManagerRecord);
 
 // Exit manager
 router.post('/records/:id/exit', exitManager);
+
+// Soft delete manager record
+router.delete('/records/:id', deleteManagerRecord);
+
+// Restore manager record
+router.post('/records/:id/restore', restoreManagerRecord);
 
 export default router;

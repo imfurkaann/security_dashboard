@@ -9,8 +9,12 @@ import { getClientIp } from '../middleware/rateLimiter';
  * Get all manager records with joins
  * GET /api/managers/records
  */
-export const getManagerRecords = async (_req: Request, res: Response): Promise<void> => {
+export const getManagerRecords = async (req: Request, res: Response): Promise<void> => {
     try {
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const deletedAtSelect = includeDeleted ? 'mr.deleted_at,' : '';
+        const deletedAtFilter = includeDeleted ? '' : 'WHERE mr.deleted_at IS NULL';
+
         const query = `
             SELECT
                 mr.id,
@@ -23,6 +27,7 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
                 mr.status,
                 mr.notes,
                 mr.created_at,
+                ${deletedAtSelect}
                 m.first_name as manager_first_name,
                 m.last_name as manager_last_name,
                 m.title as manager_title,
@@ -38,7 +43,7 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
             LEFT JOIN managers m ON mr.manager_id = m.id
             LEFT JOIN personnel pe ON mr.entry_by = pe.id
             LEFT JOIN personnel px ON mr.exit_by = px.id
-            WHERE mr.deleted_at IS NULL
+            ${deletedAtFilter}
             ORDER BY mr.entry_date DESC, mr.entry_time DESC
             LIMIT 1000
         `;
@@ -58,6 +63,7 @@ export const getManagerRecords = async (_req: Request, res: Response): Promise<v
             exit_time: row.exit_time,
             status: row.status,
             notes: row.notes,
+            deleted_at: row.deleted_at || null,
             entry_by: (row.entry_by_first_name || row.entry_by_last_name) ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim() : null,
             exit_by: (row.exit_by_first_name || row.exit_by_last_name) ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim() : null,
             created_at: row.created_at
@@ -556,5 +562,107 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
     } catch (error) {
         console.error('Update manager record error:', error);
         res.status(500).json({ success: false, message: 'Kayıt güncellenirken hata oluştu' });
+    }
+};
+
+/**
+ * Soft delete manager record
+ * DELETE /api/managers/records/:id
+ */
+export const deleteManagerRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM managers_records WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        if (existing.rows[0].deleted_at) {
+            res.status(400).json({ success: false, message: 'Kayıt zaten silinmiş' });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE managers_records
+             SET deleted_at = CURRENT_TIMESTAMP,
+                 updated_at = now()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'managers_records',
+            id,
+            'SOFT_DELETE',
+            { deleted_at: null },
+            { deleted_at: 'CURRENT_TIMESTAMP' },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, message: 'Kayıt silindi' });
+    } catch (error) {
+        console.error('Delete manager record error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt silinirken hata oluştu' });
+    }
+};
+
+/**
+ * Restore manager record
+ * POST /api/managers/records/:id/restore
+ */
+export const restoreManagerRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM managers_records WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        if (!existing.rows[0].deleted_at) {
+            res.status(400).json({ success: false, message: 'Kayıt zaten aktif' });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE managers_records
+             SET deleted_at = NULL,
+                 updated_at = now()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'managers_records',
+            id,
+            'UPDATE',
+            { deleted_at: 'TIMESTAMP' },
+            { deleted_at: null },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, message: 'Kayıt geri alındı' });
+    } catch (error) {
+        console.error('Restore manager record error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });
     }
 };
