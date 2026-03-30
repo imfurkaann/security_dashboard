@@ -1,21 +1,20 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import type { User, VehicleUsage } from '../types';
-import { STORAGE_KEYS, ROLE_LABELS } from '../constants';
-
-// Logout Loading Overlay Component
-function LogoutOverlay() {
-    return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
-            <div className="bg-gray-800 rounded-xl p-8 shadow-2xl flex flex-col items-center gap-4 border border-gray-700">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
-                <div className="text-white text-lg font-medium">Veriler kaydediliyor...</div>
-                <div className="text-gray-400 text-sm">Lütfen bekleyin</div>
-            </div>
-        </div>
-    );
-}
+import type { VehicleUsage, VisitorRecord } from '../types';
+import { STORAGE_KEYS } from '../constants';
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+    LineChart,
+    Line
+} from 'recharts';
 
 // Stat Card Component
 interface StatCardProps {
@@ -28,13 +27,13 @@ interface StatCardProps {
 
 function StatCard({ title, value, gradient, iconBgColor, icon }: StatCardProps) {
     return (
-        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow-lg p-6`}>
+        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow p-3`}>
             <div className="flex items-center justify-between">
                 <div>
-                    <p className="text-sm font-medium opacity-90">{title}</p>
-                    <p className="text-3xl font-bold text-white mt-2">{value}</p>
+                    <p className="text-xs font-medium opacity-90">{title}</p>
+                    <p className="text-xl font-bold text-white mt-1">{value}</p>
                 </div>
-                <div className={`${iconBgColor} p-3 rounded-lg`}>
+                <div className={`${iconBgColor} p-2 rounded-lg`}>
                     {icon}
                 </div>
             </div>
@@ -42,73 +41,36 @@ function StatCard({ title, value, gradient, iconBgColor, icon }: StatCardProps) 
     );
 }
 
-// Navigation Card Component
-interface NavCardProps {
-    title: string;
-    description: string;
-    gradient: string;
-    hoverGradient: string;
-    icon: React.ReactNode;
-    onClick: () => void;
-}
-
-function NavCard({ title, description, gradient, hoverGradient, icon, onClick }: NavCardProps) {
-    return (
-        <button
-            onClick={onClick}
-            className={`bg-gradient-to-br ${gradient} ${hoverGradient} p-6 rounded-lg shadow-lg transition-all transform hover:scale-105`}
-        >
-            <div className="text-white">
-                {icon}
-                <h3 className="text-xl font-bold mb-2">{title}</h3>
-                <p className="opacity-90">{description}</p>
-            </div>
-        </button>
-    );
-}
-
 // Icons
 const VehicleIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
     </svg>
 );
 
 const VisitorIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
     </svg>
 );
 
 const ManagerIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
     </svg>
 );
 
-const IncidentIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-);
-
 const FireAlarmIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
     </svg>
 );
 
-const SgkIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size} mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-    </svg>
-);
-
 export default function Dashboard() {
-    const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
+    const [visitorRecords, setVisitorRecords] = useState<VisitorRecord[]>([]);
     const [todayAlarms, setTodayAlarms] = useState(0);
     const [visitorsInside, setVisitorsInside] = useState(0);
     const [managersInside, setManagersInside] = useState(0);
@@ -123,24 +85,19 @@ export default function Dashboard() {
         }
 
         try {
-            const [userRes, vehiclesRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
-                api.get('/auth/me'),
+            const [vehiclesRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
                 api.get('/vehicles/records'),
                 api.get('/visitors/records'),
                 api.get('/managers/records'),
                 api.get('/fire-alarms/records'),
             ]);
 
-            // User
-            if (userRes.data?.data) {
-                setUser(userRes.data.data);
-            }
-
             // Vehicles
             setUsages(vehiclesRes.data || []);
 
             // Visitors inside
             const visitors = visitorsRes.data || [];
+            setVisitorRecords(visitors);
             setVisitorsInside(visitors.filter((v: { status: string }) => v.status === 'inside').length);
 
             // Managers inside
@@ -170,33 +127,107 @@ export default function Dashboard() {
         fetchAllData();
     }, [fetchAllData]);
 
-    const [logoutLoading, setLogoutLoading] = useState(false);
-
-    const handleLogout = async () => {
-        setLogoutLoading(true);
-        try {
-            await api.post('/auth/logout', {});
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            localStorage.removeItem(STORAGE_KEYS.TOKEN);
-            localStorage.removeItem(STORAGE_KEYS.USER);
-            navigate('/login');
-        }
-    };
-
     // Calculate stats
     const vehiclesInUse = usages.filter(u => u.status === 'in_use').length;
 
-    // Get role badge color
-    const getRoleBadgeClass = (role: string) => {
-        const classes: Record<string, string> = {
-            admin: 'bg-red-500/20 text-red-400',
-            manager: 'bg-blue-500/20 text-blue-400',
-            security: 'bg-green-500/20 text-green-400',
-        };
-        return classes[role] || classes.security;
+    const getVisitorTotalCount = (personCount: number | null | undefined) => {
+        if (typeof personCount === 'number' && personCount > 0) {
+            // person_count yaninda gelen kisi sayisi oldugu icin ana ziyaretciyi de ekliyoruz.
+            return personCount + 1;
+        }
+        return 1;
     };
+
+    const topVehicleUsers = useMemo(() => {
+        const counts: Record<string, number> = {};
+
+        usages.forEach((usage) => {
+            if (!usage.manager) return;
+            counts[usage.manager] = (counts[usage.manager] || 0) + 1;
+        });
+
+        return Object.entries(counts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 6);
+    }, [usages]);
+
+    const topUsedVehicles = useMemo(() => {
+        const counts: Record<string, number> = {};
+
+        usages.forEach((usage) => {
+            if (!usage.vehicle_plate) return;
+            counts[usage.vehicle_plate] = (counts[usage.vehicle_plate] || 0) + 1;
+        });
+
+        return Object.entries(counts)
+            .map(([plate, count]) => ({ plate, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 6);
+    }, [usages]);
+
+    const mostVisitedPeople = useMemo(() => {
+        const counts: Record<string, number> = {};
+
+        visitorRecords.forEach((record) => {
+            const target = record.visiting_person?.trim();
+            if (!target) return;
+            const visitorCount = getVisitorTotalCount(record.person_count);
+            counts[target] = (counts[target] || 0) + visitorCount;
+        });
+
+        return Object.entries(counts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 6);
+    }, [visitorRecords]);
+
+    const twoWeekVisitorComparison = useMemo(() => {
+        const labels = ['Pzt', 'Sal', 'Car', 'Per', 'Cum', 'Cmt', 'Paz'];
+        const data = labels.map((label) => ({
+            day: label,
+            thisWeek: 0,
+            lastWeek: 0,
+            diff: 0
+        }));
+
+        const startOfWeek = (dateInput: Date) => {
+            const date = new Date(dateInput);
+            date.setHours(0, 0, 0, 0);
+            const day = (date.getDay() + 6) % 7;
+            date.setDate(date.getDate() - day);
+            return date;
+        };
+
+        const now = new Date();
+        const thisWeekStart = startOfWeek(now);
+        const nextWeekStart = new Date(thisWeekStart);
+        nextWeekStart.setDate(thisWeekStart.getDate() + 7);
+
+        const lastWeekStart = new Date(thisWeekStart);
+        lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+
+        visitorRecords.forEach((record) => {
+            if (!record.entry_date) return;
+            const entryDate = new Date(record.entry_date);
+            entryDate.setHours(0, 0, 0, 0);
+
+            const count = getVisitorTotalCount(record.person_count);
+            const dayIndex = (entryDate.getDay() + 6) % 7;
+
+            if (entryDate >= thisWeekStart && entryDate < nextWeekStart) {
+                data[dayIndex].thisWeek += count;
+            } else if (entryDate >= lastWeekStart && entryDate < thisWeekStart) {
+                data[dayIndex].lastWeek += count;
+            }
+        });
+
+        data.forEach((item) => {
+            item.diff = item.thisWeek - item.lastWeek;
+        });
+
+        return data;
+    }, [visitorRecords]);
 
     if (loading) {
         return (
@@ -211,123 +242,113 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-gray-900">
-            {logoutLoading && <LogoutOverlay />}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
                 {/* Header */}
-                <div className="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-2xl font-bold text-white">Hoş Geldiniz</h1>
-                            <p className="text-gray-400 mt-1">{user?.fullName}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            {/* Shift Status */}
-                            <div className="flex flex-col items-end text-right mr-2">
-                                <div className="text-xs text-gray-300 mb-1">Vardiya</div>
-                                <div className="inline-flex items-center gap-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-semibold shadow-sm">
-                                    <span className="w-2 h-2 bg-white rounded-full opacity-90" />
-                                    <span>Aktif</span>
-                                </div>
-                            </div>
-
-                            {/* Role Badge */}
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRoleBadgeClass(user?.role || '')}`}>
-                                {ROLE_LABELS[user?.role || ''] || 'GÜVENLİK'}
-                            </span>
-
-                            {/* Logout Button */}
-                            <button
-                                onClick={handleLogout}
-                                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                            >
-                                Çıkış Yap
-                            </button>
-                        </div>
-                    </div>
+                <div className="bg-gray-800 rounded-lg shadow p-4 mb-4">
+                    <h1 className="text-lg font-bold text-white">Dashboard</h1>
                 </div>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
                         gradient="from-blue-600 to-blue-700"
                         iconBgColor="bg-blue-500/30"
-                        icon={<VehicleIcon size={8} />}
+                        icon={<VehicleIcon size={6} />}
                     />
                     <StatCard
                         title="İçerideki Ziyaretçiler"
                         value={visitorsInside}
                         gradient="from-green-600 to-green-700"
                         iconBgColor="bg-green-500/30"
-                        icon={<VisitorIcon size={8} />}
+                        icon={<VisitorIcon size={6} />}
                     />
                     <StatCard
                         title="İçerideki Müdürler"
                         value={managersInside}
                         gradient="from-purple-600 to-purple-700"
                         iconBgColor="bg-purple-500/30"
-                        icon={<ManagerIcon size={8} />}
+                        icon={<ManagerIcon size={6} />}
                     />
                     <StatCard
                         title="Bugün Çalınan Alarmlar"
                         value={todayAlarms}
                         gradient="from-red-600 to-red-700"
                         iconBgColor="bg-red-500/30"
-                        icon={<FireAlarmIcon size={8} />}
+                        icon={<FireAlarmIcon size={6} />}
                     />
                 </div>
 
-                {/* Navigation Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <NavCard
-                        title="Araç Yönetimi"
-                        description="Araç kayıtlarını görüntüle ve yönet"
-                        gradient="from-blue-600 to-blue-700"
-                        hoverGradient="hover:from-blue-700 hover:to-blue-800"
-                        icon={<VehicleIcon />}
-                        onClick={() => navigate('/vehicles')}
-                    />
-                    <NavCard
-                        title="Ziyaretçi Yönetimi"
-                        description="Ziyaretçi kayıtlarını görüntüle ve yönet"
-                        gradient="from-green-600 to-green-700"
-                        hoverGradient="hover:from-green-700 hover:to-green-800"
-                        icon={<VisitorIcon />}
-                        onClick={() => navigate('/visitors')}
-                    />
-                    <NavCard
-                        title="SGK Kayıtları"
-                        description="SGK kayıtlarını görüntüle ve yönet"
-                        gradient="from-cyan-600 to-cyan-700"
-                        hoverGradient="hover:from-cyan-700 hover:to-cyan-800"
-                        icon={<SgkIcon />}
-                        onClick={() => navigate('/sgk')}
-                    />
-                    <NavCard
-                        title="Müdür Yönetimi"
-                        description="Müdürleri görüntüle ve yönet"
-                        gradient="from-indigo-600 to-indigo-700"
-                        hoverGradient="hover:from-indigo-700 hover:to-indigo-800"
-                        icon={<ManagerIcon />}
-                        onClick={() => navigate('/managers')}
-                    />
-                    <NavCard
-                        title="Olay Kayıtları"
-                        description="Olayları görüntüle ve yönet"
-                        gradient="from-yellow-600 to-yellow-700"
-                        hoverGradient="hover:from-yellow-700 hover:to-yellow-800"
-                        icon={<IncidentIcon />}
-                        onClick={() => navigate('/incidents')}
-                    />
-                    <NavCard
-                        title="Yangın Alarmları"
-                        description="Yangın alarm kayıtlarını görüntüle ve yönet"
-                        gradient="from-red-600 to-red-700"
-                        hoverGradient="hover:from-red-700 hover:to-red-800"
-                        icon={<FireAlarmIcon />}
-                        onClick={() => navigate('/fire-alarms')}
-                    />
+                {/* Analytics Charts */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+                    <div className="bg-gray-800 rounded-lg shadow p-4 border border-gray-700">
+                        <h2 className="text-sm font-semibold text-white mb-3">En Cok Arac Alan Kullanicilar</h2>
+                        {topVehicleUsers.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={topVehicleUsers}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                    <XAxis dataKey="name" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+                                    <YAxis stroke="#9CA3AF" allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#60A5FA" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <p className="text-gray-400 text-sm">Grafik verisi bulunamadi.</p>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-800 rounded-lg shadow p-4 border border-gray-700">
+                        <h2 className="text-sm font-semibold text-white mb-3">En Cok Kullanilan Araclar</h2>
+                        {topUsedVehicles.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={topUsedVehicles}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                    <XAxis dataKey="plate" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+                                    <YAxis stroke="#9CA3AF" allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#34D399" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <p className="text-gray-400 text-sm">Grafik verisi bulunamadi.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+                    <div className="bg-gray-800 rounded-lg shadow p-4 border border-gray-700">
+                        <h2 className="text-sm font-semibold text-white mb-3">En Cok Ziyaret Edilen Kisiler</h2>
+                        {mostVisitedPeople.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={mostVisitedPeople}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                    <XAxis dataKey="name" stroke="#9CA3AF" tick={{ fontSize: 11 }} />
+                                    <YAxis stroke="#9CA3AF" allowDecimals={false} />
+                                    <Tooltip />
+                                    <Bar dataKey="count" fill="#F59E0B" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <p className="text-gray-400 text-sm">Grafik verisi bulunamadi.</p>
+                        )}
+                    </div>
+
+                    <div className="bg-gray-800 rounded-lg shadow p-4 border border-gray-700">
+                        <h2 className="text-sm font-semibold text-white mb-3">Gecen Hafta ve Bu Hafta Ziyaretci Karsilastirmasi</h2>
+                        <ResponsiveContainer width="100%" height={280}>
+                            <LineChart data={twoWeekVisitorComparison}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                <XAxis dataKey="day" stroke="#9CA3AF" />
+                                <YAxis stroke="#9CA3AF" allowDecimals={false} />
+                                <Tooltip />
+                                <Legend />
+                                <Line type="monotone" dataKey="lastWeek" stroke="#94A3B8" strokeWidth={2} name="Gecen Hafta" />
+                                <Line type="monotone" dataKey="thisWeek" stroke="#22C55E" strokeWidth={2} name="Bu Hafta" />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
             </div>
         </div>

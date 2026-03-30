@@ -10,8 +10,12 @@ import { createVisitorRecordMessage, createVisitorExitMessage } from '../service
  * Get all visitor records with joins
  * GET /api/visitors/records
  */
-export const getVisitorRecords = async (_req: Request, res: Response): Promise<void> => {
+export const getVisitorRecords = async (req: Request, res: Response): Promise<void> => {
     try {
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
+        const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
+
         const query = `
             SELECT 
                 vr.id,
@@ -30,6 +34,7 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
                 vr.exit_time,
                 vr.status,
                 vr.created_at,
+                ${deletedAtSelect}
                 pe.first_name as entry_by_first_name,
                 pe.last_name as entry_by_last_name,
                 px.first_name as exit_by_first_name,
@@ -37,7 +42,7 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
             FROM visitor_records vr
             LEFT JOIN personnel pe ON vr.entry_by = pe.id
             LEFT JOIN personnel px ON vr.exit_by = px.id
-            WHERE vr.deleted_at IS NULL
+            ${deletedAtFilter}
             ORDER BY vr.entry_date DESC, vr.entry_time DESC
             LIMIT 1000
         `;
@@ -59,6 +64,7 @@ export const getVisitorRecords = async (_req: Request, res: Response): Promise<v
             exit_date: row.exit_date,
             exit_time: row.exit_time,
             status: row.status,
+            deleted_at: row.deleted_at || null,
             entry_by: (row.entry_by_first_name || row.entry_by_last_name) ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim() : null,
             exit_by: (row.exit_by_first_name || row.exit_by_last_name) ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim() : null,
             created_at: row.created_at
@@ -421,5 +427,107 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
     } catch (error) {
         console.error('Exit visitor error:', error);
         res.status(500).json({ success: false, message: 'Çıkış kaydedilirken hata oluştu' });
+    }
+};
+
+/**
+ * Soft delete visitor record
+ * DELETE /api/visitors/records/:id
+ */
+export const deleteVisitorRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM visitor_records WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        if (existing.rows[0].deleted_at) {
+            res.status(400).json({ success: false, message: 'Kayıt zaten silinmiş' });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE visitor_records
+             SET deleted_at = CURRENT_TIMESTAMP,
+                 updated_at = now()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'visitor_records',
+            id,
+            'SOFT_DELETE',
+            { deleted_at: null },
+            { deleted_at: 'CURRENT_TIMESTAMP' },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, message: 'Kayıt silindi' });
+    } catch (error) {
+        console.error('Delete visitor record error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt silinirken hata oluştu' });
+    }
+};
+
+/**
+ * Restore visitor record
+ * POST /api/visitors/records/:id/restore
+ */
+export const restoreVisitorRecord = async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    const userId = req.user?.userId || null;
+    const clientIp = getClientIp(req);
+
+    try {
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const existing = await pool.query('SELECT id, deleted_at FROM visitor_records WHERE id = $1', [id]);
+        if (existing.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        if (!existing.rows[0].deleted_at) {
+            res.status(400).json({ success: false, message: 'Kayıt zaten aktif' });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE visitor_records
+             SET deleted_at = NULL,
+                 updated_at = now()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'visitor_records',
+            id,
+            'UPDATE',
+            { deleted_at: 'TIMESTAMP' },
+            { deleted_at: null },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, message: 'Kayıt geri alındı' });
+    } catch (error) {
+        console.error('Restore visitor record error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });
     }
 };

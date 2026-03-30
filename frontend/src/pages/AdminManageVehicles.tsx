@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { Vehicle } from '../types';
 import { API_URL } from '../constants';
+import ActionButton from '../components/ActionButton';
 
 interface VehicleFormData {
     plate: string;
@@ -174,18 +175,20 @@ export default function AdminManageVehicles() {
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <button
+                                    <ActionButton
                                         onClick={() => handleEdit(vehicle)}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                                        variant="primary"
+                                        className="flex-1"
                                     >
                                         Düzenle
-                                    </button>
-                                    <button
+                                    </ActionButton>
+                                    <ActionButton
                                         onClick={() => handleDelete(vehicle.id)}
-                                        className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium"
+                                        variant="danger"
+                                        className="flex-1"
                                     >
                                         Sil
-                                    </button>
+                                    </ActionButton>
                                 </div>
                             </div>
                         ))}

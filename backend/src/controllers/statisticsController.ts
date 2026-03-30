@@ -10,7 +10,7 @@ export const getGeneralStats = async (_req: Request, res: Response) => {
             // Bugünkü istatistikler
             const todayStats = await client.query(`
                 SELECT 
-                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date = CURRENT_DATE AND deleted_at IS NULL) as today_visitors,
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE entry_date = CURRENT_DATE AND deleted_at IS NULL) as today_visitors,
                     (SELECT COUNT(*) FROM vehicle_records WHERE given_date = CURRENT_DATE AND deleted_at IS NULL) as today_vehicles,
                     (SELECT COUNT(*) FROM managers_records WHERE entry_date = CURRENT_DATE AND deleted_at IS NULL) as today_managers,
                     (SELECT COUNT(*) FROM fire_alarms WHERE alarm_time::date = CURRENT_DATE AND deleted_at IS NULL) as today_alarms,
@@ -20,7 +20,7 @@ export const getGeneralStats = async (_req: Request, res: Response) => {
             // Bu ayki istatistikler
             const monthStats = await client.query(`
                 SELECT 
-                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_visitors,
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_visitors,
                     (SELECT COUNT(*) FROM vehicle_records WHERE EXTRACT(MONTH FROM given_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM given_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_vehicles,
                     (SELECT COUNT(*) FROM managers_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as month_managers
             `);
@@ -28,7 +28,7 @@ export const getGeneralStats = async (_req: Request, res: Response) => {
             // Aktif durumlar
             const activeStats = await client.query(`
                 SELECT 
-                    (SELECT COUNT(*) FROM visitor_records WHERE status = 'inside' AND deleted_at IS NULL) as active_visitors,
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE status = 'inside' AND deleted_at IS NULL) as active_visitors,
                     (SELECT COUNT(*) FROM vehicle_records WHERE status = 'in_use' AND deleted_at IS NULL) as active_vehicles,
                     (SELECT COUNT(*) FROM managers_records WHERE status = 'inside' AND deleted_at IS NULL) as active_managers
             `);
@@ -64,7 +64,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         entry_date::text as date,
                         COUNT(*) as count,
-                        SUM(person_count) as total_persons
+                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
                     WHERE entry_date >= CURRENT_DATE - $1::integer
                       AND deleted_at IS NULL
@@ -76,7 +76,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         DATE_TRUNC('week', entry_date)::date::text as date,
                         COUNT(*) as count,
-                        SUM(person_count) as total_persons
+                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
                     WHERE entry_date >= CURRENT_DATE - $1::integer
                       AND deleted_at IS NULL
@@ -88,7 +88,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         TO_CHAR(entry_date, 'YYYY-MM') as date,
                         COUNT(*) as count,
-                        SUM(person_count) as total_persons
+                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
                     WHERE entry_date >= CURRENT_DATE - $1::integer
                       AND deleted_at IS NULL
@@ -106,7 +106,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     EXTRACT(DOW FROM entry_date) as day_of_week,
                     EXTRACT(HOUR FROM entry_time::time) as hour,
                     COUNT(*) as visit_count,
-                    SUM(person_count) as total_persons
+                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
                 WHERE entry_date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
@@ -156,7 +156,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                 SELECT 
                     COALESCE(visiting_person, 'Belirtilmemiş') as host,
                     COUNT(*) as visit_count,
-                    SUM(person_count) as total_persons
+                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
                 WHERE entry_date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
@@ -170,7 +170,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                 SELECT 
                     entry_date::text as date,
                     COUNT(*) as count,
-                    SUM(person_count) as total_persons
+                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
                 WHERE entry_date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
@@ -184,7 +184,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                 SELECT 
                     entry_date::text as date,
                     COUNT(*) as count,
-                    SUM(person_count) as total_persons
+                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
                 WHERE entry_date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
@@ -202,7 +202,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                         ELSE 'Diğer'
                     END as category,
                     COUNT(*) as count,
-                    SUM(person_count) as total_persons
+                    SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
                 WHERE entry_date >= CURRENT_DATE - $1::integer
                   AND deleted_at IS NULL
@@ -722,8 +722,8 @@ export const getComparativeAnalysis = async (req: Request, res: Response) => {
             const comparison = await client.query(`
                 SELECT 
                     'visitors' as category,
-                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
-                    (SELECT COUNT(*) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND deleted_at IS NULL) as current_month,
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE EXTRACT(MONTH FROM entry_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month') AND EXTRACT(YEAR FROM entry_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') AND deleted_at IS NULL) as previous_month
                 UNION ALL
                 SELECT 
                     'vehicles' as category,
@@ -750,8 +750,8 @@ export const getComparativeAnalysis = async (req: Request, res: Response) => {
             const weeklyComparison = await client.query(`
                 SELECT 
                     'visitors' as category,
-                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
-                    (SELECT COUNT(*) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 14 AND entry_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 7 AND deleted_at IS NULL) as current_week,
+                    (SELECT COALESCE(SUM(COALESCE(person_count, 0) + 1), 0) FROM visitor_records WHERE entry_date >= CURRENT_DATE - 14 AND entry_date < CURRENT_DATE - 7 AND deleted_at IS NULL) as previous_week
                 UNION ALL
                 SELECT 
                     'vehicles' as category,

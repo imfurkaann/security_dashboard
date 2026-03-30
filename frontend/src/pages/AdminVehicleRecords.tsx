@@ -7,6 +7,7 @@ import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types'; import { API_URL } from '../constants';
+import ActionButton from '../components/ActionButton';
 const { RangePicker } = DatePicker;
 
 export default function AdminVehicleRecords() {
@@ -41,7 +42,7 @@ export default function AdminVehicleRecords() {
                 };
 
                 const [recordsRes, vehiclesRes] = await Promise.all([
-                    axios.get(`${API_URL}/vehicles/records`, config),
+                    axios.get(`${API_URL}/vehicles/records?includeDeleted=true`, config),
                     axios.get(`${API_URL}/vehicles`, config)
                 ]);
                 setRecords(recordsRes.data || []);
@@ -205,6 +206,34 @@ export default function AdminVehicleRecords() {
         });
     };
 
+    const handleDeleteRecord = async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.delete(`${API_URL}/vehicles/records/${id}`, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+        } catch (error) {
+            console.error('Kayıt silinemedi:', error);
+            alert('Kayıt silinirken bir hata oluştu');
+        }
+    };
+
+    const handleRestoreRecord = async (id: string) => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/vehicles/records/${id}/restore`, {}, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+        } catch (error) {
+            console.error('Kayıt geri alınamadı:', error);
+            alert('Kayıt geri alınırken bir hata oluştu');
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-100">
             {/* Header */}
@@ -233,7 +262,7 @@ export default function AdminVehicleRecords() {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                 </svg>
-                                Araçları Yönet
+                                Yeni Araç Ekle
                             </button>
                             <div className="text-sm text-gray-600">
                                 Toplam: <span className="font-bold text-gray-900">{filteredRecords.length}</span> kayıt
@@ -464,6 +493,7 @@ export default function AdminVehicleRecords() {
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
@@ -477,7 +507,14 @@ export default function AdminVehicleRecords() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {sortedFilteredRecords.map((record) => (
-                                            <tr key={record.id} className="hover:bg-gray-50">
+                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {record.deleted_at ? (
+                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                    ) : (
+                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center">
                                                         <div className="p-2 bg-blue-100 rounded">
@@ -565,6 +602,7 @@ export default function AdminVehicleRecords() {
                                                 <table className="min-w-full divide-y divide-gray-200">
                                                     <thead className="bg-gray-50">
                                                         <tr>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
@@ -578,7 +616,14 @@ export default function AdminVehicleRecords() {
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {dayGroup.records.map((record) => (
-                                                            <tr key={record.id} className="hover:bg-gray-50">
+                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    {record.deleted_at ? (
+                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
+                                                                    ) : (
+                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center">
                                                                         <div className="p-2 bg-blue-100 rounded">

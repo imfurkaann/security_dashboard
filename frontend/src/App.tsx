@@ -4,6 +4,8 @@ import trTR from 'antd/locale/tr_TR';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
+import AdminSidebarLayout from './components/AdminSidebarLayout';
+import UserSidebarLayout from './components/UserSidebarLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -47,121 +49,44 @@ function App() {
             } />
 
             {/* Admin Protected Routes */}
-            <Route path="/admin/dashboard" element={
+            <Route path="/admin" element={
               <AdminProtectedRoute>
-                <AdminDashboard />
+                <AdminSidebarLayout />
               </AdminProtectedRoute>
-            } />
-            <Route path="/admin/vehicle-records" element={
-              <AdminProtectedRoute>
-                <AdminVehicleRecords />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/manage-vehicles" element={
-              <AdminProtectedRoute>
-                <AdminManageVehicles />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/visitor-records" element={
-              <AdminProtectedRoute>
-                <AdminVisitorRecords />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/manager-records" element={
-              <AdminProtectedRoute>
-                <AdminManagerRecords />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/incident-records" element={
-              <AdminProtectedRoute>
-                <AdminIncidentRecords />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/fire-alarm-records" element={
-              <AdminProtectedRoute>
-                <AdminFireAlarmRecords />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/manage-personnel" element={
-              <AdminProtectedRoute>
-                <AdminManagePersonnel />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/manage-managers" element={
-              <AdminProtectedRoute>
-                <AdminManageManagers />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/export-data" element={
-              <AdminProtectedRoute>
-                <AdminExportData />
-              </AdminProtectedRoute>
-            } />
-            <Route path="/admin/statistics" element={
-              <AdminProtectedRoute>
-                <AdminStatistics />
-              </AdminProtectedRoute>
-            } />
+            }>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="vehicle-records" element={<AdminVehicleRecords />} />
+              <Route path="manage-vehicles" element={<AdminManageVehicles />} />
+              <Route path="visitor-records" element={<AdminVisitorRecords />} />
+              <Route path="manager-records" element={<AdminManagerRecords />} />
+              <Route path="incident-records" element={<AdminIncidentRecords />} />
+              <Route path="fire-alarm-records" element={<AdminFireAlarmRecords />} />
+              <Route path="manage-personnel" element={<AdminManagePersonnel />} />
+              <Route path="manage-managers" element={<AdminManageManagers />} />
+              <Route path="export-data" element={<AdminExportData />} />
+              <Route path="statistics" element={<AdminStatistics />} />
+            </Route>
 
             {/* Protected Routes - Authentication gerekli */}
-            <Route path="/dashboard" element={
+            <Route path="/" element={
               <ProtectedRoute>
-                <Dashboard />
+                <UserSidebarLayout />
               </ProtectedRoute>
-            } />
-            <Route path="/vehicles" element={
-              <ProtectedRoute>
-                <Vehicles />
-              </ProtectedRoute>
-            } />
-            <Route path="/vehicle-records" element={
-              <ProtectedRoute>
-                <VehicleRecords />
-              </ProtectedRoute>
-            } />
-            <Route path="/visitors" element={
-              <ProtectedRoute>
-                <Visitors />
-              </ProtectedRoute>
-            } />
-            <Route path="/visitor-records" element={
-              <ProtectedRoute>
-                <VisitorRecords />
-              </ProtectedRoute>
-            } />
-            <Route path="/managers" element={
-              <ProtectedRoute>
-                <Managers />
-              </ProtectedRoute>
-            } />
-            <Route path="/manager-records" element={
-              <ProtectedRoute>
-                <ManagerRecords />
-              </ProtectedRoute>
-            } />
-            <Route path="/incidents" element={
-              <ProtectedRoute>
-                <Incidents />
-              </ProtectedRoute>
-            } />
-            <Route path="/incident-records" element={
-              <ProtectedRoute>
-                <IncidentRecords />
-              </ProtectedRoute>
-            } />
-            <Route path="/fire-alarms" element={
-              <ProtectedRoute>
-                <FireAlarms />
-              </ProtectedRoute>
-            } />          <Route path="/fire-alarm-records" element={
-              <ProtectedRoute>
-                <FireAlarmRecords />
-              </ProtectedRoute>
-            } />          <Route path="/sgk" element={
-              <ProtectedRoute>
-                <Sgk />
-              </ProtectedRoute>
-            } />
+            }>
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="vehicles" element={<Vehicles />} />
+              <Route path="vehicle-records" element={<VehicleRecords />} />
+              <Route path="visitors" element={<Visitors />} />
+              <Route path="visitor-records" element={<VisitorRecords />} />
+              <Route path="managers" element={<Managers />} />
+              <Route path="manager-records" element={<ManagerRecords />} />
+              <Route path="incidents" element={<Incidents />} />
+              <Route path="incident-records" element={<IncidentRecords />} />
+              <Route path="fire-alarms" element={<FireAlarms />} />
+              <Route path="fire-alarm-records" element={<FireAlarmRecords />} />
+              <Route path="sgk" element={<Sgk />} />
+            </Route>
 
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/login" replace />} />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import type { Vehicle, VehicleUsage, Manager, VehicleFormData, VehicleFilterType } from '../types';
+import ActionButton from '../components/ActionButton';
 
 // Initial form state
 const INITIAL_FORM_DATA: VehicleFormData = {
@@ -33,7 +34,7 @@ export default function Vehicles() {
         try {
             const [vehiclesRes, recordsRes, managersRes] = await Promise.all([
                 api.get('/vehicles'),
-                api.get('/vehicles/records'),
+                api.get('/vehicles/records?includeDeleted=true'),
                 api.get('/vehicles/managers'),
             ]);
             setVehicles(vehiclesRes.data || []);
@@ -89,6 +90,28 @@ export default function Vehicles() {
             alert(err.response?.data?.message || 'İade kaydı başarısız');
         }
     }, [fetchData]);
+
+    const handleDeleteRecord = useCallback(async (usageId: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            await api.delete(`/vehicles/records/${usageId}`);
+            setUsages(prev => prev.map(usage => usage.id === usageId ? { ...usage, deleted_at: new Date().toISOString() } : usage));
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'Kayıt silinemedi');
+        }
+    }, []);
+
+    const handleRestoreRecord = useCallback(async (usageId: string) => {
+        try {
+            await api.post(`/vehicles/records/${usageId}/restore`);
+            setUsages(prev => prev.map(usage => usage.id === usageId ? { ...usage, deleted_at: null } : usage));
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'Kayıt geri alınamadı');
+        }
+    }, []);
 
     // Reset form to initial state
     const resetForm = useCallback(() => {
@@ -325,22 +348,19 @@ export default function Vehicles() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredUsages.map((usage) => (
-                                            <tr key={usage.id} className="hover:bg-gray-50">
+                                            <tr key={usage.id} className={`hover:bg-gray-50 ${usage.deleted_at ? 'opacity-60' : ''}`}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                     <div className="flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => openEditModal(usage)}
-                                                            className="text-blue-600 hover:text-blue-800 transition"
-                                                        >
-                                                            Düzenle
-                                                        </button>
-                                                        {usage.status === 'in_use' && (
-                                                            <button
-                                                                onClick={() => handleReturn(usage.id)}
-                                                                className="text-green-600 hover:text-green-800 transition"
-                                                            >
-                                                                Teslim Al
-                                                            </button>
+                                                        {usage.deleted_at ? (
+                                                            <ActionButton onClick={() => handleRestoreRecord(usage.id)} variant="success">Geri Al</ActionButton>
+                                                        ) : (
+                                                            <>
+                                                                <ActionButton onClick={() => openEditModal(usage)} variant="primary">Düzenle</ActionButton>
+                                                                {usage.status === 'in_use' && (
+                                                                    <ActionButton onClick={() => handleReturn(usage.id)} variant="success">Teslim Al</ActionButton>
+                                                                )}
+                                                                <ActionButton onClick={() => handleDeleteRecord(usage.id)} variant="danger">Sil</ActionButton>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>
