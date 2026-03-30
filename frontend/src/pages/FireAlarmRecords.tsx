@@ -396,7 +396,6 @@ export default function FireAlarmRecords() {
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -410,13 +409,6 @@ export default function FireAlarmRecords() {
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {sortedFilteredRecords.map(record => (
                                         <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {record.deleted_at ? (
-                                                    <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
-                                                ) : (
-                                                    <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
-                                                )}
-                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                             </td>
@@ -469,18 +461,17 @@ export default function FireAlarmRecords() {
                                     </div>
                                     {Object.keys(groupedRecords[monthKey]).sort().reverse().map(dayKey => (
                                         <div key={dayKey} className="border-b border-gray-100 last:border-b-0">
-                                            <div className="bg-red-50 px-6 py-2 border-b border-red-100">
+                                            <div className="sticky top-14 bg-red-50 px-6 py-2 border-b border-red-100 z-9 shadow-sm">
                                                 <h4 className="text-sm font-medium text-red-800">{getDayName(dayKey)}</h4>
                                             </div>
                                             <div className="overflow-x-auto">
                                                 <table className="min-w-full">
-                                                    <thead className="bg-gray-50">
+                                                    <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Alarm Zamanı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çözüm Zamanı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
@@ -491,24 +482,17 @@ export default function FireAlarmRecords() {
                                                         {groupedRecords[monthKey][dayKey].map(record => (
                                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.deleted_at ? (
-                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
-                                                                    ) : (
-                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                                 </td>
                                                                 <td className="px-6 py-4">
                                                                     <div className="text-sm font-bold text-gray-900">{record.location}</div>
                                                                     {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-8 bg-white">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                                     <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-24 z-8 bg-white">
                                                                     {record.resolution_time ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>

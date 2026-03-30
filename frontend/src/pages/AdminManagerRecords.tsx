@@ -436,7 +436,6 @@ export default function AdminManagerRecords() {
                                 <table className="min-w-full table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -448,13 +447,6 @@ export default function AdminManagerRecords() {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {sortedFilteredRecords.map((record) => (
                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.deleted_at ? (
-                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
-                                                    ) : (
-                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
-                                                    )}
-                                                </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-indigo-100 rounded">
@@ -524,19 +516,20 @@ export default function AdminManagerRecords() {
                                         {monthGroup.dayGroups.map((dayGroup) => (
                                             <div key={dayGroup.dayKey} className="border-b border-gray-200 last:border-b-0">
                                                 {/* Day Header */}
-                                                <div className="bg-gray-100 px-6 py-2 border-b border-gray-200">
+                                                <div className="sticky top-14 bg-gray-100 px-6 py-2 border-l-4 border-blue-500 z-9 shadow-sm">
+
                                                     <h3 className="text-sm font-semibold text-gray-700">{dayGroup.dayLabel}</h3>
                                                     <p className="text-xs text-gray-500">{dayGroup.records.length} kayıt</p>
                                                 </div>
 
                                                 {/* Records Table */}
                                                 <table className="min-w-full table-auto divide-y divide-gray-200">
-                                                    <thead className="bg-gray-50">
+                                                    <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Giriş Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çıkış Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
@@ -545,13 +538,6 @@ export default function AdminManagerRecords() {
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {dayGroup.records.map((record) => (
                                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.deleted_at ? (
-                                                                        <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success">Geri Al</ActionButton>
-                                                                    ) : (
-                                                                        <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger">Sil</ActionButton>
-                                                                    )}
-                                                                </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="p-2 bg-indigo-100 rounded">
@@ -568,12 +554,12 @@ export default function AdminManagerRecords() {
                                                                     </div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4">
+                                                                <td className="px-6 py-4 sticky left-0 z-8 bg-white">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4">
+                                                                <td className="px-6 py-4 sticky left-24 z-8 bg-white">
                                                                     {record.exit_date ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
