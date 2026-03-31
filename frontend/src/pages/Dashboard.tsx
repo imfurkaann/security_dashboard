@@ -15,6 +15,7 @@ import {
     LineChart,
     Line
 } from 'recharts';
+import { AlertCircle, CheckCircle, Lock, LogOut, Shield } from 'lucide-react';
 
 // Stat Card Component
 interface StatCardProps {
@@ -248,8 +249,8 @@ export default function Dashboard() {
                     <h1 className="text-lg font-bold text-white">Dashboard</h1>
                 </div>
 
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                {/* Stats Cards - Araç ve Ziyaretçi Bilgileri */}
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
@@ -278,6 +279,58 @@ export default function Dashboard() {
                         iconBgColor="bg-red-500/30"
                         icon={<FireAlarmIcon size={6} />}
                     />
+                </div>
+
+                {/* Önemli Uyarılar */}
+                <div className="bg-amber-50 rounded-lg shadow-lg p-6 mb-6 border-l-4 border-amber-500">
+                    <div className="flex items-start gap-4">
+                        <AlertCircle className="text-amber-600 flex-shrink-0 mt-1" size={24} />
+                        <div className="flex-1">
+                            <h2 className="text-amber-900 font-bold text-lg mb-4">ÖNEMLİ UYARILAR</h2>
+                            <div className="space-y-3 text-sm text-amber-900">
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Sistemi ilk defa kullanacaksanız bilen çalışma arkadaşlarınızdan lütfen bilgilendirmeler alınız.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Sisteme giriş yaptığınız andan itibaren yapılan tüm işlemler giriş yapan kişi adına kaydedilmektedir. O yüzden giriş bilgilerinizi güvenli şekilde saklamanız önemlidir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Uygulama içerisinde gerçekleştirilen her türlü işlem kayıt altına alınmaktadır. Giriş çıkış bilgileri, hatalı şifre giriş denemeleri, alınan kayıt bilgileri, sistemde yapılan her bir tıklama, sisteme girilmeye çalışılan cihaz bilgileri vb. tarih ve saat bilgisiyle kaydedilmektedir. Yönetici ilgili durumlarda bu verilere erişebilmektedir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Yapılan her türlü veri girişi, güncelleme ve rapor alma işlemleri sistem günlüğüne işlenmektedir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Kullanım sırasında karşılaşılan her türlü teknik hata veya aksaklık vakit kaybetmeden yöneticiye bildirilmelidir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Sistemin daha verimli çalışması ve geliştirilmesi adına kullanıcı önerilerinin yöneticiye iletilmesi beklenmektedir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Veri girişlerinin doğru ve eksiksiz yapılması zorunludur; hatalı girilen işlemler veri güvenliği için sistemden tamamen silinmemektedir. Yanlış veri girişi, sistemin ürettiği istatistiklerin bozulmasına ve hatalı sonuçlar alınmasına neden olmaktadır.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Uygulamadan ayrılmadan önce oturumun güvenli bir şekilde sonlandırılması için mutlaka "Çıkış Yap" butonu kullanılmalıdır.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Şifrenin unutulması durumunda veya sisteme ilk girişte tanımlanan geçici şifrenin kişisel bir şifreyle değiştirilmesi için yönetici ile iletişime geçilmesi gerekmektedir.</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <p>Sistem verilerinin kopyaları alınarak cihaz dışına aktarılması, başka kişi ve kurumlarla paylaşılması yasaktır.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -337,15 +337,7 @@ export default function FireAlarms() {
                         <button onClick={() => setFilter('resolved')} className={`px-4 py-2 rounded-lg transition ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Çözülen Alarmlar ({records.filter(r => r.resolved).length})
                         </button>
-                        <button onClick={() => setRecordVisibility('all')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'all' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Aktif + Silinen
-                        </button>
-                        <button onClick={() => setRecordVisibility('active')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'active' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Sadece Aktif
-                        </button>
-                        <button onClick={() => setRecordVisibility('deleted')} className={`px-4 py-2 rounded-lg transition ${recordVisibility === 'deleted' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Sadece Silinen
-                        </button>
+
                     </div>
                 </div>
 
