@@ -4,12 +4,11 @@ import {
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
 } from 'recharts';
 import {
-    Users, Car, UserCheck, Flame, FileText, TrendingUp, TrendingDown,
-    Calendar, RefreshCw, ChevronDown
+    Users, Car, Flame, TrendingUp, TrendingDown,
+    RefreshCw
 } from 'lucide-react';
 import api from '../utils/api';
 import WordCloud from '../components/WordCloud';
-import CalendarHeatmap from '../components/CalendarHeatmap';
 
 // Renk paleti
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
@@ -37,15 +36,13 @@ interface TrendData {
 
 const AdminStatistics = () => {
     const [loading, setLoading] = useState(true);
-    const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly'>('daily');
     const [days, setDays] = useState(30);
-    const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'vehicles' | 'managers' | 'incidents' | 'fire-alarms'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'vehicles' | 'fire-alarms' | 'incidents'>('overview');
 
     // Data states
     const [generalStats, setGeneralStats] = useState<any>(null);
     const [visitorTrends, setVisitorTrends] = useState<any>({ trend: [], hourlyHeatmap: [], avgDuration: {}, durationDistribution: [], hostDistribution: [], electricStationVisitors: [], subcontractorVisitors: [], categoryComparison: [] });
     const [vehicleStats, setVehicleStats] = useState<any>({ trend: [], topVehicles: [], topManagers: [], statusDistribution: [], topDestinations: [], hourlyUsage: [], hourlyHeatmap: [], personnelVehicleUsage: [] });
-    const [managerStats, setManagerStats] = useState<any>({ trend: [], topManagers: [], hourlyDistribution: [] });
     const [incidentStats, setIncidentStats] = useState<any>({ monthlyTrend: [], typeDistribution: [], severityDistribution: [] });
     const [fireAlarmStats, setFireAlarmStats] = useState<any>({ dailyTrend: [], monthlyTrend: [], locationDistribution: [], resolutionStats: [], hourlyTrend: [] });
     const [comparison, setComparison] = useState<any>([]);
@@ -53,11 +50,10 @@ const AdminStatistics = () => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const [generalRes, visitorRes, vehicleRes, managerRes, incidentRes, fireRes, compRes] = await Promise.all([
+            const [generalRes, visitorRes, vehicleRes, incidentRes, fireRes, compRes] = await Promise.all([
                 api.get('/statistics/general'),
-                api.get(`/statistics/visitors?period=${period}&days=${days}`),
-                api.get(`/statistics/vehicles?period=${period}&days=${days}`),
-                api.get(`/statistics/managers?period=${period}&days=${days}`),
+                api.get(`/statistics/visitors?period=daily&days=${days}`),
+                api.get(`/statistics/vehicles?period=daily&days=${days}`),
                 api.get(`/statistics/incidents?days=${days}`),
                 api.get(`/statistics/fire-alarms?days=${days}`),
                 api.get('/statistics/comparison')
@@ -66,7 +62,6 @@ const AdminStatistics = () => {
             setGeneralStats(generalRes.data.data);
             setVisitorTrends(visitorRes.data.data);
             setVehicleStats(vehicleRes.data.data);
-            setManagerStats(managerRes.data.data);
             setIncidentStats(incidentRes.data.data);
             setFireAlarmStats(fireRes.data.data);
             setComparison(compRes.data.data);
@@ -75,7 +70,7 @@ const AdminStatistics = () => {
         } finally {
             setLoading(false);
         }
-    }, [period, days]);
+    }, [days]);
 
     useEffect(() => {
         fetchData();
@@ -98,16 +93,6 @@ const AdminStatistics = () => {
     const getChangePercent = (current: number, previous: number) => {
         if (previous === 0) return current > 0 ? 100 : 0;
         return Math.round(((current - previous) / previous) * 100);
-    };
-
-    // Dinamik etiketler için yardımcı fonksiyonlar
-    const getPeriodLabel = () => {
-        switch (period) {
-            case 'daily': return 'Günlük';
-            case 'weekly': return 'Haftalık';
-            case 'monthly': return 'Aylık';
-            default: return 'Günlük';
-        }
     };
 
     const getDaysLabel = () => {
@@ -183,20 +168,6 @@ const AdminStatistics = () => {
             {/* Kontroller */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
                 <div className="flex flex-wrap items-center gap-4">
-                    {/* Periyot Seçimi */}
-                    <div className="flex items-center gap-2">
-                        <Calendar size={18} className="text-gray-400" />
-                        <select
-                            value={period}
-                            onChange={(e) => setPeriod(e.target.value as any)}
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            <option value="daily">Günlük</option>
-                            <option value="weekly">Haftalık</option>
-                            <option value="monthly">Aylık</option>
-                        </select>
-                    </div>
-
                     {/* Gün Aralığı */}
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">Son</span>
@@ -254,9 +225,9 @@ const AdminStatistics = () => {
                 <>
                     {/* Dönem Bazlı Değişim Kartları */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-sm text-blue-700">📅 <strong>{getDaysLabel()}</strong> verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                        <p className="text-sm text-blue-700">📅 <strong>{getDaysLabel()}</strong> verilerini görüntülüyorsunuz</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                         {/* Ziyaretçi Değişimi */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <div className="flex items-center justify-between mb-3">
@@ -264,8 +235,13 @@ const AdminStatistics = () => {
                                     <Users size={24} className="text-blue-600" />
                                 </div>
                                 {(() => {
-                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.current_week) || 0;
-                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.previous_week) || 0;
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                    const current = parseInt(record?.[currentKey]) || 0;
+                                    const previous = parseInt(record?.[previousKey]) || 0;
                                     const change = getChangePercent(current, previous);
                                     return (
                                         <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -276,11 +252,23 @@ const AdminStatistics = () => {
                                 })()}
                             </div>
                             <p className="text-2xl font-bold text-gray-800">
-                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.current_week) || 0}
+                                {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                    return parseInt(record?.[currentKey]) || 0;
+                                })()}
                             </p>
                             <p className="text-sm text-gray-500">{getComparisonLabel().current} Ziyaretçi</p>
                             <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'visitors')?.previous_week) || 0}
+                                {getComparisonLabel().previous}: {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                    return parseInt(record?.[previousKey]) || 0;
+                                })()}
                             </p>
                         </div>
 
@@ -291,8 +279,13 @@ const AdminStatistics = () => {
                                     <Car size={24} className="text-green-600" />
                                 </div>
                                 {(() => {
-                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.current_week) || 0;
-                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.previous_week) || 0;
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                    const current = parseInt(record?.[currentKey]) || 0;
+                                    const previous = parseInt(record?.[previousKey]) || 0;
                                     const change = getChangePercent(current, previous);
                                     return (
                                         <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -303,11 +296,23 @@ const AdminStatistics = () => {
                                 })()}
                             </div>
                             <p className="text-2xl font-bold text-gray-800">
-                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.current_week) || 0}
+                                {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                    return parseInt(record?.[currentKey]) || 0;
+                                })()}
                             </p>
                             <p className="text-sm text-gray-500">{getComparisonLabel().current} Araç</p>
                             <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'vehicles')?.previous_week) || 0}
+                                {getComparisonLabel().previous}: {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                    return parseInt(record?.[previousKey]) || 0;
+                                })()}
                             </p>
                         </div>
 
@@ -318,8 +323,13 @@ const AdminStatistics = () => {
                                     <Flame size={24} className="text-red-600" />
                                 </div>
                                 {(() => {
-                                    const current = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.current_week) || 0;
-                                    const previous = parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.previous_week) || 0;
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                    const current = parseInt(record?.[currentKey]) || 0;
+                                    const previous = parseInt(record?.[previousKey]) || 0;
                                     const change = getChangePercent(current, previous);
                                     return (
                                         <span className={`flex items-center text-sm font-medium ${change <= 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -330,80 +340,35 @@ const AdminStatistics = () => {
                                 })()}
                             </div>
                             <p className="text-2xl font-bold text-gray-800">
-                                {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.current_week) || 0}
+                                {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                    return parseInt(record?.[currentKey]) || 0;
+                                })()}
                             </p>
                             <p className="text-sm text-gray-500">{getComparisonLabel().current} Alarm</p>
                             <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {parseInt(comparison?.weeklyComparison?.find((c: any) => c.category === 'fire_alarms')?.previous_week) || 0}
+                                {getComparisonLabel().previous}: {(() => {
+                                    const comparisonType = getComparisonLabel().type;
+                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                    return parseInt(record?.[previousKey]) || 0;
+                                })()}
                             </p>
                         </div>
                     </div>
 
-                    {/* Aktif Durumlar */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-blue-100 text-sm">Şu An İçeride</p>
-                                    <p className="text-4xl font-bold mt-1">{parseInt(generalStats.active?.active_visitors) || 0}</p>
-                                    <p className="text-blue-100 text-sm mt-1">Ziyaretçi</p>
-                                </div>
-                                <Users size={48} className="text-blue-200 opacity-50" />
-                            </div>
-                        </div>
-                        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-green-100 text-sm">Kullanımda</p>
-                                    <p className="text-4xl font-bold mt-1">{parseInt(generalStats.active?.active_vehicles) || 0}</p>
-                                    <p className="text-green-100 text-sm mt-1">Araç</p>
-                                </div>
-                                <Car size={48} className="text-green-200 opacity-50" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Karşılaştırma Grafikleri */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        {/* Haftalık Karşılaştırma */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Haftalık Karşılaştırma</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={(comparison?.weeklyComparison || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
-                                    ...item,
-                                    current_week: parseInt(item.current_week) || 0,
-                                    previous_week: parseInt(item.previous_week) || 0
-                                }))}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis
-                                        dataKey="category"
-                                        tickFormatter={(v) => {
-                                            const labels: Record<string, string> = {
-                                                visitors: 'Ziyaretçi',
-                                                vehicles: 'Araç',
-                                                fire_alarms: 'Alarm'
-                                            };
-                                            return labels[v] || v;
-                                        }}
-                                    />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Legend />
-                                    <Bar dataKey="current_week" name={getComparisonLabel().current} fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="previous_week" name={getComparisonLabel().previous} fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Dönemsel Karşılaştırma */}
+                    {/* Dönemsel Karşılaştırma */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Dönemsel Karşılaştırma ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={(() => {
-                                    // Eğer 7 gün seçiliyse weekly, diğerleri için monthly kullan
-                                    const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = days === 7 ? 'current_week' : 'current_month';
-                                    const previousKey = days === 7 ? 'previous_week' : 'previous_month';
+                                    const comparisonData = days <= 14 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = days <= 14 ? 'current_week' : 'current_month';
+                                    const previousKey = days <= 14 ? 'previous_week' : 'previous_month';
 
                                     return (comparisonData || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
                                         ...item,
@@ -437,7 +402,7 @@ const AdminStatistics = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                         {/* Ziyaretçi Trendi */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Ziyaretçi Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Ziyaretçi Trendi ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={250}>
                                 <AreaChart data={visitorTrends.trend}>
                                     <defs>
@@ -464,7 +429,7 @@ const AdminStatistics = () => {
 
                         {/* Araç Trendi */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={250}>
                                 <AreaChart data={vehicleStats.trend}>
                                     <defs>
@@ -532,8 +497,9 @@ const AdminStatistics = () => {
                                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                                     <p className="text-3xl font-bold text-blue-600">
                                         {(() => {
-                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const comparisonType = getComparisonLabel().type;
+                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
                                             const visitorData = comparisonData?.find((c: any) => c.category === 'visitors');
                                             return parseInt(visitorData?.[currentKey]) || 0;
                                         })()}
@@ -543,8 +509,9 @@ const AdminStatistics = () => {
                                 <div className="text-center p-4 bg-green-50 rounded-lg">
                                     <p className="text-3xl font-bold text-green-600">
                                         {(() => {
-                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const comparisonType = getComparisonLabel().type;
+                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
                                             const vehicleData = comparisonData?.find((c: any) => c.category === 'vehicles');
                                             return parseInt(vehicleData?.[currentKey]) || 0;
                                         })()}
@@ -554,8 +521,9 @@ const AdminStatistics = () => {
                                 <div className="text-center p-4 bg-red-50 rounded-lg">
                                     <p className="text-3xl font-bold text-red-600">
                                         {(() => {
-                                            const comparisonData = days === 7 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = days === 7 ? 'current_week' : 'current_month';
+                                            const comparisonType = getComparisonLabel().type;
+                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
                                             const alarmData = comparisonData?.find((c: any) => c.category === 'fire_alarms');
                                             return parseInt(alarmData?.[currentKey]) || 0;
                                         })()}
@@ -618,7 +586,7 @@ const AdminStatistics = () => {
 
                         {/* Günlük Ortalamalar */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 {getPeriodLabel()} Ortalamalar</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                                     <span className="text-gray-600 text-sm">Ziyaretçi</span>
@@ -655,12 +623,12 @@ const AdminStatistics = () => {
                 <div className="space-y-6">
                     {/* Dönem Bilgisi Başlık */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
                     </div>
 
                     {/* 1. Toplam İnsan Trafiği - Zaman Serisi */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği ({getDaysLabel()})</h3>
                         <ResponsiveContainer width="100%" height={400}>
                             <AreaChart data={visitorTrends.trend}>
                                 <defs>
@@ -868,7 +836,7 @@ const AdminStatistics = () => {
                             {/* Elektrik İstasyonu Ziyaretleri */}
                             {visitorTrends.electricStationVisitors && visitorTrends.electricStationVisitors.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={visitorTrends.electricStationVisitors}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -885,7 +853,7 @@ const AdminStatistics = () => {
                             {/* Taşeron İşçi Ziyaretleri */}
                             {visitorTrends.subcontractorVisitors && visitorTrends.subcontractorVisitors.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri ({getDaysLabel()})</h3>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={visitorTrends.subcontractorVisitors}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -904,10 +872,10 @@ const AdminStatistics = () => {
                     {/* Özet Kartlar */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 {getPeriodLabel()} Ortalamalar ({getDaysLabel()})</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
                             <div className="space-y-3">
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">{getPeriodLabel()} Ort. Kayıt</span>
+                                    <span className="text-gray-600 text-sm">Günlük Ort. Kayıt</span>
                                     <span className="text-xl font-bold text-blue-600">
                                         {visitorTrends.trend && visitorTrends.trend.length > 0
                                             ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) / visitorTrends.trend.length)
@@ -915,7 +883,7 @@ const AdminStatistics = () => {
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">{getPeriodLabel()} Ort. Kişi</span>
+                                    <span className="text-gray-600 text-sm">Günlük Ort. Kişi</span>
                                     <span className="text-xl font-bold text-green-600">
                                         {visitorTrends.trend && visitorTrends.trend.length > 0
                                             ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
@@ -974,12 +942,12 @@ const AdminStatistics = () => {
                 <div className="space-y-6">
                     {/* Dönem Bilgisi Başlık */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
                     </div>
 
                     {/* Araç Kullanım Trendi */}
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()} - {getPeriodLabel()})</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()})</h3>
                         <ResponsiveContainer width="100%" height={350}>
                             <AreaChart data={vehicleStats.trend}>
                                 <defs>
@@ -1162,7 +1130,7 @@ const AdminStatistics = () => {
                 <div className="space-y-6">
                     {/* Dönem Bilgisi Başlık */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz ({getPeriodLabel()} bazında)</p>
+                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
                     </div>
 
                     {/* Özet Kartlar */}
@@ -1220,7 +1188,7 @@ const AdminStatistics = () => {
                     {/* Günlük Alarm Sayısı - Bar Chart */}
                     {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0 && (
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 {getPeriodLabel()} Alarm Sayısı ({getDaysLabel()})</h3>
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Alarm Sayısı ({getDaysLabel()})</h3>
                             <ResponsiveContainer width="100%" height={350}>
                                 <BarChart data={fireAlarmStats.dailyTrend}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
