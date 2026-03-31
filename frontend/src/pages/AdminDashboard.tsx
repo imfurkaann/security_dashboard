@@ -143,38 +143,6 @@ export default function AdminDashboard() {
                 <div className="bg-gray-800 rounded-lg shadow p-4 mb-4">
                     <h1 className="text-lg font-bold text-white">Admin Dashboard</h1>
                 </div>
-
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                    <StatCard
-                        title="Kullanımdaki Araçlar"
-                        value={vehiclesInUse}
-                        gradient="from-blue-600 to-blue-700"
-                        iconBgColor="bg-blue-500/30"
-                        icon={<VehicleIcon size={6} />}
-                    />
-                    <StatCard
-                        title="İçerideki Ziyaretçiler"
-                        value={visitorsInside}
-                        gradient="from-green-600 to-green-700"
-                        iconBgColor="bg-green-500/30"
-                        icon={<VisitorIcon size={6} />}
-                    />
-                    <StatCard
-                        title="İçerideki Müdürler"
-                        value={managersInside}
-                        gradient="from-purple-600 to-purple-700"
-                        iconBgColor="bg-purple-500/30"
-                        icon={<ManagerIcon size={6} />}
-                    />
-                    <StatCard
-                        title="Bugün Çalınan Alarmlar"
-                        value={todayAlarms}
-                        gradient="from-red-600 to-red-700"
-                        iconBgColor="bg-red-500/30"
-                        icon={<FireAlarmIcon size={6} />}
-                    />
-                </div>
             </div>
         </div>
     );
