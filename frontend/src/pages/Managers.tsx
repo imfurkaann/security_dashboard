@@ -340,26 +340,7 @@ export default function Managers() {
                                 Bugün Çıkış Yapanlar ({stats.todayExitCount})
                             </button>
 
-                            <button
-                                onClick={() => setRecordVisibility('all')}
-                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'all' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700'}`}
-                            >
-                                Aktif + Silinen
-                            </button>
 
-                            <button
-                                onClick={() => setRecordVisibility('active')}
-                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'active' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                            >
-                                Sadece Aktif
-                            </button>
-
-                            <button
-                                onClick={() => setRecordVisibility('deleted')}
-                                className={`px-4 py-2 rounded-lg ${recordVisibility === 'deleted' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-                            >
-                                Sadece Silinen
-                            </button>
                         </div>
                     </div>
                     {loading ? (

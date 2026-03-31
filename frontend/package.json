@@ -24,6 +24,8 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.19",
     "dompurify": "^3.3.1",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.562.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
