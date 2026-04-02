@@ -6,17 +6,15 @@ import {
     adminLoginValidation,
 } from '../controllers/adminAuthController';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
-import { loginRateLimiter } from '../middleware/rateLimiter';
-import { rateLimitMiddleware } from '../middleware/auth';
 
 const router = Router();
 
 /**
  * @route   POST /api/admin/login
  * @desc    Admin login
- * @access  Public (with rate limiting)
+ * @access  Public
  */
-router.post('/login', loginRateLimiter, rateLimitMiddleware, adminLoginValidation, adminLogin);
+router.post('/login', adminLoginValidation, adminLogin);
 
 /**
  * @route   POST /api/admin/logout

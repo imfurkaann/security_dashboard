@@ -25,6 +25,12 @@ process.env.TZ = 'Europe/Istanbul';
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
 
+const UNLIMITED_LOGIN_PATHS = new Set(['/api/auth/login', '/api/admin/login']);
+const isUnlimitedLoginRequest = (req: Request): boolean => {
+    const requestPath = req.path;
+    return req.method === 'POST' && UNLIMITED_LOGIN_PATHS.has(requestPath);
+};
+
 // GÜVENLİK: Request body boyutu sınırlaması (DoS koruması)
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
@@ -93,11 +99,25 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     next();
 });
 
-// GÜVENLİK: Global rate limiting
-app.use(generalRateLimiter);
+// GÜVENLİK: Global rate limiting (login endpointleri hariç)
+app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isUnlimitedLoginRequest(req)) {
+        next();
+        return;
+    }
 
-// GÜVENLİK: Yazma işlemleri için ek rate limiting
-app.use(writeRateLimiter);
+    generalRateLimiter(req, res, next);
+});
+
+// GÜVENLİK: Yazma işlemleri için ek rate limiting (login endpointleri hariç)
+app.use((req: Request, res: Response, next: NextFunction) => {
+    if (isUnlimitedLoginRequest(req)) {
+        next();
+        return;
+    }
+
+    writeRateLimiter(req, res, next);
+});
 
 // Routes
 app.use('/api/admin', adminRoutes);

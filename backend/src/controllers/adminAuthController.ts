@@ -3,7 +3,6 @@ import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
-import { recordFailedAttempt, clearAttempts } from '../middleware/auth';
 import { sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 
@@ -39,7 +38,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         // Validate input
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            recordFailedAttempt(clientIp);
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz giriş bilgileri',
@@ -54,7 +52,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         const sanitizedUsername = sanitizeInput(username, 100);
 
         if (!sanitizedUsername || !password) {
-            recordFailedAttempt(clientIp);
             res.status(400).json({
                 success: false,
                 message: 'Kullanıcı adı ve şifre gereklidir',
@@ -64,7 +61,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 
         // Username length validation
         if (!isValidLength(sanitizedUsername, 3, 100)) {
-            recordFailedAttempt(clientIp);
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz kullanıcı adı formatı',
@@ -81,7 +77,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         const userResult = await pool.query(userQuery, [sanitizedUsername]);
 
         if (userResult.rows.length === 0) {
-            recordFailedAttempt(clientIp);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
@@ -93,7 +88,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 
         // Check if user has admin role
         if (user.role !== 'admin') {
-            recordFailedAttempt(clientIp);
             res.status(403).json({
                 success: false,
                 message: 'Yetkisiz erişim - Admin yetkisi gerekli',
@@ -105,7 +99,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         const isPasswordValid = await comparePassword(password, user.password);
 
         if (!isPasswordValid) {
-            recordFailedAttempt(clientIp);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
@@ -113,8 +106,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        // Successful login - clear rate limit
-        clearAttempts(clientIp);
+        // Successful login
 
         // Create personnel_record entry for admin login time tracking
         const personnelRecordQuery = `

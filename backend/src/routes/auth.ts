@@ -5,18 +5,16 @@ import {
     getCurrentUser,
     loginValidation,
 } from '../controllers/authController';
-import { authMiddleware, rateLimitMiddleware } from '../middleware/auth';
-import { loginRateLimiter } from '../middleware/rateLimiter';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
 /**
  * @route   POST /api/auth/login
  * @desc    Login user
- * @access  Public (with enhanced rate limiting)
- * GÜVENLİK: İki katmanlı rate limiting - genel + login özel
+ * @access  Public
  */
-router.post('/login', loginRateLimiter, rateLimitMiddleware, loginValidation, login);
+router.post('/login', loginValidation, login);
 
 /**
  * @route   POST /api/auth/logout
