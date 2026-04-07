@@ -147,56 +147,72 @@ export default function AdminFireAlarmRecords() {
         );
     }, [alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
 
-    // Group records by month and day (only when no filters)
-    // Group records by month and day (only when no filters)
-    const groupedRecords = useMemo(() => {
-        if (hasActiveFilters) return {};
-
-        const groups: { [key: string]: { [key: string]: FireAlarmRecord[] } } = {};
-
-        filteredRecords.forEach(record => {
-            const date = dayjs(record.alarm_time);
-            const monthKey = date.format('YYYY-MM');
-            const dayKey = date.format('YYYY-MM-DD');
-
-            if (!groups[monthKey]) {
-                groups[monthKey] = {};
-            }
-            if (!groups[monthKey][dayKey]) {
-                groups[monthKey][dayKey] = [];
-            }
-            groups[monthKey][dayKey].push(record);
-        });
-
-        // Sort records within each day (newest first)
-        Object.keys(groups).forEach(monthKey => {
-            Object.keys(groups[monthKey]).forEach(dayKey => {
-                groups[monthKey][dayKey].sort((a, b) =>
-                    dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf()
-                );
-            });
-        });
-
-        return groups;
-    }, [filteredRecords, hasActiveFilters]);
-
-    // Sorted records for filtered view
     const sortedFilteredRecords = useMemo(() => {
-        if (!hasActiveFilters) return [];
         return [...filteredRecords].sort((a, b) =>
             dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf()
         );
     }, [filteredRecords, hasActiveFilters]);
 
     // Get month name in Turkish
-    const getMonthName = (monthKey: string) => {
+    function getMonthName(monthKey: string) {
         return dayjs(monthKey + '-01').format('MMMM YYYY');
-    };
+    }
 
     // Get day name in Turkish
-    const getDayName = (dayKey: string) => {
+    function getDayName(dayKey: string) {
         return dayjs(dayKey).format('DD MMMM YYYY dddd');
-    };
+    }
+
+    const groupedRecords = useMemo(() => {
+        if (hasActiveFilters) return [] as Array<{
+            monthKey: string;
+            monthLabel: string;
+            totalRecords: number;
+            dayGroups: Array<{
+                dayKey: string;
+                dayLabel: string;
+                records: FireAlarmRecord[];
+            }>;
+        }>;
+
+        const monthMap = new Map<string, Map<string, FireAlarmRecord[]>>();
+
+        filteredRecords.forEach((record) => {
+            const date = dayjs(record.alarm_time);
+            const monthKey = date.format('YYYY-MM');
+            const dayKey = date.format('YYYY-MM-DD');
+
+            if (!monthMap.has(monthKey)) {
+                monthMap.set(monthKey, new Map());
+            }
+
+            const dayMap = monthMap.get(monthKey)!;
+            if (!dayMap.has(dayKey)) {
+                dayMap.set(dayKey, []);
+            }
+
+            dayMap.get(dayKey)!.push(record);
+        });
+
+        return Array.from(monthMap.entries())
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([monthKey, dayMap]) => {
+                const dayGroups = Array.from(dayMap.entries())
+                    .sort(([a], [b]) => b.localeCompare(a))
+                    .map(([dayKey, records]) => ({
+                        dayKey,
+                        dayLabel: getDayName(dayKey),
+                        records: records.sort((a, b) => dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf())
+                    }));
+
+                return {
+                    monthKey,
+                    monthLabel: getMonthName(monthKey),
+                    totalRecords: dayGroups.reduce((sum, group) => sum + group.records.length, 0),
+                    dayGroups
+                };
+            });
+    }, [filteredRecords, hasActiveFilters]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -246,23 +262,23 @@ export default function AdminFireAlarmRecords() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex items-center gap-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                         <button
                             onClick={() => navigate('/admin/dashboard')}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition"
+                            className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                             </svg>
                         </button>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                             <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Yangın Alarm Kayıtları</h1>
-                                <p className="text-gray-600 mt-1">Tüm alarm kayıtlarını filtreleyin ve inceleyin</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Yangın Alarm Kayıtları</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">Tüm alarm kayıtlarını filtreleyin ve inceleyin</p>
                             </div>
                         </div>
                     </div>
@@ -272,7 +288,7 @@ export default function AdminFireAlarmRecords() {
             <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Filters */}
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                         <h2 className="text-xl font-semibold text-gray-900">Filtreler</h2>
                         {hasActiveFilters && (
                             <button
@@ -401,87 +417,91 @@ export default function AdminFireAlarmRecords() {
                             <p className="text-gray-500 text-lg">Kayıt bulunamadı</p>
                         </div>
                     ) : hasActiveFilters ? (
-                        // Flat table view when filters are active
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {sortedFilteredRecords.map(record => (
-                                        <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm font-bold text-gray-900">{record.location}</div>
-                                                {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {record.resolution_time ? (
-                                                    <>
-                                                        <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
-                                                    </>
-                                                ) : (
-                                                    <span className="text-sm text-gray-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {record.resolved ? (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
-                                                ) : (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
-                                            </td>
+                            <div className="max-h-[600px] overflow-y-auto">
+                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                    <thead className="bg-gray-50 sticky top-0 z-10">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {sortedFilteredRecords.map(record => (
+                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm font-bold text-gray-900">{record.location}</div>
+                                                    {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                    <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {record.resolution_time ? (
+                                                        <>
+                                                            <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                            <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-sm text-gray-400">-</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm text-gray-900 max-w-xs truncate" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {record.resolved ? (
+                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
+                                                    ) : (
+                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     ) : (
-                        // Grouped view by month and day
                         <div className="divide-y divide-gray-200">
-                            {Object.keys(groupedRecords).sort().reverse().map(monthKey => (
-                                <div key={monthKey}>
-                                    <div className="bg-gradient-to-r from-red-600 to-red-500 px-6 py-3">
-                                        <h3 className="text-lg font-semibold text-white">{getMonthName(monthKey)}</h3>
+                            {groupedRecords.map((monthGroup) => (
+                                <div key={monthGroup.monthKey} className="mb-8 last:mb-0">
+                                    <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-500 px-6 py-3 z-10 shadow-md">
+                                        <h2 className="text-lg font-bold text-white">{monthGroup.monthLabel}</h2>
+                                        <p className="text-sm text-red-100">{monthGroup.totalRecords} kayıt</p>
                                     </div>
-                                    {Object.keys(groupedRecords[monthKey]).sort().reverse().map(dayKey => (
-                                        <div key={dayKey} className="border-b border-gray-100 last:border-b-0">
-                                            <div className="sticky top-14 bg-red-50 px-6 py-2 border-b border-red-100 z-9 shadow-sm">
-                                                <h4 className="text-sm font-medium text-red-800">{getDayName(dayKey)}</h4>
+
+                                    {monthGroup.dayGroups.map((dayGroup) => (
+                                        <div key={dayGroup.dayKey} className="border-b border-gray-200 last:border-b-0">
+                                            <div className="sticky top-14 bg-gray-100 px-6 py-2 border-l-4 border-red-500 z-10 shadow-sm">
+                                                <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
+                                                <p className="text-xs text-gray-600">{dayGroup.records.length} kayıt</p>
                                             </div>
+
                                             <div className="overflow-x-auto">
-                                                <table className="min-w-full">
+                                                <table className="min-w-full table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Alarm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çözüm Zamanı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
@@ -489,7 +509,7 @@ export default function AdminFireAlarmRecords() {
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
-                                                        {groupedRecords[monthKey][dayKey].map(record => (
+                                                        {dayGroup.records.map(record => (
                                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
@@ -498,11 +518,11 @@ export default function AdminFireAlarmRecords() {
                                                                     <div className="text-sm font-bold text-gray-900">{record.location}</div>
                                                                     {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                                     <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.resolution_time ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
@@ -513,7 +533,7 @@ export default function AdminFireAlarmRecords() {
                                                                     )}
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
+                                                                    <div className="text-sm text-gray-900 max-w-xs truncate" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.resolved ? (

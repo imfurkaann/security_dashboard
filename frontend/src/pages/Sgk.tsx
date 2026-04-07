@@ -27,6 +27,9 @@ export default function Sgk() {
     const [allRecords, setAllRecords] = useState<SgkRecord[]>([]);
     const [previewRecord, setPreviewRecord] = useState<SgkRecord | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string>('');
+    const [previewContentType, setPreviewContentType] = useState('');
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [isMobilePreview, setIsMobilePreview] = useState(false);
     const [imageZoom, setImageZoom] = useState(1);
     const [zoomOrigin, setZoomOrigin] = useState('50% 50%');
     const navigate = useNavigate();
@@ -62,6 +65,17 @@ export default function Sgk() {
             setZoomOrigin('50% 50%');
         }
     }, [showPreviewModal, previewRecord]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const updateViewport = () => {
+            setIsMobilePreview(window.matchMedia('(max-width: 768px)').matches);
+        };
+
+        updateViewport();
+        window.addEventListener('resize', updateViewport);
+        return () => window.removeEventListener('resize', updateViewport);
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -288,24 +302,39 @@ export default function Sgk() {
 
     // Handle preview
     const handlePreview = useCallback(async (record: SgkRecord) => {
+        // Modalı hemen açıp yükleme durumunu göster
+        setPreviewRecord(record);
+        setShowPreviewModal(true);
+        setPreviewLoading(true);
+        setPreviewContentType('');
+
         try {
             const response = await api.get(`/sgk/records/${record.id}/file`, {
                 responseType: 'blob'
             });
 
             // Blob URL oluştur
+            if (pdfUrl) {
+                URL.revokeObjectURL(pdfUrl);
+            }
             const blob = new Blob([response.data], {
                 type: response.headers['content-type'] || 'application/octet-stream'
             });
             const url = URL.createObjectURL(blob);
+            const contentType = response.headers['content-type'] || '';
 
             setPdfUrl(url);
-            setPreviewRecord(record);
-            setShowPreviewModal(true);
+            setPreviewContentType(contentType);
         } catch (error) {
             alert('Belge önizlenirken hata oluştu');
+            setShowPreviewModal(false);
+            setPreviewRecord(null);
+            setPdfUrl('');
+            setPreviewContentType('');
+        } finally {
+            setPreviewLoading(false);
         }
-    }, []);
+    }, [pdfUrl]);
 
     // Handle edit
     const handleEdit = useCallback((record: SgkRecord) => {
@@ -426,22 +455,22 @@ export default function Sgk() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">SGK Belge Yönetimi</h1>
-                                <p className="text-gray-600 mt-1">SGK belgelerini kaydedin ve arayın</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">SGK Belge Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">SGK belgelerini kaydedin ve arayın</p>
                             </div>
                         </div>
                         <button
                             onClick={() => { resetUploadForm(); setShowUploadModal(true); }}
-                            className="flex items-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                            className="flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -455,10 +484,10 @@ export default function Sgk() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Filter Section */}
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-6">
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
                         <h2 className="text-xl font-bold text-gray-900">
                             SGK Belgeleri
-                            <span className="ml-3 text-sm font-normal text-gray-500">
+                            <span className="block sm:inline sm:ml-3 text-sm font-normal text-gray-500">
                                 ({filteredRecords.length} kayıt{hasActiveFilters && ` - ${allRecords.length} toplam`})
                             </span>
                         </h2>
@@ -567,22 +596,22 @@ export default function Sgk() {
                             <div className="space-y-3">
                                 {filteredRecords.map((record) => (
                                     <div key={record.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition">
-                                        <div className="flex items-center justify-between gap-4">
-                                            <div className="flex-1 grid grid-cols-3 gap-4 text-sm">
+                                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm min-w-0">
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Ad Soyad</span>
-                                                    <span className="font-medium text-gray-900">{record.full_name}</span>
+                                                    <span className="font-medium text-gray-900 break-words">{record.full_name}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Firma</span>
-                                                    <span className="font-medium text-gray-900">{record.company_name || '-'}</span>
+                                                    <span className="font-medium text-gray-900 break-words">{record.company_name || '-'}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Yüklenme Tarihi</span>
                                                     <span className="font-medium text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
                                             </div>
-                                            <div className="flex-shrink-0 flex items-center gap-3">
+                                            <div className="flex-shrink-0 flex flex-wrap items-center gap-2 sm:gap-3">
                                                 <ActionButton
                                                     onClick={() => handleEdit(record)}
                                                     variant="primary"
@@ -887,26 +916,41 @@ export default function Sgk() {
 
             {/* Preview Modal */}
             {showPreviewModal && previewRecord && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-5xl w-full h-[90vh] flex flex-col">
-                        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                            <div>
-                                <h2 className="text-xl font-bold text-gray-900">{previewRecord.full_name} - SGK Belgesi</h2>
-                                <p className="text-sm text-gray-600">{previewRecord.company_name || 'Firma belirtilmemiş'}</p>
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-2 sm:p-4 z-50">
+                    <div className="bg-white rounded-none sm:rounded-lg max-w-5xl w-full h-[95vh] sm:h-[90vh] flex flex-col">
+                        <div className="p-3 sm:p-4 border-b border-gray-200 flex justify-between items-start gap-3">
+                            <div className="min-w-0">
+                                <h2 className="text-base sm:text-xl font-bold text-gray-900 break-words">{previewRecord.full_name} - SGK Belgesi</h2>
+                                <p className="text-xs sm:text-sm text-gray-600 break-words">{previewRecord.company_name || 'Firma belirtilmemiş'}</p>
                             </div>
-                            <button onClick={() => {
-                                if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-                                setShowPreviewModal(false);
-                                setPdfUrl('');
-                                setPreviewRecord(null);
-                            }} className="text-gray-400 hover:text-gray-600">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {(previewContentType.includes('pdf') || previewRecord.file_path.match(/\.pdf$/i)) && pdfUrl && (
+                                    <a
+                                        href={pdfUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs sm:text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+                                    >
+                                        Yeni Sekmede Aç
+                                    </a>
+                                )}
+                                <button onClick={() => {
+                                    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                                    setShowPreviewModal(false);
+                                    setPdfUrl('');
+                                    setPreviewRecord(null);
+                                    setPreviewContentType('');
+                                }} className="text-gray-400 hover:text-gray-600">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex-1 overflow-hidden bg-gray-100 flex items-center justify-center">
-                            {previewRecord.file_path.match(/\.(jpg|jpeg|png)$/i) ? (
+                        <div className="flex-1 min-h-0 overflow-auto bg-gray-100 flex items-center justify-center">
+                            {previewLoading ? (
+                                <div className="text-gray-700 text-sm sm:text-base">Belge yükleniyor...</div>
+                            ) : (previewContentType.startsWith('image/') || previewRecord.file_path.match(/\.(jpg|jpeg|png)$/i)) ? (
                                 // Resim dosyası için img tag kullan
                                 <img
                                     src={pdfUrl}
@@ -919,8 +963,29 @@ export default function Sgk() {
                                         cursor: imageZoom > 1 ? 'zoom-out' : 'zoom-in'
                                     }}
                                 />
+                            ) : (previewContentType.includes('pdf') || previewRecord.file_path.match(/\.pdf$/i)) ? (
+                                isMobilePreview ? (
+                                    <div className="text-center p-6 sm:p-8">
+                                        <p className="text-gray-700 mb-3">Mobil cihazlarda PDF yeni sekmede açılır.</p>
+                                        {pdfUrl && (
+                                            <a
+                                                href={pdfUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition text-sm"
+                                            >
+                                                PDF'i Yeni Sekmede Aç
+                                            </a>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <iframe
+                                        src={pdfUrl}
+                                        className="w-full h-full"
+                                        title="SGK PDF Önizleme"
+                                    />
+                                )
                             ) : (
-                                // PDF için iframe kullan
                                 <iframe
                                     src={pdfUrl}
                                     className="w-full h-full"

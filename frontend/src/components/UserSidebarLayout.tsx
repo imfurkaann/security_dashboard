@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Menu, X } from 'lucide-react';
 import api from '../utils/api';
 import { STORAGE_KEYS } from '../constants';
 
@@ -26,6 +27,7 @@ const menuItems = [
 
 export default function UserSidebarLayout() {
     const [logoutLoading, setLogoutLoading] = useState(false);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const navigate = useNavigate();
     const rawUser = localStorage.getItem(STORAGE_KEYS.USER);
     const parsedUser = rawUser ? JSON.parse(rawUser) : null;
@@ -49,7 +51,26 @@ export default function UserSidebarLayout() {
         <div className="min-h-screen bg-gray-900">
             {logoutLoading && <LogoutOverlay />}
 
-            <aside className="fixed left-0 top-0 h-screen w-60 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col">
+            <button
+                type="button"
+                onClick={() => setIsSidebarOpen((prev) => !prev)}
+                className="fixed top-4 left-4 z-40 inline-flex lg:hidden items-center justify-center rounded-md bg-gray-800 p-2 text-gray-100 border border-gray-700 hover:bg-gray-700 transition"
+                aria-label={isSidebarOpen ? 'Menüyü kapat' : 'Menüyü aç'}
+            >
+                {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+                    onClick={() => setIsSidebarOpen(false)}
+                    aria-hidden="true"
+                />
+            )}
+
+            <aside className={`fixed left-0 top-0 h-screen w-64 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${
+                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}>
                 <div className="mb-4 pb-3 border-b border-gray-700">
                     <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Güvenlik Paneli</h1>
                 </div>
@@ -59,6 +80,7 @@ export default function UserSidebarLayout() {
                         <NavLink
                             key={item.path}
                             to={item.path}
+                            onClick={() => setIsSidebarOpen(false)}
                             className={({ isActive }) =>
                                 `block rounded-md px-3 py-2 text-sm transition ${
                                     isActive
@@ -86,7 +108,7 @@ export default function UserSidebarLayout() {
                 </button>
             </aside>
 
-            <main className="ml-60 min-h-screen">
+            <main className="min-h-screen pt-14 lg:pt-0 lg:ml-64">
                 <Outlet />
             </main>
         </div>

@@ -131,25 +131,25 @@ export default function AdminManageVehicles() {
         <div className="min-h-screen bg-gray-100">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 sm:gap-4">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/vehicle-records')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                                className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Araç Yönetimi</h1>
-                                <p className="text-gray-600 mt-1">Araçları ekleyin, düzenleyin veya silin</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Araç Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">Araçları ekleyin, düzenleyin veya silin</p>
                             </div>
                         </div>
                         <button
                             onClick={handleAddNew}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2"
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -198,10 +198,10 @@ export default function AdminManageVehicles() {
 
             {/* Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-                        <div className="p-6">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-4 sm:p-6">
+                            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">
                                 {editingVehicle ? 'Araç Düzenle' : 'Yeni Araç Ekle'}
                             </h2>
 
@@ -234,17 +234,17 @@ export default function AdminManageVehicles() {
                                     />
                                 </div>
 
-                                <div className="flex gap-3 pt-4">
+                                <div className="flex flex-col sm:flex-row gap-3 pt-4">
                                     <button
                                         type="button"
                                         onClick={() => setShowModal(false)}
-                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium"
+                                        className="w-full sm:flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium"
                                     >
                                         İptal
                                     </button>
                                     <button
                                         type="submit"
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                                        className="w-full sm:flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
                                     >
                                         Kaydet
                                     </button>

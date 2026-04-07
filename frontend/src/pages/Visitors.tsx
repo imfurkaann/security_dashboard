@@ -200,30 +200,31 @@ export default function Visitors() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Ziyaretçi Kayıtları</h1>
-                                <p className="text-gray-600 mt-1">Ziyaretçi giriş/çıkış kayıtlarını yönetin</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Ziyaretçi Kayıtları</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">Ziyaretçi giriş/çıkış kayıtlarını yönetin</p>
                             </div>
                         </div>
-                        <div className="flex gap-3">
+
+                        <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full lg:w-auto">
                             <button
                                 onClick={() => navigate('/visitor-records')}
-                                className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                                className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
                                 Kayıt Filtrele
                             </button>
-                            <button onClick={openModalForNew} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                            <button onClick={openModalForNew} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
@@ -283,19 +284,19 @@ export default function Visitors() {
                 {/* Filters */}
                 <div className="bg-white rounded-lg shadow p-4 mb-6">
                     <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setFilter('today')} className={`px-4 py-2 rounded-lg transition ${filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                        <button onClick={() => setFilter('today')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Bugünün Kayıtları ({records.filter(r => isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date))).length})
                         </button>
-                        <button onClick={() => setFilter('inside')} className={`px-4 py-2 rounded-lg transition ${filter === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                        <button onClick={() => setFilter('inside')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Aktif İçeridekiler ({stats.insideCount})
                         </button>
-                        <button onClick={() => setFilter('subcontractor')} className={`px-4 py-2 rounded-lg transition ${filter === 'subcontractor' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                        <button onClick={() => setFilter('subcontractor')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'subcontractor' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Taşeron İşçiler ({stats.subcontractorCount})
                         </button>
-                        <button onClick={() => setFilter('electric')} className={`px-4 py-2 rounded-lg transition ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                        <button onClick={() => setFilter('electric')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Elektrik İstasyonu ({stats.electricStationCount})
                         </button>
-                        <button onClick={() => setFilter('exits')} className={`px-4 py-2 rounded-lg transition ${filter === 'exits' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                        <button onClick={() => setFilter('exits')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'exits' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Bugün Çıkış Yapanlar ({stats.todayExits})
                         </button>
                     </div>
