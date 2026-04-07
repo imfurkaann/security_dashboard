@@ -324,23 +324,23 @@ export default function AdminVisitorRecords() {
         <div className="min-h-screen bg-gray-100">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/dashboard')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                                className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Ziyaretçi Kayıtları</h1>
-                                <p className="text-gray-600 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Ziyaretçi Kayıtları</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 sm:text-right">
                             Toplam: <span className="font-bold text-gray-900">{filteredRecords.length}</span> kayıt
                         </div>
                     </div>
@@ -350,7 +350,7 @@ export default function AdminVisitorRecords() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {/* Filters Panel */}
                 <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-                    <div className="flex justify-between items-center mb-3">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
                         <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
                         <button
                             onClick={clearFilters}
@@ -570,7 +570,7 @@ export default function AdminVisitorRecords() {
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                <table className="min-w-[1500px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
@@ -688,7 +688,7 @@ export default function AdminVisitorRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                                <table className="min-w-[1500px] table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
@@ -696,8 +696,8 @@ export default function AdminVisitorRecords() {
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Giriş Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çıkış Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
                                                             <th className="px-6 py-3 w-60 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
@@ -739,12 +739,12 @@ export default function AdminVisitorRecords() {
                                                                     <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.exit_date ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>

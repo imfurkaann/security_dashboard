@@ -30,8 +30,13 @@ export default function AdminManagePersonnel() {
     const [lastName, setLastName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [role, setRole] = useState<'personnel' | 'admin'>('personnel');
     const [isActive, setIsActive] = useState(true);
+
+    const hasInvalidUsernameChars = /[^A-Za-z0-9._-]/.test(username);
+    const shouldValidatePasswordMatch = !editingPersonnel || password.trim().length > 0 || confirmPassword.trim().length > 0;
+    const passwordsDoNotMatch = shouldValidatePasswordMatch && password !== confirmPassword;
 
     useEffect(() => {
         fetchPersonnel();
@@ -58,6 +63,7 @@ export default function AdminManagePersonnel() {
         setLastName('');
         setUsername('');
         setPassword('');
+        setConfirmPassword('');
         setRole('personnel');
         setIsActive(true);
         setShowModal(true);
@@ -69,6 +75,7 @@ export default function AdminManagePersonnel() {
         setLastName(person.last_name);
         setUsername(person.username);
         setPassword(''); // Don't pre-fill password
+        setConfirmPassword('');
         setRole(person.role as 'personnel' | 'admin');
         setIsActive(person.is_active);
         setShowModal(true);
@@ -81,6 +88,7 @@ export default function AdminManagePersonnel() {
         setLastName('');
         setUsername('');
         setPassword('');
+        setConfirmPassword('');
         setRole('personnel');
         setIsActive(true);
     };
@@ -95,6 +103,16 @@ export default function AdminManagePersonnel() {
 
         if (!editingPersonnel && !password.trim()) {
             alert('Yeni personel için şifre gereklidir');
+            return;
+        }
+
+        if (hasInvalidUsernameChars) {
+            alert('Kullanıcı adında İngilizce olmayan karakter kullanamazsınız');
+            return;
+        }
+
+        if (shouldValidatePasswordMatch && passwordsDoNotMatch) {
+            alert('Girilen şifreler eşleşmiyor');
             return;
         }
 
@@ -187,21 +205,21 @@ export default function AdminManagePersonnel() {
             {/* Header */}
             <header className="bg-white shadow-md">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/dashboard')}
-                                className="text-gray-600 hover:text-gray-800 transition"
+                                className="text-gray-600 hover:text-gray-800 transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-2xl font-bold text-gray-900">Personel Yönetimi</h1>
+                            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight break-words">Personel Yönetimi</h1>
                         </div>
                         <button
                             onClick={openAddModal}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                            className="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -251,7 +269,7 @@ export default function AdminManagePersonnel() {
 
                 {/* Table */}
                 <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <h2 className="text-lg font-semibold text-gray-900">
                             Personel Listesi ({filteredPersonnel.length} / {personnel.length})
                         </h2>
@@ -378,9 +396,12 @@ export default function AdminManagePersonnel() {
                                     type="text"
                                     value={username}
                                     onChange={(e) => setUsername(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${hasInvalidUsernameChars ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                     required
                                 />
+                                {hasInvalidUsernameChars && (
+                                    <p className="mt-1 text-xs text-red-600">Bu alan için İngilizce olmayan karakter kullanamazsınız.</p>
+                                )}
                             </div>
 
                             <div>
@@ -397,9 +418,26 @@ export default function AdminManagePersonnel() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder={editingPersonnel ? "Yeni şifre (opsiyonel)" : "Şifre"}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${passwordsDoNotMatch ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                                     required={!editingPersonnel}
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Şifre Tekrar {!editingPersonnel && <span className="text-red-500">*</span>}
+                                </label>
+                                <input
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    placeholder="Şifreyi tekrar girin"
+                                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${passwordsDoNotMatch ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                                    required={!editingPersonnel || password.trim().length > 0}
+                                />
+                                {passwordsDoNotMatch && (
+                                    <p className="mt-1 text-xs text-red-600">Şifreler eşleşmiyor.</p>
+                                )}
                             </div>
 
                             <div>

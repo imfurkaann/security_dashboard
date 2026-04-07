@@ -42,6 +42,7 @@ const AdminStatistics = () => {
     const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'vehicles' | 'fire-alarms' | 'incidents'>('overview');
     const [showExportModal, setShowExportModal] = useState(false);
     const [selectedCharts, setSelectedCharts] = useState<string[]>([]);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
 
     // Data states
     const [generalStats, setGeneralStats] = useState<any>(null);
@@ -79,6 +80,19 @@ const AdminStatistics = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const updateViewport = () => setIsMobileViewport(window.innerWidth < 768);
+        updateViewport();
+        window.addEventListener('resize', updateViewport);
+        return () => window.removeEventListener('resize', updateViewport);
+    }, []);
+
+    const getWordCloudWidth = () => {
+        if (typeof window === 'undefined') return 320;
+        return Math.max(window.innerWidth - (isMobileViewport ? 40 : 120), 280);
+    };
 
     const formatDate = (dateStr: string) => {
         if (!dateStr) return '';
@@ -118,19 +132,19 @@ const AdminStatistics = () => {
     };
 
     const StatCardComponent = ({ title, value, icon, color, change }: StatCard) => (
-        <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow`}>
+        <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow`}>
             <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-sm text-gray-500 mb-1">{title}</p>
-                    <p className="text-3xl font-bold text-gray-800">{value.toLocaleString('tr-TR')}</p>
+                <div className="min-w-0">
+                    <p className="text-xs sm:text-sm text-gray-500 mb-1 break-words">{title}</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-800">{value.toLocaleString('tr-TR')}</p>
                     {change !== undefined && (
-                        <div className={`flex items-center mt-2 text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <div className={`flex items-center mt-2 text-xs sm:text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
                             <span>{change >= 0 ? '+' : ''}{change}% geçen aya göre</span>
                         </div>
                     )}
                 </div>
-                <div className={`p-4 rounded-xl ${color}`}>
+                <div className={`p-3 sm:p-4 rounded-xl shrink-0 ${color}`}>
                     {icon}
                 </div>
             </div>
@@ -503,12 +517,12 @@ const AdminStatistics = () => {
     }
 
     return (
-        <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
             {/* Header */}
-            <div className="mb-8 flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">📊 İstatistikler & Grafikler</h1>
-                    <p className="text-gray-500">Güvenlik verilerinizin detaylı analizi</p>
+            <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1 sm:mb-2 break-words">📊 İstatistikler & Grafikler</h1>
+                    <p className="text-sm sm:text-base text-gray-500">Güvenlik verilerinizin detaylı analizi</p>
                 </div>
                 {/* Export Button */}
                 <button
@@ -516,7 +530,7 @@ const AdminStatistics = () => {
                         setSelectedCharts([]);
                         setShowExportModal(true);
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                 >
                     <Download size={20} />
                     PDF İndir
@@ -525,9 +539,9 @@ const AdminStatistics = () => {
 
             {/* Kontroller */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                     {/* Gün Aralığı */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm text-gray-500">Son</span>
                         <select
                             value={days}
@@ -546,15 +560,15 @@ const AdminStatistics = () => {
                     <button
                         onClick={fetchData}
                         disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
                         <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                         Yenile
                     </button>
 
                     {/* Tab Seçimi */}
-                    <div className="flex-1 flex justify-end">
-                        <div className="flex bg-gray-100 rounded-lg p-1">
+                    <div className="w-full lg:flex-1 lg:flex lg:justify-end">
+                        <div className="w-full lg:w-auto flex flex-wrap bg-gray-100 rounded-lg p-1 gap-1">
                             {[
                                 { key: 'overview', label: 'Genel Bakış' },
                                 { key: 'visitors', label: 'Ziyaretçiler' },
@@ -565,7 +579,7 @@ const AdminStatistics = () => {
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key as any)}
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.key
+                                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.key
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-gray-600 hover:text-gray-800'
                                         }`}
@@ -850,7 +864,7 @@ const AdminStatistics = () => {
                         {/* Dönem Özeti */}
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
                             <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 {getDaysLabel()} Toplam</h3>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                                     <p className="text-3xl font-bold text-blue-600">
                                         {(() => {
@@ -902,13 +916,13 @@ const AdminStatistics = () => {
                                         .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
                                         .slice(0, 5)
                                         .map((day: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
                                                 <div className="flex items-center gap-2">
                                                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
                                                         }`}>
                                                         {index + 1}
                                                     </span>
-                                                    <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
+                                                    <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
                                                 </div>
                                                 <span className="text-sm font-bold text-gray-800">{parseInt(day.total_persons || 0)} kişi</span>
                                             </div>
@@ -926,13 +940,13 @@ const AdminStatistics = () => {
                                         .sort((a: any, b: any) => parseInt(String(b.count || 0)) - parseInt(String(a.count || 0)))
                                         .slice(0, 5)
                                         .map((day: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
                                                 <div className="flex items-center gap-2">
                                                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
                                                         }`}>
                                                         {index + 1}
                                                     </span>
-                                                    <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
+                                                    <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
                                                 </div>
                                                 <span className="text-sm font-bold text-gray-800">{parseInt(day.count || 0)} araç</span>
                                             </div>
@@ -1031,9 +1045,9 @@ const AdminStatistics = () => {
                                 <table className="min-w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="border border-gray-300 px-4 py-2 bg-gray-50">Gün \\ Saat</th>
+                                            <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
                                             {Array.from({ length: 24 }, (_, i) => (
-                                                <th key={i} className="border border-gray-300 px-2 py-2 bg-gray-50 text-xs">{String(i).padStart(2, '0')}</th>
+                                                <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
                                             ))}
                                         </tr>
                                     </thead>
@@ -1044,7 +1058,7 @@ const AdminStatistics = () => {
 
                                             return (
                                                 <tr key={dayIndex}>
-                                                    <td className="border border-gray-300 px-4 py-2 font-medium bg-gray-50">{day}</td>
+                                                    <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
                                                     {Array.from({ length: 24 }, (_, hour) => {
                                                         const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
                                                         const count = hourData ? parseInt(hourData.total_persons || hourData.visit_count || 0) : 0;
@@ -1405,9 +1419,9 @@ const AdminStatistics = () => {
                                 <table className="min-w-full border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="border border-gray-300 px-4 py-2 bg-gray-50">Gün \\ Saat</th>
+                                            <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
                                             {Array.from({ length: 24 }, (_, i) => (
-                                                <th key={i} className="border border-gray-300 px-2 py-2 bg-gray-50 text-xs">{String(i).padStart(2, '0')}</th>
+                                                <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
                                             ))}
                                         </tr>
                                     </thead>
@@ -1418,7 +1432,7 @@ const AdminStatistics = () => {
 
                                             return (
                                                 <tr key={dayIndex}>
-                                                    <td className="border border-gray-300 px-4 py-2 font-medium bg-gray-50">{day}</td>
+                                                    <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
                                                     {Array.from({ length: 24 }, (_, hour) => {
                                                         const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
                                                         const count = hourData ? parseInt(hourData.count || 0) : 0;
@@ -1471,7 +1485,7 @@ const AdminStatistics = () => {
                                             text: item.destination,
                                             value: item.count
                                         }))}
-                                        width={Math.max(window.innerWidth - 80, 300)}
+                                        width={getWordCloudWidth()}
                                         height={300}
                                     />
                                 </div>
@@ -1596,7 +1610,7 @@ const AdminStatistics = () => {
                                             text: item.location,
                                             value: item.count
                                         }))}
-                                        width={Math.max(window.innerWidth - 80, 300)}
+                                        width={getWordCloudWidth()}
                                         height={300}
                                     />
                                 </div>
@@ -1636,7 +1650,7 @@ const AdminStatistics = () => {
                     </div>
 
                     {/* Kategori İstatistikleri - Ana Kartlar */}
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
                             <div className="flex items-center gap-3 mb-2">
                                 <div className="p-2 bg-red-100 rounded-lg">
@@ -1950,8 +1964,8 @@ const AdminStatistics = () => {
 
             {/* PDF Export Modal */}
             {showExportModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
+                    <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
                         {/* Modal Header */}
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-800">📊 Grafikleri Seç</h3>
@@ -1970,7 +1984,7 @@ const AdminStatistics = () => {
                         <p className="text-sm text-gray-600 mb-4">PDF dosyasına dâhil etmek istediğiniz grafikleri seçiniz.</p>
 
                         {/* Select All / Deselect All Buttons */}
-                        <div className="flex gap-2 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
                             <button
                                 onClick={() => setSelectedCharts(getAvailableCharts().map(c => c.id))}
                                 className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
@@ -2010,7 +2024,7 @@ const AdminStatistics = () => {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
                             <button
                                 onClick={() => {
                                     setShowExportModal(false);

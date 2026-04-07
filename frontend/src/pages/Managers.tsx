@@ -235,30 +235,31 @@ export default function Managers() {
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
             <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Müdür Yönetimi</h1>
-                                <p className="text-gray-600 mt-1">Müdür kayıtlarını görüntüle ve yönet</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Müdür Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-gray-600 mt-1">Müdür kayıtlarını görüntüle ve yönet</p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-3">
+
+                        <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
                             <button
                                 onClick={() => navigate('/manager-records')}
-                                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg transition shadow-md hover:shadow-lg"
+                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
                                 Kayıt Filtrele
                             </button>
-                            <button onClick={openModalForNew} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg transition shadow-md hover:shadow-lg">
+                            <button onClick={openModalForNew} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
@@ -318,24 +319,24 @@ export default function Managers() {
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto">
                     {/* Filter buttons - always visible when not loading */}
                     <div className="mb-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                             <button
                                 onClick={() => setFilterMode('all')}
-                                className={`px-4 py-2 rounded-lg ${filterMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                className={`px-3 sm:px-4 py-2 rounded-lg text-sm ${filterMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
                                 Bugünün Kayıtları ({stats.todayCount})
                             </button>
 
                             <button
                                 onClick={() => setFilterMode('inside')}
-                                className={`px-4 py-2 rounded-lg ${filterMode === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                className={`px-3 sm:px-4 py-2 rounded-lg text-sm ${filterMode === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
                                 Aktif İçeridekiler ({stats.insideCount})
                             </button>
 
                             <button
                                 onClick={() => setFilterMode('exited')}
-                                className={`px-4 py-2 rounded-lg ${filterMode === 'exited' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`}
+                                className={`px-3 sm:px-4 py-2 rounded-lg text-sm ${filterMode === 'exited' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`}
                             >
                                 Bugün Çıkış Yapanlar ({stats.todayExitCount})
                             </button>

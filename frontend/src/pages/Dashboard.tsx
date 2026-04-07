@@ -28,13 +28,13 @@ interface StatCardProps {
 
 function StatCard({ title, value, gradient, iconBgColor, icon }: StatCardProps) {
     return (
-        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow p-3`}>
+        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow p-3 sm:p-4 min-h-[88px] sm:min-h-[96px]`}>
             <div className="flex items-center justify-between">
-                <div>
-                    <p className="text-xs font-medium opacity-90">{title}</p>
-                    <p className="text-xl font-bold text-white mt-1">{value}</p>
+                <div className="min-w-0 pr-2">
+                    <p className="text-[11px] sm:text-xs font-medium opacity-90 leading-tight break-words">{title}</p>
+                    <p className="text-lg sm:text-xl font-bold text-white mt-1">{value}</p>
                 </div>
-                <div className={`${iconBgColor} p-2 rounded-lg`}>
+                <div className={`${iconBgColor} p-2 rounded-lg flex-shrink-0`}>
                     {icon}
                 </div>
             </div>
@@ -243,14 +243,14 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-gray-900">
-            <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-5">
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5">
                 {/* Header */}
-                <div className="bg-gray-800 rounded-lg shadow p-4 mb-4">
-                    <h1 className="text-lg font-bold text-white">Dashboard</h1>
+                <div className="bg-gray-800 rounded-lg shadow p-3 sm:p-4 mb-4">
+                    <h1 className="text-base sm:text-lg font-bold text-white">Dashboard</h1>
                 </div>
 
                 {/* Stats Cards - Araç ve Ziyaretçi Bilgileri */}
-                <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5 sm:mb-6">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
@@ -282,12 +282,12 @@ export default function Dashboard() {
                 </div>
 
                 {/* Önemli Uyarılar */}
-                <div className="bg-amber-50 rounded-lg shadow-lg p-6 mb-6 border-l-4 border-amber-500">
-                    <div className="flex items-start gap-4">
-                        <AlertCircle className="text-amber-600 flex-shrink-0 mt-1" size={24} />
+                <div className="bg-amber-50 rounded-lg shadow-lg p-4 sm:p-6 mb-6 border-l-4 border-amber-500">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                        <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5 sm:mt-1" size={22} />
                         <div className="flex-1">
-                            <h2 className="text-amber-900 font-bold text-lg mb-4">ÖNEMLİ UYARILAR</h2>
-                            <div className="space-y-3 text-sm text-amber-900">
+                            <h2 className="text-amber-900 font-bold text-base sm:text-lg mb-3 sm:mb-4">ÖNEMLİ UYARILAR</h2>
+                            <div className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm text-amber-900 leading-relaxed">
                                 <div className="flex gap-3">
                                     <span className="text-amber-600 font-bold flex-shrink-0">•</span>
                                     <p>Sistemi ilk defa kullanacaksanız bilen çalışma arkadaşlarınızdan lütfen bilgilendirmeler alınız.</p>

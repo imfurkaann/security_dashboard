@@ -64,6 +64,8 @@ const allowedOrigins = [
     'http://localhost:80'     // Docker frontend (explicit port)
 ].filter(Boolean);
 
+const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
 app.use(cors({
     origin: (origin, callback) => {
         // Eğer CORS_ORIGIN="*" ise tüm originlere izin ver (yerel ağ paylaşımı)
@@ -72,7 +74,7 @@ app.use(cors({
             return;
         }
         // API istekleri (origin olmadan) veya izin verilen originler
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin)) {
             callback(null, true);
         } else {
             // Yerel ağ IP'leri için de izin ver (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
