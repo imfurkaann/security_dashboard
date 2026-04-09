@@ -2,9 +2,21 @@ import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
-import { isValidUUID, sanitizeInput, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
+import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
+
+const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) return null;
+
+    return String(value)
+        .replace(/&#x2F;/g, '/')
+        .replace(/&#x27;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&');
+};
 
 /**
  * Get all visitor records with joins
@@ -51,12 +63,12 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
             vehicle_plate: row.vehicle_plate,
-            full_name: row.full_name,
-            company_name: row.company_name,
-            visiting_person: row.visiting_person,
+            full_name: decodeStoredHtmlEntities(row.full_name),
+            company_name: decodeStoredHtmlEntities(row.company_name),
+            visiting_person: decodeStoredHtmlEntities(row.visiting_person),
             person_count: row.person_count,
             phone: row.phone,
-            notes: row.notes,
+            notes: decodeStoredHtmlEntities(row.notes),
             subcontractor_worker: row.subcontractor_worker,
             for_electric_station: row.for_electric_station,
             entry_date: row.entry_date,
@@ -89,10 +101,10 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: Input sanitization
-        const sanitizedFullName = sanitizeInput(full_name, 100);
-        const sanitizedCompanyName = sanitizeInput(company_name, 100);
-        const sanitizedVisitingPerson = sanitizeInput(visiting_person, 100);
-        const sanitizedNotes = sanitizeInput(notes, 1000);
+        const sanitizedFullName = sanitizePlainText(full_name, 100);
+        const sanitizedCompanyName = sanitizePlainText(company_name, 100);
+        const sanitizedVisitingPerson = sanitizePlainText(visiting_person, 100);
+        const sanitizedNotes = sanitizePlainText(notes, 1000);
         const normalizedPlate = normalizePlate(vehicle_plate);
         const normalizedPhone = phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null;
 
