@@ -17,6 +17,22 @@ const INITIAL_FORM_DATA: SgkFormData = {
 
 const ZOOM_STEPS: number[] = [1, 2, 4, 8];
 
+const looksLikeMojibake = (value: string): boolean => /Ã|Å|Ä|Ð|Ñ|â/.test(value);
+
+const normalizeDisplayFileName = (value: string): string => {
+    if (!value || !looksLikeMojibake(value)) {
+        return value;
+    }
+
+    try {
+        const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0));
+        const fixed = new TextDecoder('utf-8').decode(bytes);
+        return fixed.includes('�') ? value : fixed;
+    } catch (_error) {
+        return value;
+    }
+};
+
 export default function Sgk() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -1016,7 +1032,7 @@ export default function Sgk() {
                                         onClick={() => setSelectedFileIndex(index)}
                                         className={`px-3 py-1.5 text-xs rounded-md whitespace-nowrap ${selectedFileIndex === index ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                     >
-                                        {file.original_file_name || file.file_name}
+                                        {normalizeDisplayFileName(file.original_file_name || file.file_name)}
                                     </button>
                                 ))}
                             </div>
