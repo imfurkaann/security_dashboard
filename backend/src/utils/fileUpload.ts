@@ -15,6 +15,19 @@ const parseUploadLimitMb = (value: string | undefined, fallbackMb: number): numb
     return parsed;
 };
 
+const looksLikeMojibake = (value: string): boolean => {
+    return /Ã|Å|Ä|Ð|Ñ|â/.test(value);
+};
+
+const normalizeMultipartText = (value: string | undefined): string | undefined => {
+    if (!value || !looksLikeMojibake(value)) {
+        return value;
+    }
+
+    const fixed = Buffer.from(value, 'latin1').toString('utf8');
+    return fixed.includes('�') ? value : fixed;
+};
+
 export const SGK_MAX_FILE_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_FILE_SIZE_MB, 25);
 export const SGK_MAX_FILE_SIZE_BYTES = SGK_MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -101,10 +114,19 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         try {
+            const normalizedOriginalName = normalizeMultipartText(file.originalname);
+            if (normalizedOriginalName) {
+                file.originalname = normalizedOriginalName;
+            }
+
             // Request body'den TC, pasaport ve ad soyad al
             const tcNo = req.body.tc_no;
             const passportNo = req.body.passport_no;
-            const fullName = req.body.full_name;
+            const fullName = normalizeMultipartText(req.body.full_name);
+
+            if (fullName) {
+                req.body.full_name = fullName;
+            }
 
             if (!fullName) {
                 return cb(new Error('Ad Soyad zorunludur'), '');
