@@ -1,6 +1,7 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { MulterError } from 'multer';
 import pool from './config/database';
 import { runMigrations } from './config/migrations';
 import authRoutes from './routes/auth';
@@ -16,6 +17,7 @@ import personnelRoutes from './routes/personnel';
 import exportRoutes from './routes/export';
 import statisticsRoutes from './routes/statistics';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
+import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
 
 dotenv.config();
 
@@ -196,6 +198,14 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
         return res.status(413).json({
             success: false,
             message: 'İstek boyutu çok büyük'
+        });
+    }
+
+    // Multipart dosya limit hataları
+    if (err instanceof MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+            success: false,
+            message: `Dosya boyutu çok büyük. Her bir dosya en fazla ${SGK_MAX_FILE_SIZE_MB}MB olabilir.`
         });
     }
 
