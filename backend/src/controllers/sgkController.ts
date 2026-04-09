@@ -4,8 +4,161 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
-import { hashTC, formatFileName, deleteFile, getFilePath, hashPassport } from '../utils/fileUpload';
-import path from 'path';
+import { hashTC, deleteFile, getFilePath, hashPassport } from '../utils/fileUpload';
+
+interface SgkFileMeta {
+    id: string;
+    record_id: string;
+    file_name: string;
+    original_file_name: string | null;
+    mime_type: string | null;
+    size_bytes: number | null;
+    sort_order: number;
+    created_at: string;
+}
+
+const extractUploadedFiles = (req: Request): Express.Multer.File[] => {
+    const filesFromSingle = req.file ? [req.file] : [];
+
+    if (!req.files) {
+        return filesFromSingle;
+    }
+
+    if (Array.isArray(req.files)) {
+        return [...filesFromSingle, ...req.files];
+    }
+
+    const filesMap = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const filesFromFields = Object.values(filesMap).flat();
+    return [...filesFromSingle, ...filesFromFields];
+};
+
+const mapFileRow = (row: any): SgkFileMeta => ({
+    id: row.id,
+    record_id: row.sgk_record_id,
+    file_name: row.stored_file_name,
+    original_file_name: row.original_file_name,
+    mime_type: row.mime_type,
+    size_bytes: row.size_bytes,
+    sort_order: row.sort_order,
+    created_at: row.created_at
+});
+
+const getRecordFilesByIds = async (recordIds: string[]): Promise<Map<string, SgkFileMeta[]>> => {
+    const grouped = new Map<string, SgkFileMeta[]>();
+
+    if (recordIds.length === 0) {
+        return grouped;
+    }
+
+    const query = `
+        SELECT
+            id,
+            sgk_record_id,
+            stored_file_name,
+            original_file_name,
+            mime_type,
+            size_bytes,
+            sort_order,
+            created_at
+        FROM sgk_record_files
+        WHERE deleted_at IS NULL AND sgk_record_id = ANY($1::uuid[])
+        ORDER BY sgk_record_id, sort_order, created_at
+    `;
+
+    const result = await pool.query(query, [recordIds]);
+
+    for (const row of result.rows) {
+        const file = mapFileRow(row);
+        const current = grouped.get(file.record_id) || [];
+        current.push(file);
+        grouped.set(file.record_id, current);
+    }
+
+    return grouped;
+};
+
+const withFallbackFile = (record: any, files: SgkFileMeta[]): SgkFileMeta[] => {
+    if (files.length > 0) {
+        return files;
+    }
+
+    if (!record.file_path) {
+        return [];
+    }
+
+    return [
+        {
+            id: '',
+            record_id: record.id,
+            file_name: record.file_path,
+            original_file_name: record.file_path,
+            mime_type: null,
+            size_bytes: null,
+            sort_order: 0,
+            created_at: record.created_at
+        }
+    ];
+};
+
+const mapRecordResponse = (record: any, fileMap: Map<string, SgkFileMeta[]>) => {
+    const files = withFallbackFile(record, fileMap.get(record.id) || []);
+    return {
+        id: record.id,
+        hashed_tc: record.hashed_tc,
+        hashed_passport: record.hashed_passport,
+        full_name: record.full_name,
+        company_name: record.company_name,
+        file_path: files[0]?.file_name || record.file_path || null,
+        files,
+        file_count: files.length,
+        upload_date: record.upload_date,
+        notes: record.notes,
+        personnel: (record.personnel_first_name || record.personnel_last_name)
+            ? `${record.personnel_first_name || ''} ${record.personnel_last_name || ''}`.trim()
+            : null,
+        created_at: record.created_at
+    };
+};
+
+const resolveContentType = (fileName: string): string => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+
+    switch (ext) {
+        case 'pdf':
+            return 'application/pdf';
+        case 'jpg':
+        case 'jpeg':
+            return 'image/jpeg';
+        case 'png':
+            return 'image/png';
+        default:
+            return 'application/octet-stream';
+    }
+};
+
+const sendStoredFile = (res: Response, fileName: string): void => {
+    const filePath = getFilePath(fileName);
+    const fs = require('fs');
+
+    if (!fs.existsSync(filePath)) {
+        res.status(404).json({ success: false, message: `Dosya bulunamadı: ${fileName}` });
+        return;
+    }
+
+    const contentType = resolveContentType(fileName);
+    res.setHeader('Content-Type', contentType);
+    const encodedFileName = encodeURIComponent(fileName).replace(/['()]/g, escape);
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+    res.removeHeader('X-Frame-Options');
+    res.removeHeader('Content-Security-Policy');
+
+    res.sendFile(filePath, (err) => {
+        if (err && !res.headersSent) {
+            res.status(500).json({ success: false, message: 'Dosya gönderilirken hata oluştu' });
+        }
+    });
+};
 
 /**
  * Get all SGK records
@@ -34,20 +187,9 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
         `;
         const result = await pool.query(query);
 
-        const formattedData = result.rows.map((row: any) => ({
-            id: row.id,
-            hashed_tc: row.hashed_tc,
-            hashed_passport: row.hashed_passport,
-            full_name: row.full_name,
-            company_name: row.company_name,
-            file_path: row.file_path,
-            upload_date: row.upload_date,
-            notes: row.notes,
-            personnel: (row.personnel_first_name || row.personnel_last_name)
-                ? `${row.personnel_first_name || ''} ${row.personnel_last_name || ''}`.trim()
-                : null,
-            created_at: row.created_at
-        }));
+        const recordIds = result.rows.map((row: any) => row.id);
+        const fileMap = await getRecordFilesByIds(recordIds);
+        const formattedData = result.rows.map((row: any) => mapRecordResponse(row, fileMap));
 
         res.status(200).json(formattedData);
     } catch (error) {
@@ -66,11 +208,12 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const { tc_no, passport_no, full_name, company_name, notes } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
-        const file = req.file;
+        const uploadedFiles = extractUploadedFiles(req);
 
         // Validasyonlar
-        if (!full_name || !file) {
-            res.status(400).json({ success: false, message: 'Ad Soyad ve PDF dosyası zorunludur' });
+        if (!full_name || uploadedFiles.length === 0) {
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+            res.status(400).json({ success: false, message: 'Ad Soyad ve en az bir belge dosyası zorunludur' });
             return;
         }
 
@@ -79,7 +222,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
 
         // TC ve pasaport her ikisi de girilmiş mi kontrol et
         if (hasTCInput && hasPassportInput) {
-            if (file.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
         }
@@ -91,7 +234,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         if (hasTCInput) {
             const cleanTC = tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
-                if (file.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
                 return;
             }
@@ -102,7 +245,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
             const existingResult = await pool.query(existingQuery, [hashedTC]);
 
             if (existingResult.rows.length > 0) {
-                if (file.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait kayıt zaten mevcut' });
                 return;
             }
@@ -112,7 +255,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         if (hasPassportInput) {
             const cleanPassport = passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
-                if (file.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
                 return;
             }
@@ -123,7 +266,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
             const existingResult = await pool.query(existingQuery, [hashedPassport]);
 
             if (existingResult.rows.length > 0) {
-                if (file.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait kayıt zaten mevcut' });
                 return;
             }
@@ -135,7 +278,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const sanitizedNotes = sanitizeInput(notes, 1000);
 
         if (!sanitizedFullName || sanitizedFullName.trim().length === 0) {
-            if (file.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
             return;
         }
@@ -143,29 +286,70 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const id = uuidv4();
         const currentDate = new Date();
 
-        const insertQuery = `
-            INSERT INTO sgk_records (
-                id, hashed_tc, hashed_passport, full_name, company_name, 
-                file_path, upload_date, notes, personnel_id, created_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING *
-        `;
+        const client = await pool.connect();
+        let createdRecord: any;
+        let committed = false;
 
-        const values = [
-            id,
-            hashedTC,
-            hashedPassport,
-            sanitizedFullName,
-            sanitizedCompanyName,
-            file.filename, // Sadece dosya adı kaydet
-            currentDate,
-            sanitizedNotes,
-            personnel_id,
-            currentDate
-        ];
+        try {
+            await client.query('BEGIN');
 
-        const result = await pool.query(insertQuery, values);
+            const insertQuery = `
+                INSERT INTO sgk_records (
+                    id, hashed_tc, hashed_passport, full_name, company_name,
+                    file_path, upload_date, notes, personnel_id, created_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING *
+            `;
+
+            const values = [
+                id,
+                hashedTC,
+                hashedPassport,
+                sanitizedFullName,
+                sanitizedCompanyName,
+                uploadedFiles[0].filename,
+                currentDate,
+                sanitizedNotes,
+                personnel_id,
+                currentDate
+            ];
+
+            const insertResult = await client.query(insertQuery, values);
+            createdRecord = insertResult.rows[0];
+
+            for (let i = 0; i < uploadedFiles.length; i++) {
+                const uploadedFile = uploadedFiles[i];
+                const fileInsertQuery = `
+                    INSERT INTO sgk_record_files (
+                        id, sgk_record_id, stored_file_name, original_file_name,
+                        mime_type, size_bytes, sort_order
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                `;
+
+                await client.query(fileInsertQuery, [
+                    uuidv4(),
+                    id,
+                    uploadedFile.filename,
+                    uploadedFile.originalname || null,
+                    uploadedFile.mimetype || null,
+                    uploadedFile.size || null,
+                    i
+                ]);
+            }
+
+            await client.query('COMMIT');
+            committed = true;
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
+
+        const fileMap = await getRecordFilesByIds([id]);
+        const responseData = mapRecordResponse(createdRecord, fileMap);
 
         // Audit log
         await logDataChange(
@@ -173,22 +357,20 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
             id,
             'INSERT',
             null,
-            result.rows[0],
+            responseData,
             personnel_id,
             clientIp
         );
 
         res.status(201).json({
             success: true,
-            message: 'SGK belgesi başarıyla kaydedildi',
-            data: result.rows[0]
+            message: 'SGK belgeleri başarıyla kaydedildi',
+            data: responseData
         });
     } catch (error) {
         console.error('Create SGK record error:', error);
-        // Hata durumunda dosyayı sil
-        if (req.file?.filename) {
-            deleteFile(req.file.filename);
-        }
+        const uploadedFiles = extractUploadedFiles(req);
+        uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
         res.status(500).json({ success: false, message: 'SGK kaydı oluşturulurken hata oluştu' });
     }
 };
@@ -296,20 +478,9 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        const formattedData = result.rows.map(record => ({
-            id: record.id,
-            hashed_tc: record.hashed_tc,
-            hashed_passport: record.hashed_passport,
-            full_name: record.full_name,
-            company_name: record.company_name,
-            file_path: record.file_path,
-            upload_date: record.upload_date,
-            notes: record.notes,
-            personnel: (record.personnel_first_name || record.personnel_last_name)
-                ? `${record.personnel_first_name || ''} ${record.personnel_last_name || ''}`.trim()
-                : null,
-            created_at: record.created_at
-        }));
+        const recordIds = result.rows.map((row: any) => row.id);
+        const fileMap = await getRecordFilesByIds(recordIds);
+        const formattedData = result.rows.map((record) => mapRecordResponse(record, fileMap));
 
         res.status(200).json({
             success: true,
@@ -329,9 +500,15 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
 export const getSgkFile = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
+        const fileIdFromQuery = typeof req.query.file_id === 'string' ? req.query.file_id : null;
 
         if (!isValidUUID(id)) {
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID' });
+            return;
+        }
+
+        if (fileIdFromQuery && !isValidUUID(fileIdFromQuery)) {
+            res.status(400).json({ success: false, message: 'Geçersiz dosya ID' });
             return;
         }
 
@@ -345,7 +522,36 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        const fileName = result.rows[0].file_path;
+        let fileName = result.rows[0].file_path;
+
+        if (fileIdFromQuery) {
+            const fileQuery = `
+                SELECT stored_file_name
+                FROM sgk_record_files
+                WHERE id = $1 AND sgk_record_id = $2 AND deleted_at IS NULL
+            `;
+            const fileResult = await pool.query(fileQuery, [fileIdFromQuery, id]);
+
+            if (fileResult.rows.length === 0) {
+                res.status(404).json({ success: false, message: 'Dosya bulunamadı' });
+                return;
+            }
+
+            fileName = fileResult.rows[0].stored_file_name;
+        } else {
+            const fileQuery = `
+                SELECT stored_file_name
+                FROM sgk_record_files
+                WHERE sgk_record_id = $1 AND deleted_at IS NULL
+                ORDER BY sort_order, created_at
+                LIMIT 1
+            `;
+            const fileResult = await pool.query(fileQuery, [id]);
+
+            if (fileResult.rows.length > 0) {
+                fileName = fileResult.rows[0].stored_file_name;
+            }
+        }
 
         if (!fileName) {
             console.error(`[SGK File] Dosya yolu boş: ${id}`);
@@ -353,56 +559,54 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        const filePath = getFilePath(fileName);
-        console.log(`[SGK File] Dosya istendi: ${fileName}, Tam yol: ${filePath}`);
+        sendStoredFile(res, fileName);
+    } catch (error) {
+        console.error('[SGK File] Beklenmeyen hata:', error);
+        res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
+    }
+};
 
-        // Dosya var mı kontrol et
-        const fs = require('fs');
-        const path = require('path');
-        if (!fs.existsSync(filePath)) {
-            console.error(`[SGK File] Dosya mevcut değil: ${filePath}`);
-            res.status(404).json({ success: false, message: `Dosya bulunamadı: ${fileName}` });
+/**
+ * Get SGK file by file id
+ * GET /api/sgk/records/:id/files/:fileId
+ */
+export const getSgkFileById = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id, fileId } = req.params;
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID' });
             return;
         }
 
-        // Dosya uzantısına göre Content-Type belirle
-        const ext = path.extname(fileName).toLowerCase();
-        let contentType = 'application/octet-stream';
-
-        switch (ext) {
-            case '.pdf':
-                contentType = 'application/pdf';
-                break;
-            case '.jpg':
-            case '.jpeg':
-                contentType = 'image/jpeg';
-                break;
-            case '.png':
-                contentType = 'image/png';
-                break;
+        if (!isValidUUID(fileId)) {
+            res.status(400).json({ success: false, message: 'Geçersiz dosya ID' });
+            return;
         }
 
-        // Dosyayı gönder
-        res.setHeader('Content-Type', contentType);
-        // Türkçe karakterler için RFC 5987 uyumlu encoding
-        const encodedFileName = encodeURIComponent(fileName).replace(/['()]/g, escape);
-        res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
-        // iframe içinde görüntülenebilmesi için güvenlik başlıklarını kaldır
-        res.removeHeader('X-Frame-Options');
-        res.removeHeader('Content-Security-Policy');
+        const recordQuery = 'SELECT id FROM sgk_records WHERE id = $1 AND deleted_at IS NULL';
+        const recordResult = await pool.query(recordQuery, [id]);
 
-        // sendFile ile dosyayı gönder (absolute path gerekli)
-        res.sendFile(filePath, (err) => {
-            if (err) {
-                console.error(`[SGK File] sendFile hatası: ${filePath}`, err);
-                // Header gönderilmemişse hata döndür
-                if (!res.headersSent) {
-                    res.status(500).json({ success: false, message: 'Dosya gönderilirken hata oluştu' });
-                }
-            }
-        });
+        if (recordResult.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        const fileQuery = `
+            SELECT stored_file_name
+            FROM sgk_record_files
+            WHERE id = $1 AND sgk_record_id = $2 AND deleted_at IS NULL
+        `;
+        const fileResult = await pool.query(fileQuery, [fileId, id]);
+
+        if (fileResult.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Dosya bulunamadı' });
+            return;
+        }
+
+        sendStoredFile(res, fileResult.rows[0].stored_file_name);
     } catch (error) {
-        console.error('[SGK File] Beklenmeyen hata:', error);
+        console.error('Get SGK file by ID error:', error);
         res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
     }
 };
@@ -415,12 +619,12 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
     try {
         const { id } = req.params;
         const { tc_no, passport_no, full_name, company_name, notes } = req.body;
-        const file = req.file;
+        const uploadedFiles = extractUploadedFiles(req);
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
 
         if (!isValidUUID(id)) {
-            if (file?.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'Geçersiz kayıt ID' });
             return;
         }
@@ -430,7 +634,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         const existingResult = await pool.query(existingQuery, [id]);
 
         if (existingResult.rows.length === 0) {
-            if (file?.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
             return;
         }
@@ -439,7 +643,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         // TC ve pasaport her ikisi de girilmiş mi kontrol et
         if (tc_no && passport_no) {
-            if (file?.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
         }
@@ -451,7 +655,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         if (tc_no) {
             const cleanTC = tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
-                if (file?.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
                 return;
             }
@@ -462,7 +666,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             const tcCheckResult = await pool.query(tcCheckQuery, [hashedTC, id]);
 
             if (tcCheckResult.rows.length > 0) {
-                if (file?.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait başka bir kayıt zaten mevcut' });
                 return;
             }
@@ -472,7 +676,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         if (passport_no) {
             const cleanPassport = passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
-                if (file?.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
                 return;
             }
@@ -483,7 +687,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             const passportCheckResult = await pool.query(passportCheckQuery, [hashedPassport, id]);
 
             if (passportCheckResult.rows.length > 0) {
-                if (file?.filename) deleteFile(file.filename);
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
                 res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait başka bir kayıt zaten mevcut' });
                 return;
             }
@@ -495,7 +699,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         const sanitizedNotes = sanitizeInput(notes?.trim() || '');
 
         if (!sanitizedFullName) {
-            if (file?.filename) deleteFile(file.filename);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
             return;
         }
@@ -504,7 +708,6 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         const updateValues: any[] = [];
         let paramCounter = 1;
 
-        // TC/Pasaport güncellenebilir (birini null yap, diğerini set et)
         if (tc_no) {
             updateFields.push(`hashed_tc = $${paramCounter++}`);
             updateValues.push(hashedTC);
@@ -517,29 +720,18 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             updateValues.push(null);
         }
 
-        // Ad Soyad güncellenebilir
         updateFields.push(`full_name = $${paramCounter++}`);
         updateValues.push(sanitizedFullName);
 
-        // Firma adı güncellenebilir
         updateFields.push(`company_name = $${paramCounter++}`);
         updateValues.push(sanitizedCompanyName);
 
-        // Notlar güncellenebilir
         updateFields.push(`notes = $${paramCounter++}`);
         updateValues.push(sanitizedNotes);
 
-        // Dosya güncellenirse eski dosyayı sil
-        if (file?.filename) {
+        if (uploadedFiles.length > 0) {
             updateFields.push(`file_path = $${paramCounter++}`);
-            updateValues.push(file.filename);
-
-            // Eski dosyayı sil
-            try {
-                deleteFile(oldData.file_path);
-            } catch (fileError) {
-                console.error('Old file deletion error:', fileError);
-            }
+            updateValues.push(uploadedFiles[0].filename);
         }
 
         updateFields.push(`updated_at = $${paramCounter++}`);
@@ -547,14 +739,77 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         updateValues.push(id);
 
-        const updateQuery = `
-            UPDATE sgk_records 
-            SET ${updateFields.join(', ')}
-            WHERE id = $${paramCounter} AND deleted_at IS NULL
-            RETURNING *
-        `;
+        const client = await pool.connect();
+        let updatedRow: any;
+        let committed = false;
 
-        const result = await pool.query(updateQuery, updateValues);
+        try {
+            await client.query('BEGIN');
+
+            if (uploadedFiles.length > 0) {
+                const existingFilesQuery = `
+                    SELECT stored_file_name
+                    FROM sgk_record_files
+                    WHERE sgk_record_id = $1 AND deleted_at IS NULL
+                `;
+                const existingFilesResult = await client.query(existingFilesQuery, [id]);
+
+                await client.query(
+                    'UPDATE sgk_record_files SET deleted_at = NOW() WHERE sgk_record_id = $1 AND deleted_at IS NULL',
+                    [id]
+                );
+
+                for (const oldFile of existingFilesResult.rows) {
+                    try {
+                        deleteFile(oldFile.stored_file_name);
+                    } catch (fileError) {
+                        console.error('Old file deletion error:', fileError);
+                    }
+                }
+
+                for (let i = 0; i < uploadedFiles.length; i++) {
+                    const uploadedFile = uploadedFiles[i];
+                    const fileInsertQuery = `
+                        INSERT INTO sgk_record_files (
+                            id, sgk_record_id, stored_file_name, original_file_name,
+                            mime_type, size_bytes, sort_order
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    `;
+
+                    await client.query(fileInsertQuery, [
+                        uuidv4(),
+                        id,
+                        uploadedFile.filename,
+                        uploadedFile.originalname || null,
+                        uploadedFile.mimetype || null,
+                        uploadedFile.size || null,
+                        i
+                    ]);
+                }
+            }
+
+            const updateQuery = `
+                UPDATE sgk_records
+                SET ${updateFields.join(', ')}
+                WHERE id = $${paramCounter} AND deleted_at IS NULL
+                RETURNING *
+            `;
+
+            const updatedResult = await client.query(updateQuery, updateValues);
+            updatedRow = updatedResult.rows[0];
+
+            await client.query('COMMIT');
+            committed = true;
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
+
+        const fileMap = await getRecordFilesByIds([id]);
+        const responseData = mapRecordResponse(updatedRow, fileMap);
 
         // Audit log
         await logDataChange(
@@ -562,7 +817,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             id,
             'UPDATE',
             oldData,
-            result.rows[0],
+            responseData,
             personnel_id,
             clientIp
         );
@@ -570,10 +825,12 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         res.status(200).json({
             success: true,
             message: 'SGK kaydı başarıyla güncellendi',
-            data: result.rows[0]
+            data: responseData
         });
     } catch (error) {
         console.error('Update SGK record error:', error);
+        const uploadedFiles = extractUploadedFiles(req);
+        uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
         res.status(500).json({ success: false, message: 'SGK kaydı güncellenirken hata oluştu' });
     }
 };
@@ -603,24 +860,56 @@ export const deleteSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         const oldData = existingResult.rows[0];
-        const fileName = oldData.file_path;
+
+        const filesResult = await pool.query(
+            `
+                SELECT stored_file_name
+                FROM sgk_record_files
+                WHERE sgk_record_id = $1 AND deleted_at IS NULL
+                ORDER BY sort_order, created_at
+            `,
+            [id]
+        );
+
+        const fileNames: string[] = filesResult.rows.map((row: any) => row.stored_file_name);
+        if (fileNames.length === 0 && oldData.file_path) {
+            fileNames.push(oldData.file_path);
+        }
 
         // Soft delete
-        const deleteQuery = `
-            UPDATE sgk_records 
-            SET deleted_at = $1
-            WHERE id = $2 AND deleted_at IS NULL
-            RETURNING *
-        `;
+        const client = await pool.connect();
+        let result: any;
+        try {
+            await client.query('BEGIN');
 
-        const result = await pool.query(deleteQuery, [new Date(), id]);
+            await client.query(
+                'UPDATE sgk_record_files SET deleted_at = $1 WHERE sgk_record_id = $2 AND deleted_at IS NULL',
+                [new Date(), id]
+            );
+
+            const deleteQuery = `
+                UPDATE sgk_records
+                SET deleted_at = $1
+                WHERE id = $2 AND deleted_at IS NULL
+                RETURNING *
+            `;
+
+            result = await client.query(deleteQuery, [new Date(), id]);
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
 
         // Dosyayı fiziksel olarak sil
-        try {
-            deleteFile(fileName);
-        } catch (fileError) {
-            console.error('File deletion error:', fileError);
-            // Dosya silme hatası kritik değil, devam et
+        for (const fileName of fileNames) {
+            try {
+                deleteFile(fileName);
+            } catch (fileError) {
+                console.error('File deletion error:', fileError);
+            }
         }
 
         // Audit log

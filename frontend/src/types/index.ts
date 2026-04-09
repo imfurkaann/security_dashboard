@@ -118,13 +118,26 @@ export interface IncidentRecord {
 }
 
 // SGK Types
+export interface SgkFileMeta {
+    id: string;
+    record_id: string;
+    file_name: string;
+    original_file_name: string | null;
+    mime_type: string | null;
+    size_bytes: number | null;
+    sort_order: number;
+    created_at: string;
+}
+
 export interface SgkRecord {
     id: string;
     hashed_tc: string | null;
     hashed_passport: string | null;
     full_name: string;
     company_name: string | null;
-    file_path: string;
+    file_path: string | null;
+    files: SgkFileMeta[];
+    file_count: number;
     upload_date: string;
     notes: string | null;
     personnel: string | null;
@@ -137,7 +150,7 @@ export interface SgkFormData {
     full_name: string;
     company_name: string;
     notes: string;
-    pdf_file: File | null;
+    pdf_files: File[];
 }
 
 // Form Types
