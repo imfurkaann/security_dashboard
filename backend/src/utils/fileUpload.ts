@@ -6,6 +6,18 @@ import crypto from 'crypto';
 // SGK kayıtları için dosya yükleme klasörü
 const UPLOAD_DIR = path.join(__dirname, '../../sgk_kayitlari');
 
+const parseUploadLimitMb = (value: string | undefined, fallbackMb: number): number => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return fallbackMb;
+    }
+
+    return parsed;
+};
+
+export const SGK_MAX_FILE_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_FILE_SIZE_MB, 25);
+export const SGK_MAX_FILE_SIZE_BYTES = SGK_MAX_FILE_SIZE_MB * 1024 * 1024;
+
 // Klasör yoksa oluştur
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -138,7 +150,8 @@ export const sgkUpload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: SGK_MAX_FILE_SIZE_BYTES,
+        files: 10
     }
 });
 
