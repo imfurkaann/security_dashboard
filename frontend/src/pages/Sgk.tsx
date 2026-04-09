@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
-import type { SgkRecord, SgkFormData } from '../types';
+import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
 import ActionButton from '../components/ActionButton';
 
 // Initial form states
@@ -12,7 +12,7 @@ const INITIAL_FORM_DATA: SgkFormData = {
     full_name: '',
     company_name: '',
     notes: '',
-    pdf_file: null
+    pdf_files: []
 };
 
 const ZOOM_STEPS: number[] = [1, 2, 4, 8];
@@ -29,10 +29,33 @@ export default function Sgk() {
     const [pdfUrl, setPdfUrl] = useState<string>('');
     const [previewContentType, setPreviewContentType] = useState('');
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [selectedFileIndex, setSelectedFileIndex] = useState(0);
     const [isMobilePreview, setIsMobilePreview] = useState(false);
     const [imageZoom, setImageZoom] = useState(1);
     const [zoomOrigin, setZoomOrigin] = useState('50% 50%');
     const navigate = useNavigate();
+
+    const getRecordFiles = useCallback((record: SgkRecord | null): SgkFileMeta[] => {
+        if (!record) return [];
+        if (record.files && record.files.length > 0) return record.files;
+        if (!record.file_path) return [];
+
+        return [
+            {
+                id: '',
+                record_id: record.id,
+                file_name: record.file_path,
+                original_file_name: record.file_path,
+                mime_type: null,
+                size_bytes: null,
+                sort_order: 0,
+                created_at: record.created_at || record.upload_date
+            }
+        ];
+    }, []);
+
+    const previewFiles = useMemo(() => getRecordFiles(previewRecord), [getRecordFiles, previewRecord]);
+    const selectedPreviewFile = previewFiles[selectedFileIndex] || null;
 
     const handleImageWheel = useCallback((e: React.WheelEvent<HTMLImageElement>) => {
         e.preventDefault();
@@ -60,11 +83,12 @@ export default function Sgk() {
     }, []);
 
     useEffect(() => {
-        if (!showPreviewModal || !previewRecord || !previewRecord.file_path.match(/\.(jpg|jpeg|png)$/i)) {
+        const fileName = selectedPreviewFile?.file_name || '';
+        if (!showPreviewModal || !fileName.match(/\.(jpg|jpeg|png)$/i)) {
             setImageZoom(1);
             setZoomOrigin('50% 50%');
         }
-    }, [showPreviewModal, previewRecord]);
+    }, [showPreviewModal, selectedPreviewFile]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -213,15 +237,21 @@ export default function Sgk() {
 
     // Handle file selection
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0] || null;
-        if (file) {
-            const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-            if (!allowedTypes.includes(file.type)) {
-                alert('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir');
-                return;
-            }
+        const selectedFiles = Array.from(e.target.files || []);
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+        const hasInvalidType = selectedFiles.some((file) => !allowedTypes.includes(file.type));
+        if (hasInvalidType) {
+            alert('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir');
+            return;
         }
-        setFormData({ ...formData, pdf_file: file });
+
+        if (selectedFiles.length > 10) {
+            alert('En fazla 10 dosya yükleyebilirsiniz');
+            return;
+        }
+
+        setFormData({ ...formData, pdf_files: selectedFiles });
     };
 
     // Handle upload submission
@@ -258,8 +288,8 @@ export default function Sgk() {
             return;
         }
 
-        if (!formData.pdf_file) {
-            alert('Belge dosyası seçmelisiniz');
+        if (!formData.pdf_files || formData.pdf_files.length === 0) {
+            alert('En az bir belge dosyası seçmelisiniz');
             return;
         }
 
@@ -279,7 +309,9 @@ export default function Sgk() {
             uploadData.append('full_name', formData.full_name.trim());
             uploadData.append('company_name', formData.company_name?.trim() || '');
             uploadData.append('notes', formData.notes?.trim() || '');
-            uploadData.append('pdf_file', formData.pdf_file);
+            formData.pdf_files.forEach((file) => {
+                uploadData.append('pdf_files', file);
+            });
 
             const response = await api.post('/sgk/records', uploadData, {
                 headers: {
@@ -287,7 +319,7 @@ export default function Sgk() {
                 }
             });
 
-            alert('SGK belgesi başarıyla kaydedildi');
+            alert('SGK belgeleri başarıyla kaydedildi');
             setShowUploadModal(false);
             resetUploadForm();
 
@@ -301,40 +333,55 @@ export default function Sgk() {
     }, [formData, resetUploadForm]);
 
     // Handle preview
-    const handlePreview = useCallback(async (record: SgkRecord) => {
-        // Modalı hemen açıp yükleme durumunu göster
+    const handlePreview = useCallback((record: SgkRecord) => {
         setPreviewRecord(record);
+        setSelectedFileIndex(0);
         setShowPreviewModal(true);
-        setPreviewLoading(true);
         setPreviewContentType('');
+    }, []);
 
-        try {
-            const response = await api.get(`/sgk/records/${record.id}/file`, {
-                responseType: 'blob'
-            });
-
-            // Blob URL oluştur
-            if (pdfUrl) {
-                URL.revokeObjectURL(pdfUrl);
+    useEffect(() => {
+        const fetchSelectedPreviewFile = async () => {
+            if (!showPreviewModal || !previewRecord || !selectedPreviewFile) {
+                return;
             }
-            const blob = new Blob([response.data], {
-                type: response.headers['content-type'] || 'application/octet-stream'
-            });
-            const url = URL.createObjectURL(blob);
-            const contentType = response.headers['content-type'] || '';
 
-            setPdfUrl(url);
-            setPreviewContentType(contentType);
-        } catch (error) {
-            alert('Belge önizlenirken hata oluştu');
-            setShowPreviewModal(false);
-            setPreviewRecord(null);
-            setPdfUrl('');
-            setPreviewContentType('');
-        } finally {
-            setPreviewLoading(false);
-        }
-    }, [pdfUrl]);
+            setPreviewLoading(true);
+
+            try {
+                const endpoint = selectedPreviewFile.id
+                    ? `/sgk/records/${previewRecord.id}/files/${selectedPreviewFile.id}`
+                    : `/sgk/records/${previewRecord.id}/file`;
+
+                const response = await api.get(endpoint, { responseType: 'blob' });
+
+                const blob = new Blob([response.data], {
+                    type: response.headers['content-type'] || 'application/octet-stream'
+                });
+
+                const url = URL.createObjectURL(blob);
+                const contentType = response.headers['content-type'] || '';
+
+                setPdfUrl((previousUrl) => {
+                    if (previousUrl) {
+                        URL.revokeObjectURL(previousUrl);
+                    }
+                    return url;
+                });
+                setPreviewContentType(contentType);
+            } catch (error) {
+                alert('Belge önizlenirken hata oluştu');
+                setShowPreviewModal(false);
+                setPreviewRecord(null);
+                setPdfUrl('');
+                setPreviewContentType('');
+            } finally {
+                setPreviewLoading(false);
+            }
+        };
+
+        fetchSelectedPreviewFile();
+    }, [showPreviewModal, previewRecord, selectedPreviewFile]);
 
     // Handle edit
     const handleEdit = useCallback((record: SgkRecord) => {
@@ -345,7 +392,7 @@ export default function Sgk() {
             full_name: record.full_name,
             company_name: record.company_name || '',
             notes: record.notes || '',
-            pdf_file: null
+            pdf_files: []
         });
         setShowEditModal(true);
     }, []);
@@ -427,8 +474,10 @@ export default function Sgk() {
             if (formData.notes?.trim()) {
                 formDataToSend.append('notes', formData.notes.trim());
             }
-            if (formData.pdf_file) {
-                formDataToSend.append('pdf_file', formData.pdf_file);
+            if (formData.pdf_files.length > 0) {
+                formData.pdf_files.forEach((file) => {
+                    formDataToSend.append('pdf_files', file);
+                });
             }
 
             await api.put(`/sgk/records/${editingRecord.id}`, formDataToSend, {
@@ -610,6 +659,10 @@ export default function Sgk() {
                                                     <span className="text-gray-600 block mb-1">Yüklenme Tarihi</span>
                                                     <span className="font-medium text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
+                                                <div>
+                                                    <span className="text-gray-600 block mb-1">Dosya</span>
+                                                    <span className="font-medium text-gray-900">{record.file_count || record.files?.length || 0} adet</span>
+                                                </div>
                                             </div>
                                             <div className="flex-shrink-0 flex flex-wrap items-center gap-2 sm:gap-3">
                                                 <ActionButton
@@ -738,18 +791,19 @@ export default function Sgk() {
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Belge Dosyası (PDF, JPG, PNG) <span className="text-red-500">*</span>
+                                        Belge Dosyaları (PDF, JPG, PNG) <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="file"
                                         accept="application/pdf,image/jpeg,image/jpg,image/png"
+                                        multiple
                                         onChange={handleFileChange}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                                         required
                                     />
-                                    {formData.pdf_file && (
+                                    {formData.pdf_files.length > 0 && (
                                         <p className="mt-2 text-sm text-gray-600">
-                                            Seçili dosya: {formData.pdf_file.name}
+                                            Seçili dosyalar: {formData.pdf_files.length} adet
                                         </p>
                                     )}
                                 </div>
@@ -796,7 +850,7 @@ export default function Sgk() {
                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-yellow-800">
                                     <strong>Not:</strong> TC/Pasaport güncellemek için tekrar girmeniz gerekiyor.
-                                    Dosya değiştirmek isterseniz yeni dosya seçin, aksi halde mevcut dosya korunur.
+                                    Dosya değiştirmek isterseniz yeni dosyaları seçin, aksi halde mevcut dosyalar korunur.
                                 </p>
                             </div>
 
@@ -804,7 +858,7 @@ export default function Sgk() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            TC Kimlik No <span className="text-red-500">*</span>
+                                            TC Kimlik No
                                         </label>
                                         <input
                                             type="text"
@@ -819,7 +873,7 @@ export default function Sgk() {
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Pasaport Numarası <span className="text-red-500">*</span>
+                                            Pasaport Numarası
                                         </label>
                                         <input
                                             type="text"
@@ -860,21 +914,22 @@ export default function Sgk() {
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Belge Dosyası (PDF, JPG, PNG) <span className="text-gray-500">(Opsiyonel)</span>
+                                        Belge Dosyaları (PDF, JPG, PNG) <span className="text-gray-500">(Opsiyonel)</span>
                                     </label>
                                     <input
                                         type="file"
                                         accept="application/pdf,image/jpeg,image/jpg,image/png"
+                                        multiple
                                         onChange={handleFileChange}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     />
-                                    {formData.pdf_file ? (
+                                    {formData.pdf_files.length > 0 ? (
                                         <p className="mt-2 text-sm text-green-600">
-                                            Yeni dosya: {formData.pdf_file.name}
+                                            Yeni dosyalar: {formData.pdf_files.length} adet
                                         </p>
                                     ) : (
                                         <p className="mt-2 text-sm text-gray-600">
-                                            Mevcut dosya: {editingRecord.file_path}
+                                            Mevcut dosya: {editingRecord.file_count || editingRecord.files?.length || 0} adet
                                         </p>
                                     )}
                                 </div>
@@ -922,9 +977,14 @@ export default function Sgk() {
                             <div className="min-w-0">
                                 <h2 className="text-base sm:text-xl font-bold text-gray-900 break-words">{previewRecord.full_name} - SGK Belgesi</h2>
                                 <p className="text-xs sm:text-sm text-gray-600 break-words">{previewRecord.company_name || 'Firma belirtilmemiş'}</p>
+                                {previewFiles.length > 0 && (
+                                    <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                                        Dosya {selectedFileIndex + 1} / {previewFiles.length}
+                                    </p>
+                                )}
                             </div>
                             <div className="flex items-center gap-2">
-                                {(previewContentType.includes('pdf') || previewRecord.file_path.match(/\.pdf$/i)) && pdfUrl && (
+                                {(previewContentType.includes('pdf') || (selectedPreviewFile?.file_name || '').match(/\.pdf$/i)) && pdfUrl && (
                                     <a
                                         href={pdfUrl}
                                         target="_blank"
@@ -940,6 +1000,7 @@ export default function Sgk() {
                                     setPdfUrl('');
                                     setPreviewRecord(null);
                                     setPreviewContentType('');
+                                    setSelectedFileIndex(0);
                                 }} className="text-gray-400 hover:text-gray-600">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -947,10 +1008,23 @@ export default function Sgk() {
                                 </button>
                             </div>
                         </div>
+                        {previewFiles.length > 1 && (
+                            <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 overflow-x-auto">
+                                {previewFiles.map((file, index) => (
+                                    <button
+                                        key={file.id || `${file.file_name}-${index}`}
+                                        onClick={() => setSelectedFileIndex(index)}
+                                        className={`px-3 py-1.5 text-xs rounded-md whitespace-nowrap ${selectedFileIndex === index ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                    >
+                                        {file.original_file_name || file.file_name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         <div className="flex-1 min-h-0 overflow-auto bg-gray-100 flex items-center justify-center">
                             {previewLoading ? (
                                 <div className="text-gray-700 text-sm sm:text-base">Belge yükleniyor...</div>
-                            ) : (previewContentType.startsWith('image/') || previewRecord.file_path.match(/\.(jpg|jpeg|png)$/i)) ? (
+                            ) : (previewContentType.startsWith('image/') || (selectedPreviewFile?.file_name || '').match(/\.(jpg|jpeg|png)$/i)) ? (
                                 // Resim dosyası için img tag kullan
                                 <img
                                     src={pdfUrl}
@@ -963,7 +1037,7 @@ export default function Sgk() {
                                         cursor: imageZoom > 1 ? 'zoom-out' : 'zoom-in'
                                     }}
                                 />
-                            ) : (previewContentType.includes('pdf') || previewRecord.file_path.match(/\.pdf$/i)) ? (
+                            ) : (previewContentType.includes('pdf') || (selectedPreviewFile?.file_name || '').match(/\.pdf$/i)) ? (
                                 isMobilePreview ? (
                                     <div className="text-center p-6 sm:p-8">
                                         <p className="text-gray-700 mb-3">Mobil cihazlarda PDF yeni sekmede açılır.</p>
