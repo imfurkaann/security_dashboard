@@ -14,7 +14,22 @@ const { RangePicker } = DatePicker;
 
 export default function AdminManagerRecords() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
+    const [managersList, setManagersList] = useState<Array<{ id: string; full_name: string; first_name?: string; last_name?: string; title?: string; department?: string | null; phone?: string | null; email?: string | null }>>([]);
     const [loading, setLoading] = useState(true);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
+    const [createEntryDate, setCreateEntryDate] = useState(dayjs().format('YYYY-MM-DD'));
+    const [createExitDate, setCreateExitDate] = useState('');
+    const [createEntryTime, setCreateEntryTime] = useState('');
+    const [createExitTime, setCreateExitTime] = useState('');
+    const [createNotes, setCreateNotes] = useState('');
+    const [creatingRecord, setCreatingRecord] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingRecord, setEditingRecord] = useState<ManagerRecord | null>(null);
+    const [editEntryTime, setEditEntryTime] = useState('');
+    const [editExitTime, setEditExitTime] = useState('');
+    const [editNotes, setEditNotes] = useState('');
+    const [savingEdit, setSavingEdit] = useState(false);
     const navigate = useNavigate();
 
     // Filter states
@@ -39,8 +54,12 @@ export default function AdminManagerRecords() {
                         Authorization: `Bearer ${adminToken}`
                     }
                 };
-                const res = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, config);
-                setRecords(res.data || []);
+                const [recordsRes, managersRes] = await Promise.all([
+                    axios.get(`${API_URL}/managers/records?includeDeleted=true`, config),
+                    axios.get(`${API_URL}/vehicles/managers`, config)
+                ]);
+                setRecords(recordsRes.data || []);
+                setManagersList(managersRes.data || []);
             } catch (error) {
                 console.error('Veriler yüklenemedi:', error);
             } finally {
@@ -214,6 +233,143 @@ export default function AdminManagerRecords() {
         }
     };
 
+    const resetCreateForm = () => {
+        setSelectedManagerId(null);
+        setCreateEntryDate(dayjs().format('YYYY-MM-DD'));
+        setCreateExitDate('');
+        setCreateEntryTime('');
+        setCreateExitTime('');
+        setCreateNotes('');
+        setCreatingRecord(false);
+    };
+
+    const openCreateModal = () => {
+        resetCreateForm();
+        setShowCreateModal(true);
+    };
+
+    const closeCreateModal = () => {
+        setShowCreateModal(false);
+        resetCreateForm();
+    };
+
+    const handleCreateRecord = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!selectedManagerId) {
+            alert('Lütfen listeden bir müdür seçin.');
+            return;
+        }
+
+        if (createNotes.length > 1000) {
+            alert('Açıklama en fazla 1000 karakter olabilir');
+            return;
+        }
+
+        if (createEntryDate && createExitDate && createExitDate < createEntryDate) {
+            alert('Çıkış tarihi giriş tarihinden önce olamaz');
+            return;
+        }
+
+        try {
+            setCreatingRecord(true);
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/managers/records`, {
+                manager_id: selectedManagerId,
+                entry_date: createEntryDate || null,
+                exit_date: createExitDate || null,
+                entry_time: createEntryTime || null,
+                exit_time: createExitTime || null,
+                notes: createNotes.trim() || null
+            }, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+
+            const refreshConfig = {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            };
+            const res = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, refreshConfig);
+            setRecords(res.data || []);
+            closeCreateModal();
+        } catch (error: any) {
+            console.error('Kayıt oluşturulamadı:', error);
+            const message = error.response?.data?.message || 'Kayıt oluşturulurken bir hata oluştu';
+            alert(message);
+        } finally {
+            setCreatingRecord(false);
+        }
+    };
+
+    const availableManagers = useMemo(() => {
+        const insideManagerIds = new Set(
+            records
+                .filter(r => r.status === 'inside' && !r.deleted_at && r.manager_id)
+                .map(r => r.manager_id as string)
+        );
+
+        return managersList.filter(m => !insideManagerIds.has(m.id));
+    }, [managersList, records]);
+
+    const openEditModal = (record: ManagerRecord) => {
+        setEditingRecord(record);
+        setEditEntryTime(record.entry_time ? formatTime(record.entry_time) : '');
+        setEditExitTime(record.exit_time ? formatTime(record.exit_time) : '');
+        setEditNotes(record.notes || '');
+        setShowEditModal(true);
+    };
+
+    const closeEditModal = () => {
+        setShowEditModal(false);
+        setEditingRecord(null);
+        setEditEntryTime('');
+        setEditExitTime('');
+        setEditNotes('');
+        setSavingEdit(false);
+    };
+
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editingRecord) return;
+
+        if (editNotes.length > 1000) {
+            alert('Açıklama en fazla 1000 karakter olabilir');
+            return;
+        }
+
+        try {
+            setSavingEdit(true);
+            const adminToken = localStorage.getItem('adminToken');
+            const payload = {
+                entry_time: editEntryTime || null,
+                exit_time: editExitTime || null,
+                notes: editNotes.trim() || null
+            };
+
+            await axios.put(`${API_URL}/managers/records/${editingRecord.id}`, payload, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+
+            setRecords(prev => prev.map(record => {
+                if (record.id !== editingRecord.id) return record;
+                return {
+                    ...record,
+                    entry_time: payload.entry_time,
+                    exit_time: payload.exit_time,
+                    notes: payload.notes
+                };
+            }));
+
+            closeEditModal();
+        } catch (error: any) {
+            console.error('Kayıt güncellenemedi:', error);
+            const message = error.response?.data?.message || 'Kayıt güncellenirken bir hata oluştu';
+            alert(message);
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
     // Handle date range change for entry dates
     const handleEntryDateChange = (dates: null | [Dayjs | null, Dayjs | null], dateStrings: [string, string]) => {
         if (!dates || (!dates[0] && !dates[1])) {
@@ -291,15 +447,26 @@ export default function AdminManagerRecords() {
                                 </p>
                             </div>
                         </div>
-                        <button
-                            onClick={() => navigate('/admin/manage-managers')}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Müdürleri Yönet
-                        </button>
+                        <div className="flex w-full sm:w-auto gap-2">
+                            <button
+                                onClick={openCreateModal}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Müdür Giriş Kaydı Oluştur
+                            </button>
+                            <button
+                                onClick={() => navigate('/admin/manage-managers')}
+                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Müdürleri Yönet
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
@@ -436,6 +603,7 @@ export default function AdminManagerRecords() {
                                 <table className="min-w-[1100px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -447,6 +615,24 @@ export default function AdminManagerRecords() {
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {sortedFilteredRecords.map((record) => (
                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        <ActionButton
+                                                            onClick={() => openEditModal(record)}
+                                                            variant="primary"
+                                                            disabled={Boolean(record.deleted_at)}
+                                                            title="Düzenle"
+                                                        >
+                                                            Düzenle
+                                                        </ActionButton>
+                                                        {record.deleted_at ? (
+                                                            <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success" title="Geri Al">Geri Al</ActionButton>
+                                                        ) : (
+                                                            <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
+                                                        )}
+                                                    </div>
+                                                </td>
+
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-indigo-100 rounded">
@@ -527,6 +713,7 @@ export default function AdminManagerRecords() {
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
 
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -538,6 +725,24 @@ export default function AdminManagerRecords() {
                                                     <tbody className="bg-white divide-y divide-gray-200">
                                                         {dayGroup.records.map((record) => (
                                                             <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <ActionButton
+                                                                            onClick={() => openEditModal(record)}
+                                                                            variant="primary"
+                                                                            disabled={Boolean(record.deleted_at)}
+                                                                            title="Düzenle"
+                                                                        >
+                                                                            Düzenle
+                                                                        </ActionButton>
+                                                                        {record.deleted_at ? (
+                                                                            <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success" title="Geri Al">Geri Al</ActionButton>
+                                                                        ) : (
+                                                                            <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="p-2 bg-indigo-100 rounded">
@@ -596,6 +801,201 @@ export default function AdminManagerRecords() {
                     </div>
                 )}
             </main>
+
+            {showEditModal && editingRecord && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex items-start justify-between mb-5">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900">Müdür Kaydı Düzenle</h2>
+                                    <p className="text-sm text-gray-600 mt-1">{editingRecord.manager || '-'}</p>
+                                </div>
+                                <button
+                                    onClick={closeEditModal}
+                                    className="text-gray-400 hover:text-gray-600"
+                                    title="Kapat"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSaveEdit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
+                                    <input
+                                        type="time"
+                                        value={editEntryTime}
+                                        onChange={(e) => setEditEntryTime(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
+                                    <input
+                                        type="time"
+                                        value={editExitTime}
+                                        onChange={(e) => setEditExitTime(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama</label>
+                                    <textarea
+                                        value={editNotes}
+                                        onChange={(e) => setEditNotes(e.target.value)}
+                                        rows={4}
+                                        maxLength={1000}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">{editNotes.length}/1000</p>
+                                </div>
+
+                                <div className="flex items-center gap-3 pt-2">
+                                    <button
+                                        type="submit"
+                                        disabled={savingEdit}
+                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white py-2.5 rounded-lg font-medium transition"
+                                    >
+                                        {savingEdit ? 'Kaydediliyor...' : 'Kaydet'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={closeEditModal}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-medium transition"
+                                    >
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">Müdür Giriş Kaydı Oluştur</h2>
+                                <button onClick={closeCreateModal} className="text-gray-400 hover:text-gray-600">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCreateRecord} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Personel Seç</label>
+                                    <select
+                                        required
+                                        value={selectedManagerId || ''}
+                                        onChange={(e) => setSelectedManagerId(e.target.value || null)}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    >
+                                        <option value="">-- Lütfen bir müdür seçin --</option>
+                                        {availableManagers.map(p => (
+                                            <option key={p.id} value={p.id}>{p.first_name ? `${p.first_name} ${p.last_name} - ${p.title}` : p.full_name}</option>
+                                        ))}
+                                    </select>
+
+                                    {selectedManagerId && (() => {
+                                        const p = managersList.find(x => x.id === selectedManagerId);
+                                        if (!p) return null;
+                                        const name = p.first_name ? `${p.first_name} ${p.last_name}` : p.full_name;
+                                        const title = p.title || p.department || '';
+                                        return (
+                                            <div className="mt-4 p-3 border border-gray-100 rounded bg-gray-50">
+                                                <div className="text-sm font-medium text-gray-900">{name}</div>
+                                                <div className="text-xs text-gray-600">{title || '-'} • {p.phone || '-'} • {p.email || '-'}</div>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Tarihi</label>
+                                        <input
+                                            type="date"
+                                            value={createEntryDate}
+                                            onChange={(e) => setCreateEntryDate(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Tarihi (isteğe bağlı)</label>
+                                        <input
+                                            type="date"
+                                            value={createExitDate}
+                                            onChange={(e) => setCreateExitDate(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati (isteğe bağlı)</label>
+                                        <input
+                                            type="time"
+                                            value={createEntryTime}
+                                            onChange={(e) => setCreateEntryTime(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati (isteğe bağlı)</label>
+                                        <input
+                                            type="time"
+                                            value={createExitTime}
+                                            onChange={(e) => setCreateExitTime(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama (isteğe bağlı)</label>
+                                    <textarea
+                                        value={createNotes}
+                                        onChange={(e) => setCreateNotes(e.target.value)}
+                                        rows={3}
+                                        maxLength={1000}
+                                        placeholder="Not veya açıklama"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">{createNotes.length}/1000</p>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        disabled={creatingRecord}
+                                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white py-3 rounded-lg font-medium transition"
+                                    >
+                                        {creatingRecord ? 'Kaydediliyor...' : 'Kaydet'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={closeCreateModal}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                    >
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

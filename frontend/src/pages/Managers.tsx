@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import dayjs from '../utils/dayjsConfig';
@@ -28,11 +28,15 @@ export default function Managers() {
     const [managersList, setManagersList] = useState<Personnel[]>([]);
     const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
     const [notes, setNotes] = useState('');
+    const [entryDate, setEntryDate] = useState('');
+    const [exitDate, setExitDate] = useState('');
     const [entryTime, setEntryTime] = useState('');
     const [exitTime, setExitTime] = useState('');
     const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
     const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const navigate = useNavigate();
+    const location = useLocation();
+    const isAdminPage = location.pathname.startsWith('/admin');
 
     // Fetch manager records
     const fetchData = useCallback(async () => {
@@ -67,6 +71,8 @@ export default function Managers() {
         setEditingId(null);
         setSelectedManagerId(null);
         setNotes('');
+        setEntryDate('');
+        setExitDate('');
         setEntryTime('');
         setExitTime('');
     }, []);
@@ -74,8 +80,11 @@ export default function Managers() {
     // Open modal for new record
     const openModalForNew = useCallback(() => {
         resetForm();
+        if (isAdminPage) {
+            setEntryDate(dayjs().format('YYYY-MM-DD'));
+        }
         setShowModal(true);
-    }, [resetForm]);
+    }, [resetForm, isAdminPage]);
 
     // Open modal for editing
     const openModalForEdit = useCallback((rec: ManagerRecord) => {
@@ -85,6 +94,8 @@ export default function Managers() {
         });
         setSelectedManagerId(found ? found.id : null);
         setNotes(rec.notes || '');
+        setEntryDate(rec.entry_date ? dayjs(rec.entry_date).format('YYYY-MM-DD') : '');
+        setExitDate(rec.exit_date ? dayjs(rec.exit_date).format('YYYY-MM-DD') : '');
         setEntryTime(rec.entry_time ? formatTime(rec.entry_time) : '');
         setExitTime(rec.exit_time ? formatTime(rec.exit_time) : '');
         setIsEditing(true);
@@ -107,10 +118,17 @@ export default function Managers() {
             return;
         }
 
+        if (isAdminPage && !isEditing && entryDate && exitDate && exitDate < entryDate) {
+            alert('Çıkış tarihi giriş tarihinden önce olamaz');
+            return;
+        }
+
         try {
             const payload = {
                 manager_id: selectedManagerId,
                 notes: notes?.trim() || null,
+                entry_date: isAdminPage && !isEditing ? (entryDate || null) : null,
+                exit_date: isAdminPage && !isEditing ? (exitDate || null) : null,
                 entry_time: entryTime || null,
                 exit_time: exitTime || null
             };
@@ -128,7 +146,7 @@ export default function Managers() {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err?.response?.data?.message || 'İşlem başarısız');
         }
-    }, [selectedManagerId, notes, entryTime, exitTime, isEditing, editingId, resetForm, fetchData]);
+    }, [selectedManagerId, notes, entryDate, exitDate, entryTime, exitTime, isAdminPage, isEditing, editingId, resetForm, fetchData]);
 
     // Handle manager exit
     const handleExit = useCallback(async (id: string) => {
@@ -238,7 +256,7 @@ export default function Managers() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
+                            <button onClick={() => navigate(isAdminPage ? '/admin/dashboard' : '/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
@@ -251,7 +269,7 @@ export default function Managers() {
 
                         <div className="grid grid-cols-2 sm:flex items-center gap-2 sm:gap-3 w-full lg:w-auto">
                             <button
-                                onClick={() => navigate('/manager-records')}
+                                onClick={() => navigate(isAdminPage ? '/admin/manager-records' : '/manager-records')}
                                 className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -263,7 +281,7 @@ export default function Managers() {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
-                                Yeni Müdür
+                                {isAdminPage ? 'Müdür Giriş Kaydı' : 'Müdür Kaydı Aç'}
                             </button>
                         </div>
                     </div>
@@ -372,13 +390,6 @@ export default function Managers() {
                                                 {/* İşlem */}
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                     <div className="flex items-center gap-3">
-                                                        <ActionButton
-                                                            onClick={() => openModalForEdit(rec)}
-                                                            variant="primary"
-                                                            disabled={Boolean(rec.deleted_at)}
-                                                        >
-                                                            Düzenle
-                                                        </ActionButton>
                                                         {rec.status === 'inside' && !rec.deleted_at && (
                                                             <ActionButton
                                                                 onClick={() => handleExit(rec.id)}
@@ -443,7 +454,7 @@ export default function Managers() {
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Müdür Düzenle' : 'Yeni Müdür'}</h2>
+                                <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Müdür Düzenle' : (isAdminPage ? 'Müdür Giriş Kaydı' : 'Müdür Kaydı Aç')}</h2>
                                 <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -479,6 +490,33 @@ export default function Managers() {
                                 </div>
 
                                 {/* Entry Time */}
+                                {isAdminPage && !isEditing && (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Giriş Tarihi
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={entryDate}
+                                                onChange={(e) => setEntryDate(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Çıkış Tarihi (isteğe bağlı)
+                                            </label>
+                                            <input
+                                                type="date"
+                                                value={exitDate}
+                                                onChange={(e) => setExitDate(e.target.value)}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Giriş Saati (isteğe bağlı)
@@ -493,7 +531,7 @@ export default function Managers() {
                                 </div>
 
                                 {/* Exit Time - only show when editing exited records */}
-                                {isEditing && records.find(r => r.id === editingId)?.status === 'exited' && (
+                                {(isAdminPage || (isEditing && records.find(r => r.id === editingId)?.status === 'exited')) && (
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">
                                             Çıkış Saati (isteğe bağlı)

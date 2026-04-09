@@ -379,8 +379,9 @@ export const deleteManager = async (req: Request, res: Response): Promise<void> 
  */
 export const createManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { manager_id, notes, entry_time } = req.body;
+        const { manager_id, notes, entry_time, entry_date, exit_date, exit_time } = req.body;
         const entry_by = req.user?.userId || null;
+        const isAdminUser = req.user?.role === 'admin';
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: Input sanitization
@@ -389,6 +390,44 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         // Time validation (optional, HH:MM format)
         if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
             res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
+        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+            res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
+            return;
+        }
+
+        const isValidISODate = (dateValue: string): boolean => {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) return false;
+
+            const [yearStr, monthStr, dayStr] = dateValue.split('-');
+            const year = Number(yearStr);
+            const month = Number(monthStr);
+            const day = Number(dayStr);
+
+            if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+                return false;
+            }
+
+            const parsedUtc = new Date(Date.UTC(year, month - 1, day));
+
+            return parsedUtc.getUTCFullYear() === year
+                && parsedUtc.getUTCMonth() === month - 1
+                && parsedUtc.getUTCDate() === day;
+        };
+
+        if (isAdminUser && entry_date && !isValidISODate(entry_date)) {
+            res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
+            return;
+        }
+
+        if (isAdminUser && exit_date && !isValidISODate(exit_date)) {
+            res.status(400).json({ success: false, message: 'Çıkış tarihi YYYY-MM-DD formatında olmalıdır' });
+            return;
+        }
+
+        if (isAdminUser && entry_date && exit_date && exit_date < entry_date) {
+            res.status(400).json({ success: false, message: 'Çıkış tarihi giriş tarihinden önce olamaz' });
             return;
         }
 
@@ -413,13 +452,42 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         const id = uuidv4();
 
         const managerName = `${managerCheck.rows[0].first_name} ${managerCheck.rows[0].last_name}`;
+        const effectiveEntryDate = isAdminUser && entry_date ? entry_date : null;
+        const effectiveExitDate = isAdminUser && exit_date ? exit_date : null;
+        const effectiveExitTime = effectiveExitDate && isAdminUser ? (exit_time || null) : null;
+        const initialStatus = effectiveExitDate ? 'exited' : 'inside';
+        const exitBy = effectiveExitDate ? entry_by : null;
 
         await pool.query('BEGIN');
         await pool.query(
             `INSERT INTO managers_records (
-                id, manager_id, manager_name, entry_by, entry_date, entry_time, status, notes
-            ) VALUES ($1, $2, $3, $4, CURRENT_DATE, COALESCE($6::time, CURRENT_TIME), 'inside', $5)`,
-            [id, manager_id, managerName, entry_by, sanitizedNotes, entry_time || null]
+                id, manager_id, manager_name, entry_by, entry_date, entry_time, exit_date, exit_time, exit_by, status, notes
+            ) VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                COALESCE($6::date, CURRENT_DATE),
+                COALESCE($7::time, CURRENT_TIME),
+                $8::date,
+                $9::time,
+                $10,
+                $11,
+                $5
+            )`,
+            [
+                id,
+                manager_id,
+                managerName,
+                entry_by,
+                sanitizedNotes,
+                effectiveEntryDate,
+                entry_time || null,
+                effectiveExitDate,
+                effectiveExitTime,
+                exitBy,
+                initialStatus
+            ]
         );
         await pool.query('COMMIT');
 
@@ -429,7 +497,15 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
             id,
             'INSERT',
             null,
-            { manager_id, manager_name: managerName },
+            {
+                manager_id,
+                manager_name: managerName,
+                entry_date: effectiveEntryDate,
+                entry_time: entry_time || null,
+                exit_date: effectiveExitDate,
+                exit_time: effectiveExitTime,
+                status: initialStatus
+            },
             entry_by,
             clientIp
         );

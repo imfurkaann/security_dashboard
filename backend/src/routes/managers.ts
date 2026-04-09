@@ -21,6 +21,7 @@ router.get('/', adminAuthMiddleware, getAllManagers);
 router.post('/', adminAuthMiddleware, createManager);
 router.put('/:id', adminAuthMiddleware, updateManager);
 router.delete('/:id', adminAuthMiddleware, deleteManager);
+router.put('/records/:id', adminAuthMiddleware, updateManagerRecord);
 
 // All other routes require authentication
 router.use(authMiddleware);
@@ -30,9 +31,6 @@ router.get('/records', getManagerRecords);
 
 // Create new manager record
 router.post('/records', createManagerRecord);
-
-// Update manager record
-router.put('/records/:id', updateManagerRecord);
 
 // Exit manager
 router.post('/records/:id/exit', exitManager);
