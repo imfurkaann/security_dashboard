@@ -59,8 +59,7 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
 /**
  * Create new SGK record with file upload
  * POST /api/sgk/records
- * Supports TC or Passport number (one of them is required, but not both)
- * If neither is provided, record will use UUID-based naming
+ * Supports optional TC or Passport number (cannot be provided together)
  */
 export const createSgkRecord = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -75,8 +74,11 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
             return;
         }
 
+        const hasTCInput = typeof tc_no === 'string' && tc_no.trim().length > 0;
+        const hasPassportInput = typeof passport_no === 'string' && passport_no.trim().length > 0;
+
         // TC ve pasaport her ikisi de girilmiş mi kontrol et
-        if (tc_no && passport_no) {
+        if (hasTCInput && hasPassportInput) {
             if (file.filename) deleteFile(file.filename);
             res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
@@ -86,7 +88,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         let hashedPassport: string | null = null;
 
         // TC kontrolü
-        if (tc_no) {
+        if (hasTCInput) {
             const cleanTC = tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
                 if (file.filename) deleteFile(file.filename);
@@ -107,7 +109,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         // Pasaport kontrolü
-        if (passport_no) {
+        if (hasPassportInput) {
             const cleanPassport = passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
                 if (file.filename) deleteFile(file.filename);
