@@ -7,6 +7,8 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
 import { API_URL } from '../constants';
 
+const { RangePicker } = DatePicker;
+
 dayjs.locale('tr');
 
 interface RecordCounts {
@@ -25,8 +27,7 @@ interface PreviewData {
 
 export default function AdminExportData() {
     const navigate = useNavigate();
-    const [startDate, setStartDate] = useState<Dayjs | null>(dayjs().subtract(7, 'day'));
-    const [endDate, setEndDate] = useState<Dayjs | null>(dayjs());
+    const [dateRange, setDateRange] = useState<[Dayjs, Dayjs] | null>([dayjs().subtract(7, 'day'), dayjs()]);
     const [loading, setLoading] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [preview, setPreview] = useState<PreviewData | null>(null);
@@ -34,6 +35,9 @@ export default function AdminExportData() {
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [previewError, setPreviewError] = useState<string | null>(null);
+
+    const startDate = dateRange?.[0] || null;
+    const endDate = dateRange?.[1] || null;
 
     // Rapor seçimleri
     const [selectedReports, setSelectedReports] = useState({
@@ -249,29 +253,22 @@ export default function AdminExportData() {
                         </svg>
                         Tarih Aralığı
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Başlangıç Tarihi</label>
-                            <DatePicker
-                                value={startDate}
-                                onChange={(date) => setStartDate(date)}
-                                format="DD.MM.YYYY"
-                                className="w-full"
-                                placeholder="Başlangıç tarihi seçin"
-                                disabledDate={(current) => current && current > dayjs().endOf('day')}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Bitiş Tarihi</label>
-                            <DatePicker
-                                value={endDate}
-                                onChange={(date) => setEndDate(date)}
-                                format="DD.MM.YYYY"
-                                className="w-full"
-                                placeholder="Bitiş tarihi seçin"
-                                disabledDate={(current) => current && current > dayjs().endOf('day')}
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Tarih Aralığı</label>
+                        <RangePicker
+                            value={dateRange}
+                            onChange={(dates) => {
+                                if (dates && dates[0] && dates[1]) {
+                                    setDateRange([dates[0], dates[1]]);
+                                } else {
+                                    setDateRange(null);
+                                }
+                            }}
+                            format="DD.MM.YYYY"
+                            placeholder={['Başlangıç', 'Bitiş']}
+                            className="w-full"
+                            disabledDate={(current) => current && current > dayjs().endOf('day')}
+                        />
                     </div>
                     <div className="mt-4 flex justify-stretch sm:justify-end">
                         <button

@@ -471,6 +471,22 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             });
             return;
         }
+    
+    // DATA INTEGRITY: If return_date exists in database, return_time is required
+    if (!return_time) {
+        // Check if record already has return_date set
+        const existingRecord = await pool.query(
+            'SELECT return_date FROM vehicle_records WHERE id = $1',
+            [id]
+        );
+        if (existingRecord.rows[0]?.return_date && recordStatus !== 'returned') {
+            res.status(400).json({
+                success: false,
+                message: 'Teslim alınma saati zorunludur (araç iade tarihi belirtilmiş)'
+            });
+            return;
+        }
+    }
 
         // If vehicle_id is provided, check if new vehicle exists and is available (only if record is still in_use)
         if (vehicle_id && vehicle_id !== oldVehicleId) {

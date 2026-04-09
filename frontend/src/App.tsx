@@ -59,6 +59,7 @@ function App() {
               <Route path="vehicle-records" element={<AdminVehicleRecords />} />
               <Route path="manage-vehicles" element={<AdminManageVehicles />} />
               <Route path="visitor-records" element={<AdminVisitorRecords />} />
+              <Route path="managers" element={<Managers />} />
               <Route path="manager-records" element={<AdminManagerRecords />} />
               <Route path="incident-records" element={<AdminIncidentRecords />} />
               <Route path="fire-alarm-records" element={<AdminFireAlarmRecords />} />
