@@ -190,14 +190,14 @@ export default function AdminFireAlarmRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamini gormek icin tiklayin"
             >
                 {text}
@@ -405,7 +405,7 @@ export default function AdminFireAlarmRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1550px] table-auto divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1550px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
@@ -413,7 +413,7 @@ export default function AdminFireAlarmRecords() {
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapi</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamani</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozum Zamani</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozumleyen</th>
@@ -446,7 +446,7 @@ export default function AdminFireAlarmRecords() {
                                                             <span className="text-sm text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="w-[250px] px-4 py-3 pr-6">
                                                         {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
