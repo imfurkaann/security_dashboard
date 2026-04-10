@@ -662,22 +662,22 @@ export default function Sgk() {
                                 {filteredRecords.map((record) => (
                                     <div key={record.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition w-full">
                                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm min-w-0">
+                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm min-w-0">
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Ad Soyad</span>
-                                                    <span className="font-medium text-gray-900 break-words">{record.full_name}</span>
+                                                    <span className="font-normal text-gray-900 break-words">{record.full_name}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Firma</span>
-                                                    <span className="font-medium text-gray-900 break-words">{record.company_name || '-'}</span>
+                                                    <span className="font-normal text-gray-900 break-words">{record.company_name || '-'}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Yüklenme Tarihi</span>
-                                                    <span className="font-medium text-gray-900">{formatDate(record.upload_date)}</span>
+                                                    <span className="font-normal text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Dosya</span>
-                                                    <span className="font-medium text-gray-900">{record.file_count || record.files?.length || 0} adet</span>
+                                                    <span className="font-normal text-gray-900">{record.file_count || record.files?.length || 0} adet</span>
                                                 </div>
                                             </div>
                                             <div className="flex-shrink-0 flex flex-nowrap items-center gap-2 sm:gap-3 overflow-x-auto whitespace-nowrap">
