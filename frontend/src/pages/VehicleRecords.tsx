@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -14,7 +14,10 @@ export default function VehicleRecords() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [loading, setLoading] = useState(true);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -219,6 +222,57 @@ export default function VehicleRecords() {
         );
     };
 
+    useEffect(() => {
+        const measureScrollbarWidth = () => {
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const bottomClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            setScrollbarSpacerWidth(Math.max(tableScrollWidth, bottomClientWidth + 1));
+        };
+
+        measureScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(() => {
+            measureScrollbarWidth();
+        });
+
+        if (tableScrollRef.current) {
+            resizeObserver.observe(tableScrollRef.current);
+        }
+
+        if (bottomScrollRef.current) {
+            resizeObserver.observe(bottomScrollRef.current);
+        }
+
+        window.addEventListener('resize', measureScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', measureScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [filteredRecords.length, groupedByDay.length, loading]);
+
+    const syncTableScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const bottomNode = bottomScrollRef.current;
+
+        if (!tableNode || !bottomNode) return;
+
+        if (bottomNode.scrollLeft !== tableNode.scrollLeft) {
+            bottomNode.scrollLeft = tableNode.scrollLeft;
+        }
+    };
+
+    const syncBottomScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const bottomNode = bottomScrollRef.current;
+
+        if (!tableNode || !bottomNode) return;
+
+        if (tableNode.scrollLeft !== bottomNode.scrollLeft) {
+            tableNode.scrollLeft = bottomNode.scrollLeft;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
@@ -243,7 +297,7 @@ export default function VehicleRecords() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 {/* Filters Panel */}
                 <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                     <div className="flex justify-between items-center mb-3">
@@ -420,7 +474,7 @@ export default function VehicleRecords() {
                 </div>
 
                 {/* Records Table */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -433,7 +487,11 @@ export default function VehicleRecords() {
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div
+                            ref={tableScrollRef}
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                        >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
@@ -516,6 +574,12 @@ export default function VehicleRecords() {
                     )}
                 </div>
             </main>
+
+            <div className="fixed bottom-0 left-0 right-0 lg:left-[var(--sidebar-width)] z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div className="h-5 overflow-x-scroll overflow-y-hidden" ref={bottomScrollRef} onScroll={syncBottomScroll}>
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
 
             {textPreview && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

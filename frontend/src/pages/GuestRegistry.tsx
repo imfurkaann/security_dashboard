@@ -22,9 +22,12 @@ const INITIAL_FILTERS = {
 export default function GuestRegistry() {
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const [records, setRecords] = useState<GuestRegistryRecord[]>([]);
     const [filters, setFilters] = useState(INITIAL_FILTERS);
     const [dateInputValue, setDateInputValue] = useState('');
@@ -179,6 +182,46 @@ export default function GuestRegistry() {
         return text;
     };
 
+    useEffect(() => {
+        const updateScrollbarWidth = () => {
+            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+        };
+
+        updateScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+        if (tableScrollRef.current) resizeObserver.observe(tableScrollRef.current);
+        if (bottomScrollRef.current) resizeObserver.observe(bottomScrollRef.current);
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', updateScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [records.length, loading]);
+
+    const syncTableScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+
+        if (!tableNode || !barNode) return;
+        if (barNode.scrollLeft !== tableNode.scrollLeft) {
+            barNode.scrollLeft = tableNode.scrollLeft;
+        }
+    };
+
+    const syncBottomScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+
+        if (!tableNode || !barNode) return;
+        if (tableNode.scrollLeft !== barNode.scrollLeft) {
+            tableNode.scrollLeft = barNode.scrollLeft;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
@@ -219,7 +262,7 @@ export default function GuestRegistry() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 <div className="text-sm text-gray-600">
                     Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayit
                 </div>
@@ -308,7 +351,7 @@ export default function GuestRegistry() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
@@ -316,7 +359,11 @@ export default function GuestRegistry() {
                     ) : records.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">Kayit bulunamadi</div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div
+                            ref={tableScrollRef}
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                        >
                             <div className="min-h-full">
                                 <table className="w-full min-w-[1900px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
@@ -369,6 +416,12 @@ export default function GuestRegistry() {
                     )}
                 </div>
             </main>
+
+            <div className="fixed bottom-0 left-0 right-0 lg:left-[var(--sidebar-width)] z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div ref={bottomScrollRef} onScroll={syncBottomScroll} className="h-5 overflow-x-scroll overflow-y-hidden">
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
         </div>
     );
 }

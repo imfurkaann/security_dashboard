@@ -13,22 +13,25 @@
 
   body {
     @apply transition-colors duration-300;
+    scrollbar-width: auto;
+    scrollbar-color: #3b82f6 #e2e8f0;
   }
 
   ::-webkit-scrollbar {
-    @apply w-2.5 h-2.5;
+    @apply w-4 h-4;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-gray-100 dark:bg-gray-800;
+    @apply bg-slate-200 dark:bg-slate-800;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 dark:bg-gray-600 rounded hover:bg-gray-400 dark:hover:bg-gray-500;
+    @apply bg-blue-500 dark:bg-sky-500 rounded-full border-2 border-slate-200 dark:border-slate-800 hover:bg-blue-600 dark:hover:bg-sky-400;
   }
 }
 
 @layer utilities {
+
   .mobile-stack-table th,
   .mobile-stack-table td {
     white-space: normal !important;
@@ -37,7 +40,7 @@
     vertical-align: top;
   }
 
-  .mobile-stack-table td > div {
+  .mobile-stack-table td>div {
     white-space: normal !important;
     word-break: break-word;
     overflow-wrap: anywhere;

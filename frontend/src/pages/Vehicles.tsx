@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
@@ -28,7 +28,10 @@ export default function Vehicles() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingUsage, setEditingUsage] = useState<VehicleUsage | null>(null);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     // Fetch all data in parallel
     const fetchData = useCallback(async () => {
@@ -219,6 +222,44 @@ export default function Vehicles() {
         );
     };
 
+    useEffect(() => {
+        const updateScrollbarWidth = () => {
+            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+        };
+
+        updateScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+        if (tableScrollRef.current) resizeObserver.observe(tableScrollRef.current);
+        if (bottomScrollRef.current) resizeObserver.observe(bottomScrollRef.current);
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', updateScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [filteredUsages.length, loading]);
+
+    const syncTableScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+        if (barNode.scrollLeft !== tableNode.scrollLeft) {
+            barNode.scrollLeft = tableNode.scrollLeft;
+        }
+    };
+
+    const syncBottomScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+        if (tableNode.scrollLeft !== barNode.scrollLeft) {
+            tableNode.scrollLeft = barNode.scrollLeft;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
@@ -264,7 +305,7 @@ export default function Vehicles() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 <div className="w-full">
                     {/* Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
@@ -355,7 +396,11 @@ export default function Vehicles() {
                             <p className="text-gray-500">Kayıt bulunmuyor</p>
                         </div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div
+                            ref={tableScrollRef}
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto overflow-y-auto pb-2"
+                        >
                             <div className="min-h-full">
                                 <table className="w-full table-fixed divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
@@ -436,6 +481,12 @@ export default function Vehicles() {
                     )}
                 </div>
             </main>
+
+            <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div ref={bottomScrollRef} onScroll={syncBottomScroll} className="h-5 overflow-x-scroll overflow-y-hidden">
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
 
             {/* Modal */}
             {showModal && (
