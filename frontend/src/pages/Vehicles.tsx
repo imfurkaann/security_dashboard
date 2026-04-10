@@ -235,7 +235,7 @@ export default function Vehicles() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Araç Kullanım Sistemi</h1>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Araç Kayıt Sayfası</h1>
                                 <p className="text-sm sm:text-base text-slate-200 mt-1">Otel araçlarının kullanım kayıtlarını yönetin</p>
                             </div>
                         </div>
@@ -265,7 +265,7 @@ export default function Vehicles() {
             </header>
 
             <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
-                <div className="max-w-5xl mx-auto w-full">
+                <div className="w-full">
                     {/* Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                         <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700">
@@ -314,7 +314,7 @@ export default function Vehicles() {
                     </div>
 
                     {/* Filters */}
-                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-4 max-w-fit mx-auto">
+                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-4 w-full">
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 onClick={() => setFilter('all')}
@@ -375,16 +375,16 @@ export default function Vehicles() {
                                         {filteredUsages.map((usage) => (
                                             <tr key={usage.id} className={`hover:bg-gray-50 ${usage.deleted_at ? 'opacity-60' : ''}`}>
                                                 <td className="px-3 lg:px-4 py-4 text-sm align-top">
-                                                    <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
                                                         {usage.deleted_at ? (
-                                                            <ActionButton onClick={() => handleRestoreRecord(usage.id)} variant="success">Geri Al</ActionButton>
+                                                            <ActionButton onClick={() => handleRestoreRecord(usage.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
                                                         ) : (
                                                             <>
-                                                                <ActionButton onClick={() => openEditModal(usage)} variant="primary">Düzenle</ActionButton>
+                                                                <ActionButton onClick={() => openEditModal(usage)} variant="primary" className="shrink-0">Düzenle</ActionButton>
                                                                 {usage.status === 'in_use' && (
-                                                                    <ActionButton onClick={() => handleReturn(usage.id)} variant="success">Teslim Al</ActionButton>
+                                                                    <ActionButton onClick={() => handleReturn(usage.id)} variant="success" className="shrink-0">Teslim Al</ActionButton>
                                                                 )}
-                                                                <ActionButton onClick={() => handleDeleteRecord(usage.id)} variant="danger">Sil</ActionButton>
+                                                                <ActionButton onClick={() => handleDeleteRecord(usage.id)} variant="danger" className="shrink-0">Sil</ActionButton>
                                                             </>
                                                         )}
                                                     </div>

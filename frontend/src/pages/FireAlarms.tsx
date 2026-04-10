@@ -279,25 +279,30 @@ export default function FireAlarms() {
         );
     };
 
+    const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
+    const dashboardIconBase = 'p-2 bg-white/20 rounded-lg border shrink-0 text-white';
+    const dashboardLabelBase = 'text-[11px] font-medium text-white/90 uppercase tracking-wider leading-none';
+    const dashboardValueBase = 'text-xl font-bold text-white leading-none mt-1';
+
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Yangın Alarmları Kayıt Sistemi</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-1">Yangın alarm kayıtlarını yönetin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Yangın Alarmları Kayıt Sayfası</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel yangın alarm kayıtlarını yönetin.</p>
                             </div>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
-                            <button onClick={() => navigate('/fire-alarm-records')} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto">
+                            <button onClick={() => navigate('/fire-alarm-records')} className="flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
@@ -314,184 +319,139 @@ export default function FireAlarms() {
                 </div>
             </header>
 
-            <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-red-600 text-sm font-medium">Toplam Alarm</p>
-                                <p className="text-3xl font-bold text-red-900">{stats.totalAlarms}</p>
-                            </div>
-                            <div className="p-3 bg-red-100 rounded-lg">
-                                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-orange-600 text-sm font-medium">Bugün Çalan</p>
-                                <p className="text-3xl font-bold text-orange-900">{stats.todayAlarms}</p>
-                            </div>
-                            <div className="p-3 bg-orange-100 rounded-lg">
-                                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="w-full">
+                    <div className={`${dashboardCardBase} border-orange-500 bg-gradient-to-br from-orange-500 to-orange-700 mb-3`}>
+                        <div className="flex items-center gap-3 min-h-[48px]">
+                            <div className={`${dashboardIconBase} border-orange-300/60`}>
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-yellow-600 text-sm font-medium">Aktif Alarmlar</p>
-                                <p className="text-3xl font-bold text-yellow-900">{stats.activeAlarms}</p>
-                            </div>
-                            <div className="p-3 bg-yellow-100 rounded-lg">
-                                <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                </svg>
+                            <div className="min-w-0 flex-1 text-center">
+                                <p className={dashboardLabelBase}>Bugün Çalan Alarm Sayısı</p>
+                                <p className={dashboardValueBase}>{stats.todayAlarms}</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-gray-600 text-sm font-medium">Yanlış Alarm</p>
-                                <p className="text-3xl font-bold text-gray-900">{stats.falseAlarms}</p>
-                            </div>
-                            <div className="p-3 bg-gray-100 rounded-lg">
-                                <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </div>
+                    {/* Filters */}
+                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button onClick={() => setFilter('today')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Bugünün Alarmları ({stats.todayAlarms})
+                            </button>
+                            <button onClick={() => setFilter('active')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'active' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Aktif Alarmlar ({stats.activeAlarms})
+                            </button>
+                            <button onClick={() => setFilter('resolved')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Çözülen Alarmlar ({records.filter(r => r.resolved).length})
+                            </button>
+
                         </div>
                     </div>
-                </div>
 
-                {/* Filters */}
-                <div className="bg-white rounded-lg shadow p-4 mb-6">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button
-                            onClick={fetchData}
-                            className="px-3 sm:px-4 py-2 rounded-lg transition text-sm bg-blue-100 text-blue-800 hover:bg-blue-200"
-                        >
-                            Yenile
-                        </button>
-                        <button onClick={() => setFilter('today')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Bugünün Alarmları ({stats.todayAlarms})
-                        </button>
-                        <button onClick={() => setFilter('active')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'active' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Aktif Alarmlar ({stats.activeAlarms})
-                        </button>
-                        <button onClick={() => setFilter('resolved')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Çözülen Alarmlar ({records.filter(r => r.resolved).length})
-                        </button>
-
+                    {/* Table */}
+                    <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0 w-full">
+                        {loading ? (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+                            </div>
+                        ) : filteredRecords.length === 0 ? (
+                            <div className="text-center py-12">
+                                <p className="text-gray-500">Kayıt bulunmuyor</p>
+                            </div>
+                        ) : (
+                            <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                                <div className="min-h-full">
+                                    <table className="w-full table-fixed divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="w-[150px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                <th className="w-[70px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                                <th className="w-[120px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                                <th className="w-[120px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                                <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="w-[100px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[150px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {filteredRecords.map(record => (
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                    <td className="px-3 lg:px-4 py-4 text-sm align-top">
+                                                        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
+                                                            <ActionButton
+                                                                onClick={() => openModalForEdit(record)}
+                                                                variant="primary"
+                                                                disabled={Boolean(record.deleted_at)}
+                                                                className="shrink-0"
+                                                            >
+                                                                Düzenle
+                                                            </ActionButton>
+                                                            {!record.resolved && !record.deleted_at && (
+                                                                <ActionButton
+                                                                    onClick={() => openResolveModal(record.id)}
+                                                                    variant="success"
+                                                                    className="shrink-0"
+                                                                >
+                                                                    Çözümle
+                                                                </ActionButton>
+                                                            )}
+                                                            {record.deleted_at ? (
+                                                                <ActionButton onClick={() => handleRestore(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                            ) : (
+                                                                <ActionButton onClick={() => handleDelete(record.id)} variant="danger" className="shrink-0">Sil</ActionButton>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        <div className="text-sm text-gray-900 break-words">{record.gate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        <div className="text-sm font-medium text-gray-900 break-words">{record.alarm_number || '-'}</div>
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        <div className="text-sm font-bold text-gray-900 break-words">{record.location}</div>
+                                                        {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                        <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        {record.resolution_time ? (
+                                                            <>
+                                                                <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                                <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-sm text-gray-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top w-[220px]">
+                                                        {renderPreviewText(record.resolution_notes, 'Notlar')}
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top whitespace-normal">
+                                                        {record.resolved ? (
+                                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
+                                                        ) : (
+                                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                        <div className="text-sm text-gray-900 break-words">{record.recorded_by_name || '-'}</div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                </div>
-
-                {/* Table */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden">
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-                        </div>
-                    ) : filteredRecords.length === 0 ? (
-                        <div className="text-center py-12">
-                            <p className="text-gray-500">Kayıt bulunmuyor</p>
-                        </div>
-                    ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[1500px] table-auto divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                        <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredRecords.map(record => (
-                                        <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <ActionButton
-                                                        onClick={() => openModalForEdit(record)}
-                                                        variant="primary"
-                                                        disabled={Boolean(record.deleted_at)}
-                                                    >
-                                                        Düzenle
-                                                    </ActionButton>
-                                                    {!record.resolved && !record.deleted_at && (
-                                                        <ActionButton
-                                                            onClick={() => openResolveModal(record.id)}
-                                                            variant="success"
-                                                        >
-                                                            Çözümle
-                                                        </ActionButton>
-                                                    )}
-                                                    {record.deleted_at ? (
-                                                        <ActionButton onClick={() => handleRestore(record.id)} variant="success">Geri Al</ActionButton>
-                                                    ) : (
-                                                        <ActionButton onClick={() => handleDelete(record.id)} variant="danger">Sil</ActionButton>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
-                                                {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {record.resolution_time ? (
-                                                    <>
-                                                        <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
-                                                    </>
-                                                ) : (
-                                                    <span className="text-sm text-gray-400">-</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap w-[260px]">
-                                                {renderPreviewText(record.resolution_notes, 'Notlar')}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                {record.resolved ? (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
-                                                ) : (
-                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
                 </div>
             </main>
 

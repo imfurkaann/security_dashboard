@@ -161,26 +161,26 @@ export default function EquipmentCheck() {
     }, [navigate]);
 
     return (
-        <div className="min-h-screen bg-white">
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-8 px-4 shadow-md">
+        <div className="min-h-screen bg-white flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-4 sm:py-6 px-4 shadow-md">
                 <div className="max-w-5xl mx-auto">
-                    <h1 className="text-3xl font-bold mb-2">Görev Bölgesi Ataması</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1">Görev Bölgesi Ataması</h1>
                     <p className="text-gray-300">
                         Hoş geldiniz, <span className="font-semibold">{user?.fullName}</span>
                     </p>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto p-4 py-8">
+            <div className="flex-1 min-h-0 max-w-5xl w-full mx-auto p-4 sm:p-6">
                 {configLoading && (
-                    <div className="bg-white rounded-lg shadow-lg p-8 text-center text-gray-600">
+                    <div className="bg-white rounded-lg shadow-lg p-6 text-center text-gray-600">
                         Yapılandırma yükleniyor...
                     </div>
                 )}
 
                 {!configLoading && stage === 'gate-selection' && (
-                    <div className="bg-white rounded-lg shadow-lg p-8">
-                        <div className="mb-8">
+                    <div className="bg-white rounded-lg shadow-lg p-5 sm:p-6">
+                        <div className="mb-6">
                             <h2 className="text-2xl font-bold text-gray-900 mb-2">Görev Bölgesini Seçiniz</h2>
                             <p className="text-gray-600">Lütfen görev bölgenizi seçerek devam ediniz.</p>
                         </div>
@@ -215,8 +215,8 @@ export default function EquipmentCheck() {
                 )}
 
                 {!configLoading && stage === 'equipment-check' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-6">
+                    <div className="h-full min-h-0 flex flex-col">
+                        <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Ekipman Kontrol Listesi</h2>
                                 <p className="text-gray-600">
@@ -237,16 +237,16 @@ export default function EquipmentCheck() {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-8">
+                        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-5 sm:p-6 flex-1 min-h-0 flex flex-col">
                             {error && (
                                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
                                     <p className="text-red-700 text-center">{error}</p>
                                 </div>
                             )}
 
-                            <div className="space-y-4">
+                            <div className="space-y-3 overflow-y-auto pr-1 flex-1 min-h-0">
                                 {equipment.map(item => (
-                                    <div key={item.id} className="border border-gray-200 rounded-lg p-5 bg-white">
+                                    <div key={item.id} className="border border-gray-200 rounded-lg p-4 bg-white">
                                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                                             <h3 className="text-base font-semibold text-gray-900">{item.name}</h3>
 
@@ -289,7 +289,7 @@ export default function EquipmentCheck() {
                                 ))}
                             </div>
 
-                            <div className="mt-8">
+                            <div className="mt-4 shrink-0">
                                 <button
                                     type="submit"
                                     disabled={loading}

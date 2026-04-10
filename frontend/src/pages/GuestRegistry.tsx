@@ -22,7 +22,6 @@ const INITIAL_FILTERS = {
 export default function GuestRegistry() {
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    const dashboardPath = window.location.pathname.startsWith('/admin') ? '/admin/dashboard' : '/dashboard';
 
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
@@ -181,22 +180,33 @@ export default function GuestRegistry() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">Misafir Kayitlari</h1>
-                            <p className="text-gray-600 mt-1">Kolonlar Excel basliklariyla birebir tutulur</p>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button
+                                onClick={() => navigate('/dashboard')}
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Misafir Kayıt Sayfası</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel misafir kayıtlarını yönetin.</p>
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            <ActionButton variant="neutral" onClick={() => navigate(dashboardPath)}>
-                                Dashboard
-                            </ActionButton>
-                            <ActionButton variant="primary" onClick={onUploadClick} disabled={uploading}>
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
+                            <button
+                                onClick={onUploadClick}
+                                disabled={uploading}
+                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto"
+                            >
                                 {uploading ? 'Yukleniyor...' : 'Dosya Yukle'}
-                            </ActionButton>
+                            </button>
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -209,8 +219,8 @@ export default function GuestRegistry() {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-4 text-sm text-gray-600">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="text-sm text-gray-600">
                     Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayit
                 </div>
 
@@ -220,7 +230,7 @@ export default function GuestRegistry() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                <div className="w-full bg-white rounded-lg shadow-md p-4 sm:p-5 mb-2">
                     <div className="flex justify-between items-center mb-3">
                         <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
                         <button
@@ -232,8 +242,8 @@ export default function GuestRegistry() {
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                        <div>
+                    <div className="flex flex-nowrap items-end gap-3 overflow-x-auto">
+                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Isim</label>
                             <input
                                 type="text"
@@ -243,7 +253,7 @@ export default function GuestRegistry() {
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
-                        <div>
+                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Soyisim</label>
                             <input
                                 type="text"
@@ -253,7 +263,7 @@ export default function GuestRegistry() {
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
-                        <div>
+                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Acenta</label>
                             <input
                                 type="text"
@@ -263,7 +273,7 @@ export default function GuestRegistry() {
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
-                        <div>
+                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Giris Tarihi</label>
                             <input
                                 type="date"
@@ -276,7 +286,7 @@ export default function GuestRegistry() {
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
-                        <div>
+                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Giris Saati</label>
                             <input
                                 type="time"
@@ -298,7 +308,7 @@ export default function GuestRegistry() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-hidden w-full flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
@@ -306,53 +316,55 @@ export default function GuestRegistry() {
                     ) : records.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">Kayit bulunamadi</div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-[1900px] divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Hitap</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Adi</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Soyadi</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Tarihi</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Saati</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cikis Tarihi</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Yetiskin</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cocuk</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Free</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Konaklama</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Oda</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Geceleme</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Istenen</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Verilen</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Voucher</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Acenta</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Ulke</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {records.map((record) => (
-                                        <tr key={record.id} className="hover:bg-blue-50/40 even:bg-gray-50/40">
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.hitap || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.adi || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.soyadi || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.giris_tarihi)}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayTime(record.giris_saati)}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.cikis_tarihi)}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.yetiskin || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.cocuk || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.free || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.konaklama || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.oda || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.geceleme || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.istenen || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.verilen || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-900 border-r border-gray-100 last:border-r-0">{record.voucher || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.acenta || '-'}</td>
-                                            <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.ulke || '-'}</td>
+                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                            <div className="min-h-full">
+                                <table className="w-full min-w-full table-fixed divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="w-[70px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Hitap</th>
+                                            <th className="w-[130px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Adi</th>
+                                            <th className="w-[130px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Soyadi</th>
+                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Tarihi</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Saati</th>
+                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cikis Tarihi</th>
+                                            <th className="w-[70px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Yetiskin</th>
+                                            <th className="w-[60px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cocuk</th>
+                                            <th className="w-[60px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Free</th>
+                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Konaklama</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Oda</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Geceleme</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Istenen</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Verilen</th>
+                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Voucher</th>
+                                            <th className="w-[120px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Acenta</th>
+                                            <th className="w-[100px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Ulke</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {records.map((record) => (
+                                            <tr key={record.id} className="hover:bg-blue-50/40 even:bg-gray-50/40">
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.hitap || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.adi || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.soyadi || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.giris_tarihi)}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayTime(record.giris_saati)}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.cikis_tarihi)}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.yetiskin || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.cocuk || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.free || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.konaklama || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.oda || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.geceleme || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.istenen || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.verilen || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-900 border-r border-gray-100 last:border-r-0 break-words">{record.voucher || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.acenta || '-'}</td>
+                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.ulke || '-'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
                 </div>
