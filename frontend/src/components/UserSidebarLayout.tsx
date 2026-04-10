@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import api from '../utils/api';
@@ -20,10 +20,10 @@ const menuItems = [
     { title: 'Araç Yönetimi', path: '/vehicles' },
     { title: 'Ziyaretçi Yönetimi', path: '/visitors' },
     { title: 'Müdür Yönetimi', path: '/managers' },
-    { title: 'Olaylar', path: '/incidents' },
+    { title: 'Misafir Kayıtları', path: '/misafir-kayitlari' },
     { title: 'Yangın Alarmları', path: '/fire-alarms' },
+    { title: 'Olaylar', path: '/incidents' },
     { title: 'SGK', path: '/sgk' },
-    { title: 'Misafir Kayıtları', path: '/misafir-kayitlari' }
 ];
 
 export default function UserSidebarLayout() {
@@ -34,6 +34,16 @@ export default function UserSidebarLayout() {
     const parsedUser = rawUser ? JSON.parse(rawUser) : null;
     const userName = parsedUser?.fullName || parsedUser?.username || 'Kullanici';
     const userRole = parsedUser?.role || 'security';
+
+    const sidebarWidth = useMemo(() => {
+        const longestLabel = Math.max(
+            'Güvenlik Paneli'.length,
+            ...menuItems.map((item) => item.title.length)
+        );
+        // Adds space for paddings and ensures a practical minimum/maximum width.
+        const widthInCh = Math.min(26, Math.max(16, longestLabel + 7));
+        return `${widthInCh}ch`;
+    }, []);
 
     const handleLogout = async () => {
         setLogoutLoading(true);
@@ -50,7 +60,7 @@ export default function UserSidebarLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900">
+        <div className="min-h-screen bg-gray-900" style={{ ['--sidebar-width' as string]: sidebarWidth }}>
             {logoutLoading && <LogoutOverlay />}
 
             <button
@@ -70,7 +80,7 @@ export default function UserSidebarLayout() {
                 />
             )}
 
-            <aside className={`fixed left-0 top-0 h-screen w-64 bg-slate-900 border-r border-slate-700 shadow-md p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            <aside className={`fixed left-0 top-0 h-screen w-[var(--sidebar-width)] bg-slate-900 border-r border-slate-700 shadow-md p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
                 <div className="mb-4 pb-3 border-b border-slate-700">
                     <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Güvenlik Paneli</h1>
@@ -83,7 +93,7 @@ export default function UserSidebarLayout() {
                             to={item.path}
                             onClick={() => setIsSidebarOpen(false)}
                             className={({ isActive }) =>
-                                `block rounded-md px-3 py-2 text-sm transition ${isActive
+                                `block rounded-md px-3 py-2 text-sm transition whitespace-nowrap ${isActive
                                     ? 'bg-blue-600 text-white'
                                     : 'text-gray-300 hover:bg-slate-700 hover:text-white'
                                 }`
@@ -108,7 +118,7 @@ export default function UserSidebarLayout() {
                 </button>
             </aside>
 
-            <main className="min-h-screen pt-14 lg:pt-0 lg:ml-64">
+            <main className="min-h-screen pt-14 lg:pt-0 lg:ml-[var(--sidebar-width)]">
                 <Outlet />
             </main>
         </div>

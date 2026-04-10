@@ -86,31 +86,31 @@ export default function Login() {
     }, [username, password, validateForm, navigate]);
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-10 px-4 shadow-md">
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-4 sm:py-6 px-4 shadow-md">
                 <div className="max-w-5xl mx-auto text-center">
-                    <h1 className="text-3xl sm:text-4xl font-bold">Otel Guvenlik Sistemi</h1>
-                    <p className="text-slate-200 mt-2">Personel Giris Ekrani</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold">Otel Guvenlik Sistemi</h1>
+                    <p className="text-slate-200 mt-1">Personel Giris Ekrani</p>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-4 py-10">
-                <div className="w-full max-w-md mx-auto">
+            <div className="flex-1 min-h-0 w-full max-w-5xl mx-auto px-4 py-4 sm:py-6 flex items-center justify-center overflow-auto">
+                <div className="w-full max-w-md my-auto">
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
                         {/* Card Header */}
-                        <div className="p-8 text-center space-y-4">
-                            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-blue-50 border border-blue-200 mb-2">
+                        <div className="p-5 sm:p-6 text-center space-y-3">
+                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 border border-blue-200 mb-1">
                                 <svg className="w-10 h-10 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                 </svg>
                             </div>
-                            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Giris</h2>
+                            <h2 className="text-2xl font-bold text-slate-900">Giris</h2>
                             <p className="text-sm text-slate-500">Kullanici bilgileriniz ile devam edin</p>
                         </div>
 
                         {/* Card Body */}
-                        <div className="px-6 sm:px-8 pb-8">
-                            <div className="space-y-6">
+                        <div className="px-5 sm:px-6 pb-5 sm:pb-6">
+                            <div className="space-y-4 sm:space-y-5">
                                 {/* Error Message */}
                                 {error && (
                                     <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
@@ -121,7 +121,7 @@ export default function Login() {
                                     </div>
                                 )}
 
-                                <form onSubmit={handleSubmit} className="space-y-5">
+                                <form onSubmit={handleSubmit} className="space-y-4">
                                     {/* Username Input */}
                                     <div className="space-y-2">
                                         <label htmlFor="username" className="block text-sm font-medium text-slate-700">
@@ -189,7 +189,7 @@ export default function Login() {
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+                                        className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-blue-300 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-4"
                                     >
                                         {loading ? (
                                             <>
@@ -206,7 +206,7 @@ export default function Login() {
                                 </form>
 
                                 {/* Forgot Password Link */}
-                                <div className="mt-6 text-center">
+                                <div className="mt-3 text-center">
                                     <button className="text-sm text-blue-700 hover:text-blue-800 transition-colors">
                                         Şifrenizi mi unuttunuz
                                         {/* Emojiyi span içine alıp text-xl veya text-2xl gibi sınıflar ekliyoruz */}
@@ -217,7 +217,7 @@ export default function Login() {
                             </div>
 
                             {/* Footer */}
-                            <div className="mt-8 pt-6 border-t border-slate-200 text-center">
+                            <div className="mt-5 pt-4 border-t border-slate-200 text-center">
                                 <p className="text-xs text-slate-500">
 
                                 </p>

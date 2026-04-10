@@ -256,28 +256,33 @@ export default function Visitors() {
         );
     };
 
+    const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
+    const dashboardIconBase = 'p-2 bg-white/20 rounded-lg border shrink-0 text-white';
+    const dashboardLabelBase = 'text-[11px] font-medium text-white/90 uppercase tracking-wider leading-none';
+    const dashboardValueBase = 'text-xl font-bold text-white leading-none mt-1';
+
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-2.5">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Ziyaretçi Kayıtları</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-0.5">Ziyaretçi giriş/çıkış kayıtlarını yönetin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Ziyaretçi Kayıt Sayfası</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-0.5">Otel ziyaretçi kayıtlarını yönetin</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 sm:flex gap-2 w-full lg:w-auto">
                             <button
                                 onClick={() => navigate('/visitor-records')}
-                                className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-5 py-2.5 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
+                                className="flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-5 py-2.5 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -295,123 +300,126 @@ export default function Visitors() {
                 </div>
             </header>
 
-            <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2.5">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-blue-600 text-sm font-medium">İçerideki Ziyaretçi</p>
-                                <p className="text-xl font-bold text-blue-900">{stats.insideCount}</p>
+            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="w-full">
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2.5">
+                        <div className={`${dashboardCardBase} border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700`}>
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className={`${dashboardIconBase} border-blue-300/60`}>
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className={dashboardLabelBase}>İçerideki Ziyaretçi</p>
+                                    <p className={dashboardValueBase}>{stats.insideCount}</p>
+                                </div>
                             </div>
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857" />
-                                </svg>
+                        </div>
+
+                        <div className={`${dashboardCardBase} border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-700`}>
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className={`${dashboardIconBase} border-emerald-300/60`}>
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className={dashboardLabelBase}>Bugün Giriş Yapan</p>
+                                    <p className={dashboardValueBase}>{stats.todayEntries}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className={`${dashboardCardBase} border-indigo-500 bg-gradient-to-br from-indigo-500 to-indigo-700`}>
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className={`${dashboardIconBase} border-indigo-300/60`}>
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className={dashboardLabelBase}>Bugün Çıkış Yapan</p>
+                                    <p className={dashboardValueBase}>{stats.todayExits}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-2.5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-green-600 text-sm font-medium">Bugün Giriş Yapan</p>
-                                <p className="text-xl font-bold text-green-900">{stats.todayEntries}</p>
-                            </div>
-                            <div className="p-2 bg-green-100 rounded-lg">
-                                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6" />
-                                </svg>
+                    {/* Filters */}
+                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <button onClick={() => setFilter('today')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Bugünün Kayıtları ({records.filter(r => isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date))).length})
+                            </button>
+                            <button onClick={() => setFilter('inside')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Aktif İçeridekiler ({stats.insideCount})
+                            </button>
+                            <button onClick={() => setFilter('subcontractor')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'subcontractor' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Taşeron İşçiler ({stats.subcontractorCount})
+                            </button>
+                            <button onClick={() => setFilter('electric')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Elektrik İstasyonu ({stats.electricStationCount})
+                            </button>
+                            <button onClick={() => setFilter('exits')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'exits' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Bugün Çıkış Yapanlar ({stats.todayExits})
+                            </button>
+                        </div>
+
+                        <div className="mt-2 border-t border-gray-200 pt-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">İsim Soyisim</label>
+                                    <input
+                                        type="text"
+                                        value={columnFilters.fullName}
+                                        onChange={(e) => setColumnFilters((prev) => ({ ...prev, fullName: e.target.value }))}
+                                        placeholder="İsim soyisim ara..."
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Araç Plaka</label>
+                                    <input
+                                        type="text"
+                                        value={columnFilters.vehiclePlate}
+                                        onChange={(e) => setColumnFilters((prev) => ({ ...prev, vehiclePlate: e.target.value }))}
+                                        placeholder="Plaka ara..."
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Firma</label>
+                                    <input
+                                        type="text"
+                                        value={columnFilters.companyName}
+                                        onChange={(e) => setColumnFilters((prev) => ({ ...prev, companyName: e.target.value }))}
+                                        placeholder="Firma ara..."
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Ziyaret Edilen</label>
+                                    <input
+                                        type="text"
+                                        value={columnFilters.visitingPerson}
+                                        onChange={(e) => setColumnFilters((prev) => ({ ...prev, visitingPerson: e.target.value }))}
+                                        placeholder="Ziyaret edilen ara..."
+                                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-2.5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-orange-600 text-sm font-medium">Bugün Çıkış Yapan</p>
-                                <p className="text-xl font-bold text-orange-900">{stats.todayExits}</p>
-                            </div>
-                            <div className="p-2 bg-orange-100 rounded-lg">
-                                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
+                    {/* Table (large bordered, scrollable container) */}
                 </div>
 
-                {/* Filters */}
-                <div className="bg-white rounded-lg shadow p-2.5 mb-3">
-                    <div className="flex flex-wrap gap-2">
-                        <button onClick={() => setFilter('today')} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-sm ${filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Bugünün Kayıtları ({records.filter(r => isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date))).length})
-                        </button>
-                        <button onClick={() => setFilter('inside')} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-sm ${filter === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Aktif İçeridekiler ({stats.insideCount})
-                        </button>
-                        <button onClick={() => setFilter('subcontractor')} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-sm ${filter === 'subcontractor' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Taşeron İşçiler ({stats.subcontractorCount})
-                        </button>
-                        <button onClick={() => setFilter('electric')} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-sm ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Elektrik İstasyonu ({stats.electricStationCount})
-                        </button>
-                        <button onClick={() => setFilter('exits')} className={`px-2.5 sm:px-3 py-1.5 rounded-lg transition text-sm ${filter === 'exits' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                            Bugün Çıkış Yapanlar ({stats.todayExits})
-                        </button>
-                    </div>
-
-                    <div className="mt-2 border-t border-gray-200 pt-2">
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">İsim Soyisim</label>
-                                <input
-                                    type="text"
-                                    value={columnFilters.fullName}
-                                    onChange={(e) => setColumnFilters((prev) => ({ ...prev, fullName: e.target.value }))}
-                                    placeholder="İsim soyisim ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Araç Plaka</label>
-                                <input
-                                    type="text"
-                                    value={columnFilters.vehiclePlate}
-                                    onChange={(e) => setColumnFilters((prev) => ({ ...prev, vehiclePlate: e.target.value }))}
-                                    placeholder="Plaka ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Firma</label>
-                                <input
-                                    type="text"
-                                    value={columnFilters.companyName}
-                                    onChange={(e) => setColumnFilters((prev) => ({ ...prev, companyName: e.target.value }))}
-                                    placeholder="Firma ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Ziyaret Edilen</label>
-                                <input
-                                    type="text"
-                                    value={columnFilters.visitingPerson}
-                                    onChange={(e) => setColumnFilters((prev) => ({ ...prev, visitingPerson: e.target.value }))}
-                                    placeholder="Ziyaret edilen ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Table (large bordered, scrollable container) */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -447,22 +455,23 @@ export default function Visitors() {
                                         {filteredRecords.map(rec => (
                                             <tr key={rec.id} className={`hover:bg-gray-50 ${rec.deleted_at ? 'opacity-60' : ''}`}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <div className="flex items-center gap-3">
+                                                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
                                                         {rec.deleted_at ? (
-                                                            <ActionButton onClick={() => handleRestoreRecord(rec.id)} variant="success">Geri Al</ActionButton>
+                                                            <ActionButton onClick={() => handleRestoreRecord(rec.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
                                                         ) : (
                                                             <>
-                                                                <ActionButton onClick={() => openModalForEdit(rec)} variant="primary">Düzenle</ActionButton>
+                                                                <ActionButton onClick={() => openModalForEdit(rec)} variant="primary" className="shrink-0">Düzenle</ActionButton>
                                                                 {rec.status === 'inside' && (
                                                                     <ActionButton
                                                                         onClick={() => handleExit(rec.id)}
                                                                         variant="success"
                                                                         title="Çıkış Yap"
+                                                                        className="shrink-0"
                                                                     >
                                                                         Çıkış Yap
                                                                     </ActionButton>
                                                                 )}
-                                                                <ActionButton onClick={() => handleDeleteRecord(rec.id)} variant="danger">Sil</ActionButton>
+                                                                <ActionButton onClick={() => handleDeleteRecord(rec.id)} variant="danger" className="shrink-0">Sil</ActionButton>
                                                             </>
                                                         )}
                                                     </div>
@@ -473,15 +482,8 @@ export default function Visitors() {
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-blue-100 rounded">
-                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-sm font-bold text-gray-900">{rec.vehicle_plate || '-'}</span>
-                                                        </div>
+                                                    <div>
+                                                        <span className="text-sm font-bold text-gray-900">{rec.vehicle_plate || '-'}</span>
                                                     </div>
                                                 </td>
 
