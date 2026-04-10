@@ -3,70 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import type { VehicleUsage, VisitorRecord } from '../types';
 import { STORAGE_KEYS } from '../constants';
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-    LineChart,
-    Line
-} from 'recharts';
-import { AlertCircle, CheckCircle, Lock, LogOut, Shield } from 'lucide-react';
+import { AlertCircle, Car, Users, UserCheck, Flame } from 'lucide-react';
 
 // Stat Card Component
 interface StatCardProps {
     title: string;
     value: number;
-    gradient: string;
-    iconBgColor: string;
+    cardClass: string;
+    iconWrapClass: string;
     icon: React.ReactNode;
 }
 
-function StatCard({ title, value, gradient, iconBgColor, icon }: StatCardProps) {
+function StatCard({ title, value, cardClass, iconWrapClass, icon }: StatCardProps) {
     return (
-        <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow p-3 sm:p-4 min-h-[88px] sm:min-h-[96px]`}>
-            <div className="flex items-center justify-between">
+        <div className={`rounded-xl shadow-sm p-4 sm:p-5 min-h-[96px] border ${cardClass}`}>
+            <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 pr-2">
-                    <p className="text-[11px] sm:text-xs font-medium opacity-90 leading-tight break-words">{title}</p>
-                    <p className="text-lg sm:text-xl font-bold text-white mt-1">{value}</p>
+                    <p className="text-xs sm:text-sm font-semibold text-white/90 leading-tight break-words">{title}</p>
+                    <p className="text-2xl font-bold text-white mt-1">{value}</p>
                 </div>
-                <div className={`${iconBgColor} p-2 rounded-lg flex-shrink-0`}>
+                <div className={`p-2.5 rounded-lg border ${iconWrapClass} flex-shrink-0`}>
                     {icon}
                 </div>
             </div>
         </div>
     );
 }
-
-// Icons
-const VehicleIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-    </svg>
-);
-
-const VisitorIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-);
-
-const ManagerIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-    </svg>
-);
-
-const FireAlarmIcon = ({ size = 12 }: { size?: number }) => (
-    <svg className={`w-${size} h-${size}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
-    </svg>
-);
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
@@ -232,100 +194,103 @@ export default function Dashboard() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
-                    <span className="text-gray-400">Yükleniyor...</span>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700" />
+                    <span className="text-slate-600">Yükleniyor...</span>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-900">
-            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5">
-                {/* Header */}
-                <div className="bg-gray-800 rounded-lg shadow p-3 sm:p-4 mb-4">
-                    <h1 className="text-base sm:text-lg font-bold text-white">Dashboard</h1>
+        <div className="min-h-screen bg-slate-50">
+            <div className="bg-slate-900 text-white py-8 px-4 shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto">
+                    <h1 className="text-3xl font-bold mb-1">Dosinia Luxury Resort Hotel</h1>
+                    <p className="text-slate-200">GÜVENLİK VERİ KAYIT VE YÖNETİM SİSTEMİ</p>
                 </div>
+            </div>
+
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
 
                 {/* Stats Cards - Araç ve Ziyaretçi Bilgileri */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5 sm:mb-6">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
-                        gradient="from-blue-600 to-blue-700"
-                        iconBgColor="bg-blue-500/30"
-                        icon={<VehicleIcon size={6} />}
+                        cardClass="border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700"
+                        iconWrapClass="border-blue-300/60 bg-blue-400/30 text-white"
+                        icon={<Car size={20} />}
                     />
                     <StatCard
                         title="İçerideki Ziyaretçiler"
                         value={visitorsInside}
-                        gradient="from-green-600 to-green-700"
-                        iconBgColor="bg-green-500/30"
-                        icon={<VisitorIcon size={6} />}
+                        cardClass="border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-700"
+                        iconWrapClass="border-emerald-300/60 bg-emerald-400/30 text-white"
+                        icon={<Users size={20} />}
                     />
                     <StatCard
                         title="İçerideki Müdürler"
                         value={managersInside}
-                        gradient="from-purple-600 to-purple-700"
-                        iconBgColor="bg-purple-500/30"
-                        icon={<ManagerIcon size={6} />}
+                        cardClass="border-indigo-500 bg-gradient-to-br from-indigo-500 to-indigo-700"
+                        iconWrapClass="border-indigo-300/60 bg-indigo-400/30 text-white"
+                        icon={<UserCheck size={20} />}
                     />
                     <StatCard
                         title="Bugün Çalınan Alarmlar"
                         value={todayAlarms}
-                        gradient="from-red-600 to-red-700"
-                        iconBgColor="bg-red-500/30"
-                        icon={<FireAlarmIcon size={6} />}
+                        cardClass="border-rose-500 bg-gradient-to-br from-rose-500 to-red-700"
+                        iconWrapClass="border-rose-300/60 bg-rose-400/30 text-white"
+                        icon={<Flame size={20} />}
                     />
                 </div>
 
                 {/* Önemli Uyarılar */}
-                <div className="bg-amber-50 rounded-lg shadow-lg p-4 sm:p-6 mb-6 border-l-4 border-amber-500">
+                <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6 border border-amber-200">
                     <div className="flex items-start gap-3 sm:gap-4">
                         <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5 sm:mt-1" size={22} />
                         <div className="flex-1">
-                            <h2 className="text-amber-900 font-bold text-base sm:text-lg mb-3 sm:mb-4">ÖNEMLİ UYARILAR</h2>
-                            <div className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm text-amber-900 leading-relaxed">
+                            <h2 className="text-black font-bold text-base sm:text-lg mb-3 sm:mb-4">ÖNEMLİ UYARILAR</h2>
+                            <div className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm text-black leading-relaxed">
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Sistemi ilk defa kullanacaksanız bilen çalışma arkadaşlarınızdan lütfen bilgilendirmeler alınız.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Sisteme giriş yaptığınız andan itibaren yapılan tüm işlemler giriş yapan kişi adına kaydedilmektedir. O yüzden giriş bilgilerinizi güvenli şekilde saklamanız önemlidir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Uygulama içerisinde gerçekleştirilen her türlü işlem kayıt altına alınmaktadır. Giriş çıkış bilgileri, hatalı şifre giriş denemeleri, alınan kayıt bilgileri, sistemde yapılan her bir tıklama, sisteme girilmeye çalışılan cihaz bilgileri vb. tarih ve saat bilgisiyle kaydedilmektedir. Yönetici ilgili durumlarda bu verilere erişebilmektedir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Yapılan her türlü veri girişi, güncelleme ve rapor alma işlemleri sistem günlüğüne işlenmektedir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Kullanım sırasında karşılaşılan her türlü teknik hata veya aksaklık vakit kaybetmeden yöneticiye bildirilmelidir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Sistemin daha verimli çalışması ve geliştirilmesi adına kullanıcı önerilerinin yöneticiye iletilmesi beklenmektedir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Veri girişlerinin doğru ve eksiksiz yapılması zorunludur; hatalı girilen işlemler veri güvenliği için sistemden tamamen silinmemektedir. Yanlış veri girişi, sistemin ürettiği istatistiklerin bozulmasına ve hatalı sonuçlar alınmasına neden olmaktadır.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Uygulamadan ayrılmadan önce oturumun güvenli bir şekilde sonlandırılması için mutlaka "Çıkış Yap" butonu kullanılmalıdır.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Şifrenin unutulması durumunda veya sisteme ilk girişte tanımlanan geçici şifrenin kişisel bir şifreyle değiştirilmesi için yönetici ile iletişime geçilmesi gerekmektedir.</p>
                                 </div>
                                 <div className="flex gap-3">
-                                    <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                                    <span className="text-black font-bold flex-shrink-0">•</span>
                                     <p>Sistem verilerinin kopyaları alınarak cihaz dışına aktarılması, başka kişi ve kurumlarla paylaşılması yasaktır.</p>
                                 </div>
                             </div>

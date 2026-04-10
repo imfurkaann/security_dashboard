@@ -21,6 +21,7 @@ import AdminManagePersonnel from './pages/AdminManagePersonnel';
 import AdminManageManagers from './pages/AdminManageManagers';
 import AdminExportData from './pages/AdminExportData';
 import AdminStatistics from './pages/AdminStatistics';
+import AdminGateEquipmentConfig from './pages/AdminGateEquipmentConfig';
 import Visitors from './pages/Visitors';
 import VisitorRecords from './pages/VisitorRecords';
 import Managers from './pages/Managers';
@@ -68,6 +69,7 @@ function App() {
               <Route path="manage-managers" element={<AdminManageManagers />} />
               <Route path="export-data" element={<AdminExportData />} />
               <Route path="statistics" element={<AdminStatistics />} />
+              <Route path="gate-equipment-config" element={<AdminGateEquipmentConfig />} />
               <Route path="misafir-kayitlari" element={<GuestRegistry />} />
             </Route>
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
     submitEquipmentCheck,
     getEquipmentCheckStatus,
+    getEquipmentConfig,
     equipmentCheckValidation,
 } from '../controllers/equipmentController';
 import { authMiddleware } from '../middleware/auth';
@@ -21,5 +22,12 @@ router.post('/', authMiddleware, equipmentCheckValidation, submitEquipmentCheck)
  * @access  Private
  */
 router.get('/status', authMiddleware, getEquipmentCheckStatus);
+
+/**
+ * @route   GET /api/equipment-check/config
+ * @desc    Get active gate/equipment configuration for personnel flow
+ * @access  Private
+ */
+router.get('/config', authMiddleware, getEquipmentConfig);
 
 export default router;

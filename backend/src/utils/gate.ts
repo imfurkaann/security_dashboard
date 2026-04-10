@@ -1,11 +1,14 @@
 import { Request } from 'express';
 
-export type GateLabel = 'Ana Kapı' | 'Sahil Kapı';
+export type GateLabel = string;
 
 const normalizeGateValue = (value: unknown): GateLabel | null => {
     if (typeof value !== 'string') return null;
 
-    const raw = value.trim().toLowerCase();
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const raw = trimmed.toLowerCase();
 
     if (raw === 'ana_kapi' || raw === 'ana kapı' || raw === 'ana kapi') {
         return 'Ana Kapı';
@@ -15,7 +18,8 @@ const normalizeGateValue = (value: unknown): GateLabel | null => {
         return 'Sahil Kapı';
     }
 
-    return null;
+    // Dinamik kapı desteği: admin tarafından tanımlanmış kod/ad değerlerini olduğu gibi taşı.
+    return trimmed;
 };
 
 export const getGateFromRequest = (req: Request): GateLabel | null => {
