@@ -56,7 +56,7 @@ export default function UserSidebarLayout() {
             <button
                 type="button"
                 onClick={() => setIsSidebarOpen((prev) => !prev)}
-                className="fixed top-4 left-4 z-40 inline-flex lg:hidden items-center justify-center rounded-md bg-gray-800 p-2 text-gray-100 border border-gray-700 hover:bg-gray-700 transition"
+                className="fixed top-4 left-4 z-40 inline-flex lg:hidden items-center justify-center rounded-md bg-slate-900 p-2 text-gray-100 border border-slate-700 hover:bg-slate-800 transition"
                 aria-label={isSidebarOpen ? 'Menüyü kapat' : 'Menüyü aç'}
             >
                 {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
@@ -70,10 +70,9 @@ export default function UserSidebarLayout() {
                 />
             )}
 
-            <aside className={`fixed left-0 top-0 h-screen w-64 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${
-                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}>
-                <div className="mb-4 pb-3 border-b border-gray-700">
+            <aside className={`fixed left-0 top-0 h-screen w-64 bg-slate-900 border-r border-slate-700 shadow-md p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}>
+                <div className="mb-4 pb-3 border-b border-slate-700">
                     <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Güvenlik Paneli</h1>
                 </div>
 
@@ -84,10 +83,9 @@ export default function UserSidebarLayout() {
                             to={item.path}
                             onClick={() => setIsSidebarOpen(false)}
                             className={({ isActive }) =>
-                                `block rounded-md px-3 py-2 text-sm transition ${
-                                    isActive
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                                `block rounded-md px-3 py-2 text-sm transition ${isActive
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-300 hover:bg-slate-700 hover:text-white'
                                 }`
                             }
                         >
@@ -96,7 +94,7 @@ export default function UserSidebarLayout() {
                     ))}
                 </nav>
 
-                <div className="mt-4 pt-3 border-t border-gray-700">
+                <div className="mt-4 pt-3 border-t border-slate-700">
                     <p className="text-xs text-gray-400">Giris Yapan</p>
                     <p className="text-sm text-white font-semibold mt-1 truncate">{userName}</p>
                     <p className="text-[11px] text-gray-400 mt-1 uppercase">{userRole}</p>

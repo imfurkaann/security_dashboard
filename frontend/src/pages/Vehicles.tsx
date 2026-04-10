@@ -220,23 +220,23 @@ export default function Vehicles() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Otel Araç Kullanım Sistemi</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-1">Otel araçlarının kullanım kayıtlarını yönetin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Araç Kullanım Sistemi</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel araçlarının kullanım kayıtlarını yönetin</p>
                             </div>
                         </div>
 
@@ -264,116 +264,122 @@ export default function Vehicles() {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-blue-600 text-sm font-medium">Toplam Araç</p>
-                                <p className="text-2xl font-bold text-blue-900">{vehicles.length}</p>
+            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="max-w-7xl mx-auto w-full">
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                        {/* p-3 yerine py-2 px-3 kullanarak dikey boşluğu azalttık */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg py-2 px-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-blue-600 text-xs font-medium uppercase tracking-wider">Toplam Araç</p>
+                                    {/* text-2xl yerine text-xl yaparak yüksekliği düşürdük */}
+                                    <p className="text-xl font-bold text-blue-900 leading-none mt-0.5">{vehicles.length}</p>
+                                </div>
+                                {/* İkon kutusunu p-2'den p-1.5'e düşürdük */}
+                                <div className="p-1.5 bg-blue-100 rounded-md">
+                                    {/* w-6 h-6 yerine w-5 h-5 yaptık */}
+                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                    </svg>
+                                </div>
                             </div>
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                </svg>
+                        </div>
+
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg py-2 px-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-orange-600 text-xs font-medium uppercase tracking-wider">Kullanımda</p>
+                                    <p className="text-xl font-bold text-orange-900 leading-none mt-0.5">{inUseCount}</p>
+                                </div>
+                                <div className="p-1.5 bg-orange-100 rounded-md">
+                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-purple-50 border border-purple-200 rounded-lg py-2 px-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-purple-600 text-xs font-medium uppercase tracking-wider">Teslim Alınan</p>
+                                    <p className="text-xl font-bold text-purple-900 leading-none mt-0.5">
+                                        {usages.filter(u => isToday(u.given_date)).length}
+                                    </p>
+                                </div>
+                                <div className="p-1.5 bg-purple-100 rounded-md">
+                                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-orange-600 text-sm font-medium">Kullanımda</p>
-                                <p className="text-2xl font-bold text-orange-900">{inUseCount}</p>
-                            </div>
-                            <div className="p-2 bg-orange-100 rounded-lg">
-                                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
+                    {/* Filters */}
+                    <div className="bg-white rounded-lg shadow p-4 mb-6">
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={() => setFilter('all')}
+                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                Bugünün Kayıtları ({todayUsages.length})
+                            </button>
+                            <button
+                                onClick={() => setFilter('in_use')}
+                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                Kullanımda Olan Araçlar ({inUseCount})
+                            </button>
+                            <button
+                                onClick={() => setFilter('returned')}
+                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                Bugün İade Edilen Araçlar ({usages.filter(u => u.status === 'returned' && isToday(u.return_date)).length})
+                            </button>
                         </div>
-                    </div>
-
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-purple-600 text-sm font-medium">Teslim Alınan</p>
-                                <p className="text-2xl font-bold text-purple-900">
-                                    {usages.filter(u => isToday(u.given_date)).length}
-                                </p>
-                            </div>
-                            <div className="p-2 bg-purple-100 rounded-lg">
-                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Filters */}
-                <div className="bg-white rounded-lg shadow p-4 mb-6">
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={() => setFilter('all')}
-                            className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                        >
-                            Bugünün Kayıtları ({todayUsages.length})
-                        </button>
-                        <button
-                            onClick={() => setFilter('in_use')}
-                            className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                        >
-                            Kullanımda Olan Araçlar ({inUseCount})
-                        </button>
-                        <button
-                            onClick={() => setFilter('returned')}
-                            className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
-                        >
-                            Bugün İade Edilen Araçlar ({usages.filter(u => u.status === 'returned' && isToday(u.return_date)).length})
-                        </button>
                     </div>
                 </div>
 
                 {/* Table */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow overflow-hidden w-full flex-1 min-h-0">
                     {loading ? (
-                        <div className="flex items-center justify-center py-12">
+                        <div className="flex items-center justify-center h-full min-h-[240px] py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                         </div>
                     ) : filteredUsages.length === 0 ? (
-                        <div className="text-center py-12">
+                        <div className="text-center h-full min-h-[240px] flex items-center justify-center py-12">
                             <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                             </svg>
                             <p className="text-gray-500">Kayıt bulunmuyor</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
+                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                            <div className="min-h-full">
+                                <table className="w-full table-fixed divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Edilme Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alınma Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[260px]">Açıklama</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
+                                            <th className="w-[160px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                            <th className="w-[80px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                            <th className="w-[180px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
+                                            <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
+                                            <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Edilme</th>
+                                            <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alınma</th>
+                                            <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
+                                            <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredUsages.map((usage) => (
                                             <tr key={usage.id} className={`hover:bg-gray-50 ${usage.deleted_at ? 'opacity-60' : ''}`}>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <div className="flex items-center gap-3">
+                                                <td className="px-3 lg:px-4 py-4 text-sm align-top">
+                                                    <div className="flex flex-wrap items-center gap-2">
                                                         {usage.deleted_at ? (
                                                             <ActionButton onClick={() => handleRestoreRecord(usage.id)} variant="success">Geri Al</ActionButton>
                                                         ) : (
@@ -387,10 +393,10 @@ export default function Vehicles() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{usage.gate || '-'}</div>
+                                                <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <div className="text-sm text-gray-900 break-words">{usage.gate || '-'}</div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="flex items-center">
                                                         <div className="p-2 bg-blue-100 rounded">
                                                             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -398,20 +404,20 @@ export default function Vehicles() {
                                                             </svg>
                                                         </div>
                                                         <div className="ml-3">
-                                                            <div className="text-sm font-bold text-gray-900">{usage.vehicle_plate}</div>
-                                                            <div className="text-xs text-gray-500">{usage.vehicle_brand}</div>
+                                                            <div className="text-sm font-bold text-gray-900 break-words">{usage.vehicle_plate}</div>
+                                                            <div className="text-xs text-gray-500 break-words">{usage.vehicle_brand}</div>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.manager || '-'}</div>
-                                                    <div className="text-xs text-gray-500">{usage.manager_title}</div>
+                                                <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <div className="text-sm text-gray-900 break-words">{usage.manager || '-'}</div>
+                                                    <div className="text-xs text-gray-500 break-words">{usage.manager_title}</div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{formatDate(usage.given_date)}</div>
                                                     <div className="text-xs text-gray-500">{formatTime(usage.given_time)}</div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                <td className="px-3 lg:px-4 py-4 align-top">
                                                     {usage.return_date ? (
                                                         <>
                                                             <div className="text-sm text-gray-900">{formatDate(usage.return_date)}</div>
@@ -421,14 +427,14 @@ export default function Vehicles() {
                                                         <span className="text-gray-400">-</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                <td className="px-3 lg:px-4 py-4 align-top">
                                                     {renderPreviewText(usage.notes, 'Açıklama')}
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.given_by || '-'}</div>
+                                                <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <div className="text-sm text-gray-900 break-words">{usage.given_by || '-'}</div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.returned_by || '-'}</div>
+                                                <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <div className="text-sm text-gray-900 break-words">{usage.returned_by || '-'}</div>
                                                 </td>
                                             </tr>
                                         ))}

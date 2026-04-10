@@ -44,7 +44,7 @@ const getSelectedGate = (): string | null => {
     if (isAdminPath) return null;
 
     const gate = localStorage.getItem(STORAGE_KEYS.SELECTED_GATE);
-    if (gate === 'ana_kapi' || gate === 'sahil_kapi') {
+    if (gate && gate.trim().length > 0 && gate.length <= 64) {
         return gate;
     }
 

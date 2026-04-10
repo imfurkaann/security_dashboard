@@ -23,6 +23,7 @@ const menuItems = [
     { title: 'Olay Yönetimi', path: '/admin/incident-records' },
     { title: 'Yangın Yönetimi', path: '/admin/fire-alarm-records' },
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
+    { title: 'Kapı ve Ekipman Yönetimi', path: '/admin/gate-equipment-config' },
     { title: 'Veri Dışa Aktarma', path: '/admin/export-data' },
     { title: 'İstatistikler', path: '/admin/statistics' },
     { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' }
@@ -84,9 +85,8 @@ export default function AdminSidebarLayout() {
                 />
             )}
 
-            <aside className={`fixed left-0 top-0 h-screen w-64 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${
-                isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}>
+            <aside className={`fixed left-0 top-0 h-screen w-64 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}>
                 <div className="mb-4 pb-3 border-b border-gray-700">
                     <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Yönetim Paneli</h1>
                 </div>
@@ -98,10 +98,9 @@ export default function AdminSidebarLayout() {
                             to={item.path}
                             onClick={() => setIsSidebarOpen(false)}
                             className={({ isActive }) =>
-                                `block rounded-md px-3 py-2 text-sm transition ${
-                                    isActive
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                                `block rounded-md px-3 py-2 text-sm transition ${isActive
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                                 }`
                             }
                         >
