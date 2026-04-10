@@ -360,7 +360,7 @@ export default function Vehicles() {
                                 <table className="w-full table-fixed divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="w-[160px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                            <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
                                             <th className="w-[80px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="w-[180px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
@@ -375,7 +375,7 @@ export default function Vehicles() {
                                         {filteredUsages.map((usage) => (
                                             <tr key={usage.id} className={`hover:bg-gray-50 ${usage.deleted_at ? 'opacity-60' : ''}`}>
                                                 <td className="px-3 lg:px-4 py-4 text-sm align-top">
-                                                    <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
+                                                    <div className="flex items-center gap-2 whitespace-nowrap">
                                                         {usage.deleted_at ? (
                                                             <ActionButton onClick={() => handleRestoreRecord(usage.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
                                                         ) : (

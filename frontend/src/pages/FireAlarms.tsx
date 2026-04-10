@@ -367,7 +367,7 @@ export default function FireAlarms() {
                                     <table className="w-full table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
-                                                <th className="w-[150px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                 <th className="w-[70px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                 <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
@@ -382,7 +382,7 @@ export default function FireAlarms() {
                                             {filteredRecords.map(record => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                     <td className="px-3 lg:px-4 py-4 text-sm align-top">
-                                                        <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 whitespace-nowrap">
                                                             <ActionButton
                                                                 onClick={() => openModalForEdit(record)}
                                                                 variant="primary"
