@@ -22,7 +22,8 @@ const menuItems = [
     { title: 'Müdür Yönetimi', path: '/managers' },
     { title: 'Olaylar', path: '/incidents' },
     { title: 'Yangın Alarmları', path: '/fire-alarms' },
-    { title: 'SGK', path: '/sgk' }
+    { title: 'SGK', path: '/sgk' },
+    { title: 'Misafir Kayıtları', path: '/misafir-kayitlari' }
 ];
 
 export default function UserSidebarLayout() {
@@ -43,6 +44,7 @@ export default function UserSidebarLayout() {
         } finally {
             localStorage.removeItem(STORAGE_KEYS.TOKEN);
             localStorage.removeItem(STORAGE_KEYS.USER);
+            localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
             navigate('/login');
         }
     };

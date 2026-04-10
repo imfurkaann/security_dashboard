@@ -14,6 +14,7 @@ const { RangePicker } = DatePicker;
 export default function VisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
 
     // Filter states
@@ -26,6 +27,7 @@ export default function VisitorRecords() {
         entry_by: '',
         exit_by: '',
         status: 'all',
+        gate: 'all',
         subcontractor_worker: 'all',
         for_electric_station: 'all',
         entryDateStart: '',
@@ -92,6 +94,11 @@ export default function VisitorRecords() {
                 return false;
             }
 
+            // Gate filter
+            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
+                return false;
+            }
+
             // Subcontractor filter
             if (filters.subcontractor_worker === 'yes' && !record.subcontractor_worker) {
                 return false;
@@ -148,6 +155,7 @@ export default function VisitorRecords() {
             filters.entry_by !== '' ||
             filters.exit_by !== '' ||
             filters.status !== 'all' ||
+            filters.gate !== 'all' ||
             filters.subcontractor_worker !== 'all' ||
             filters.for_electric_station !== 'all' ||
             filters.entryDateStart !== '' ||
@@ -222,6 +230,7 @@ export default function VisitorRecords() {
             entry_by: '',
             exit_by: '',
             status: 'all',
+            gate: 'all',
             subcontractor_worker: 'all',
             for_electric_station: 'all',
             entryDateStart: '',
@@ -305,6 +314,26 @@ export default function VisitorRecords() {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
         }
+    };
+
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
     };
 
     return (
@@ -419,6 +448,21 @@ export default function VisitorRecords() {
                                     <option value="all">Tümü</option>
                                     <option value="inside">İçeride</option>
                                     <option value="exited">Çıkış Yaptı</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Kapı
+                                </label>
+                                <select
+                                    value={filters.gate}
+                                    onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="all">Tümü</option>
+                                    <option value="Ana Kapı">Ana Kapı</option>
+                                    <option value="Sahil Kapı">Sahil Kapı</option>
                                 </select>
                             </div>
                         </div>
@@ -557,21 +601,23 @@ export default function VisitorRecords() {
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
-                                            <th className="px-6 py-3 w-60 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
+                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -607,12 +653,18 @@ export default function VisitorRecords() {
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                 </td>
 
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 whitespace-nowrap">
                                                     {record.exit_date ? (
                                                         <>
                                                             <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
@@ -627,8 +679,8 @@ export default function VisitorRecords() {
                                                     <div className="text-sm text-gray-900">{record.phone || '-'}</div>
                                                 </td>
 
-                                                <td className="px-6 py-4 max-w-[240px]">
-                                                    <div className="text-sm text-gray-500 truncate">{record.notes || '-'}</div>
+                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -674,21 +726,23 @@ export default function VisitorRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                                <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50">
                                                         <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
-                                                            <th className="px-6 py-3 w-60 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -725,12 +779,20 @@ export default function VisitorRecords() {
                                                                     <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.exit_date ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
@@ -745,8 +807,8 @@ export default function VisitorRecords() {
                                                                     <div className="text-sm text-gray-900">{record.phone || '-'}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 max-w-[240px]">
-                                                                    <div className="text-sm text-gray-500 truncate">{record.notes || '-'}</div>
+                                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                                 </td>
 
                                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -775,6 +837,26 @@ export default function VisitorRecords() {
                     </div>
                 )}
             </main>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

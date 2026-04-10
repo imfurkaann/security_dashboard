@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
@@ -10,6 +10,7 @@ interface FireAlarm {
     alarm_number: string | null;
     location: string;
     alarm_time: string;
+    gate?: string | null;
     resolved: boolean;
     resolution_time: string | null;
     resolution_notes: string | null;
@@ -39,22 +40,50 @@ export default function FireAlarms() {
     const [resolutionTime, setResolutionTime] = useState('');
     const [resolutionNotes, setResolutionNotes] = useState('');
     const [falseAlarm, setFalseAlarm] = useState(false);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const latestFetchId = useRef(0);
     const navigate = useNavigate();
 
     // Fetch fire alarm records
     const fetchData = useCallback(async () => {
+        const fetchId = ++latestFetchId.current;
         try {
-            const res = await api.get('/fire-alarms/records?includeDeleted=true');
+            const res = await api.get(`/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`);
+            if (fetchId !== latestFetchId.current) return;
             setRecords(res.data?.data || []);
         } catch (err) {
+            if (fetchId !== latestFetchId.current) return;
             console.error('Yangın alarm verisi yüklenemedi', err);
         } finally {
+            if (fetchId !== latestFetchId.current) return;
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         fetchData();
+        const refreshInterval = window.setInterval(fetchData, 15000);
+        return () => window.clearInterval(refreshInterval);
+    }, [fetchData]);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            fetchData();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [fetchData]);
 
     // Reset form
@@ -230,6 +259,26 @@ export default function FireAlarms() {
         });
     }, [records, filter, recordVisibility]);
 
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -327,7 +376,13 @@ export default function FireAlarms() {
 
                 {/* Filters */}
                 <div className="bg-white rounded-lg shadow p-4 mb-6">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            onClick={fetchData}
+                            className="px-3 sm:px-4 py-2 rounded-lg transition text-sm bg-blue-100 text-blue-800 hover:bg-blue-200"
+                        >
+                            Yenile
+                        </button>
                         <button onClick={() => setFilter('today')} className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                             Bugünün Alarmları ({stats.todayAlarms})
                         </button>
@@ -353,17 +408,18 @@ export default function FireAlarms() {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
+                            <table className="w-full min-w-[1500px] table-auto divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -393,18 +449,21 @@ export default function FireAlarms() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm font-bold text-gray-900">{record.location}</div>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
                                                 {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                 <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 {record.resolution_time ? (
                                                     <>
                                                         <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
@@ -414,10 +473,10 @@ export default function FireAlarms() {
                                                     <span className="text-sm text-gray-400">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
+                                            <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                {renderPreviewText(record.resolution_notes, 'Notlar')}
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4 whitespace-nowrap">
                                                 {record.resolved ? (
                                                     <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
                                                 ) : (
@@ -619,6 +678,26 @@ export default function FireAlarms() {
                             >
                                 Kapat
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
                         </div>
                     </div>
                 </div>

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
+import { getGateFromRequest } from '../utils/gate';
 
 /**
  * Get all manager records with joins
@@ -20,6 +21,7 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
                 mr.id,
                 mr.manager_id,
                 mr.manager_name,
+                mr.gate,
                 mr.entry_date,
                 mr.entry_time,
                 mr.exit_date,
@@ -57,6 +59,7 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
             // prefer stored manager_name if available, otherwise use joined manager fields
             manager: row.manager_name || (row.manager_first_name || row.manager_last_name ? `${row.manager_first_name || ''} ${row.manager_last_name || ''}`.trim() : null),
             manager_title: row.manager_title,
+            gate: row.gate,
             entry_date: row.entry_date,
             entry_time: row.entry_time,
             exit_date: row.exit_date,
@@ -383,6 +386,7 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         const entry_by = req.user?.userId || null;
         const isAdminUser = req.user?.role === 'admin';
         const clientIp = getClientIp(req);
+        const gate = getGateFromRequest(req);
 
         // GÜVENLİK: Input sanitization
         const sanitizedNotes = sanitizeInput(notes, 1000);
@@ -461,24 +465,26 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         await pool.query('BEGIN');
         await pool.query(
             `INSERT INTO managers_records (
-                id, manager_id, manager_name, entry_by, entry_date, entry_time, exit_date, exit_time, exit_by, status, notes
+                id, manager_id, manager_name, gate, entry_by, entry_date, entry_time, exit_date, exit_time, exit_by, status, notes
             ) VALUES (
                 $1,
                 $2,
                 $3,
                 $4,
-                COALESCE($6::date, CURRENT_DATE),
-                COALESCE($7::time, CURRENT_TIME),
-                $8::date,
-                $9::time,
-                $10,
+                $5,
+                COALESCE($7::date, CURRENT_DATE),
+                COALESCE($8::time, CURRENT_TIME),
+                $9::date,
+                $10::time,
                 $11,
-                $5
+                $12,
+                $6
             )`,
             [
                 id,
                 manager_id,
                 managerName,
+                gate,
                 entry_by,
                 sanitizedNotes,
                 effectiveEntryDate,

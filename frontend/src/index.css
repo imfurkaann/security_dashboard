@@ -29,6 +29,32 @@
 }
 
 @layer utilities {
+  .mobile-stack-table th,
+  .mobile-stack-table td {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+  }
+
+  .mobile-stack-table td > div {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 1400px) {
+    .mobile-stack-table {
+      width: 100% !important;
+      min-width: 0 !important;
+      table-layout: auto !important;
+    }
+
+    .mobile-stack-table colgroup {
+      display: none;
+    }
+  }
+
   .animation-delay-2000 {
     animation-delay: 2s;
   }

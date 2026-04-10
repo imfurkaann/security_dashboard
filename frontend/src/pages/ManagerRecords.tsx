@@ -14,6 +14,7 @@ const { RangePicker } = DatePicker;
 export default function ManagerRecords() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
 
     // Filter states
@@ -25,7 +26,8 @@ export default function ManagerRecords() {
         entryDateStart: '',
         entryDateEnd: '',
         exitDateStart: '',
-        exitDateEnd: ''
+        exitDateEnd: '',
+        gate: 'all'
     });
 
     // Fetch all records
@@ -66,6 +68,11 @@ export default function ManagerRecords() {
                 return false;
             }
 
+            // Gate filter
+            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
+                return false;
+            }
+
             // Entry date range filter - dayjs ile yerel tarihe çevir
             const entryDateOnly = record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '';
             if (filters.entryDateStart && entryDateOnly) {
@@ -102,6 +109,7 @@ export default function ManagerRecords() {
             filters.entry_by !== '' ||
             filters.exit_by !== '' ||
             filters.status !== 'all' ||
+            filters.gate !== 'all' ||
             filters.entryDateStart !== '' ||
             filters.entryDateEnd !== '' ||
             filters.exitDateStart !== '' ||
@@ -175,7 +183,8 @@ export default function ManagerRecords() {
             entryDateStart: '',
             entryDateEnd: '',
             exitDateStart: '',
-            exitDateEnd: ''
+            exitDateEnd: '',
+            gate: 'all'
         });
     };
 
@@ -253,6 +262,26 @@ export default function ManagerRecords() {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
         }
+    };
+
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
     };
 
     return (
@@ -356,6 +385,22 @@ export default function ManagerRecords() {
                             </select>
                         </div>
 
+                        {/* Gate */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Kapı
+                            </label>
+                            <select
+                                value={filters.gate}
+                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
+                            </select>
+                        </div>
+
                         {/* Entry Date Range */}
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -410,15 +455,17 @@ export default function ManagerRecords() {
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                <table className="w-full min-w-[1420px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -440,6 +487,10 @@ export default function ManagerRecords() {
                                                     </div>
                                                 </td>
 
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                </td>
+
                                                 <td className="px-6 py-4">
                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
@@ -454,6 +505,10 @@ export default function ManagerRecords() {
                                                     ) : (
                                                         <span className="text-gray-400">-</span>
                                                     )}
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -499,16 +554,18 @@ export default function ManagerRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                                <table className="w-full min-w-[1420px] table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
 
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Giriş Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çıkış Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -530,12 +587,16 @@ export default function ManagerRecords() {
                                                                     </div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.exit_date ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
@@ -544,6 +605,10 @@ export default function ManagerRecords() {
                                                                     ) : (
                                                                         <span className="text-gray-400">-</span>
                                                                     )}
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                                 </td>
 
                                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -572,6 +637,26 @@ export default function ManagerRecords() {
                     </div>
                 )}
             </main>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

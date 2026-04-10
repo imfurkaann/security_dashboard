@@ -15,6 +15,7 @@ export default function VehicleRecords() {
     const [records, setRecords] = useState<VehicleUsage[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [loading, setLoading] = useState(true);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
 
     // Filter states
@@ -25,6 +26,7 @@ export default function VehicleRecords() {
         given_by: '',
         returned_by: '',
         status: 'all',
+        gate: 'all',
         givenDateStart: '',
         givenDateEnd: '',
         returnDateStart: '',
@@ -83,6 +85,11 @@ export default function VehicleRecords() {
                 return false;
             }
 
+            // Gate filter
+            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
+                return false;
+            }
+
             // Given date range filter - dayjs ile yerel tarihe çevir
             const givenDateOnly = record.given_date ? dayjs(record.given_date).format('YYYY-MM-DD') : '';
             if (filters.givenDateStart && givenDateOnly) {
@@ -123,6 +130,7 @@ export default function VehicleRecords() {
             filters.given_by !== '' ||
             filters.returned_by !== '' ||
             filters.status !== 'all' ||
+            filters.gate !== 'all' ||
             filters.givenDateStart !== '' ||
             filters.givenDateEnd !== '' ||
             filters.returnDateStart !== '' ||
@@ -193,6 +201,7 @@ export default function VehicleRecords() {
             given_by: '',
             returned_by: '',
             status: 'all',
+            gate: 'all',
             givenDateStart: '',
             givenDateEnd: '',
             returnDateStart: '',
@@ -220,6 +229,26 @@ export default function VehicleRecords() {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
         }
+    };
+
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
     };
 
     return (
@@ -340,6 +369,21 @@ export default function VehicleRecords() {
                                     placeholder="Ara..."
                                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Kapı
+                                </label>
+                                <select
+                                    value={filters.gate}
+                                    onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="all">Tümü</option>
+                                    <option value="Ana Kapı">Ana Kapı</option>
+                                    <option value="Sahil Kapı">Sahil Kapı</option>
+                                </select>
                             </div>
                         </div>
 
@@ -467,12 +511,25 @@ export default function VehicleRecords() {
                         // Filtered view - simple table without grouping
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
+                                <table className="mobile-stack-table w-full 2xl:w-[1520px] 2xl:min-w-[1520px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                    <colgroup>
+                                        <col style={{ width: '180px' }} />
+                                        <col style={{ width: '170px' }} />
+                                        <col style={{ width: '170px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '130px' }} />
+                                        <col style={{ width: '130px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '220px' }} />
+                                    </colgroup>
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
@@ -498,11 +555,14 @@ export default function VehicleRecords() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-bold text-gray-900">{record.manager}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
                                                     <div className="text-xs text-gray-500">{record.manager_title}</div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-900">{record.destination}</div>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
@@ -519,26 +579,24 @@ export default function VehicleRecords() {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.given_by || '-'}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.returned_by || '-'}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     {record.status === 'in_use' ? (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                                                             Kullanımda
                                                         </span>
                                                     ) : (
-                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                                             Teslim Alındı
                                                         </span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-500 max-w-xs truncate" title={record.notes || '-'}>
-                                                        {record.notes || '-'}
-                                                    </div>
+                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                 </td>
                                             </tr>
                                         ))}
@@ -568,14 +626,27 @@ export default function VehicleRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-full divide-y divide-gray-200">
+                                                <table className="mobile-stack-table w-full 2xl:w-[1520px] 2xl:min-w-[1520px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                                    <colgroup>
+                                                        <col style={{ width: '180px' }} />
+                                                        <col style={{ width: '170px' }} />
+                                                        <col style={{ width: '170px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '130px' }} />
+                                                        <col style={{ width: '130px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '220px' }} />
+                                                    </colgroup>
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Teslim Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">İade Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
@@ -599,17 +670,20 @@ export default function VehicleRecords() {
                                                                     </div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm font-bold text-gray-900">{record.manager}</div>
+                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
                                                                     <div className="text-xs text-gray-500">{record.manager_title}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-900">{record.destination}</div>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.given_time)}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.return_date ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.return_date)}</div>
@@ -620,26 +694,24 @@ export default function VehicleRecords() {
                                                                     )}
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.given_by || '-'}</div>
+                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.returned_by || '-'}</div>
+                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.status === 'in_use' ? (
-                                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                                                                             Kullanımda
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                                                             Teslim Alındı
                                                                         </span>
                                                                     )}
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-500 max-w-xs truncate" title={record.notes || '-'}>
-                                                                        {record.notes || '-'}
-                                                                    </div>
+                                                                    {renderPreviewText(record.notes, 'Açıklama')}
                                                                 </td>
                                                             </tr>
                                                         ))}
@@ -654,6 +726,26 @@ export default function VehicleRecords() {
                     )}
                 </div>
             </main>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

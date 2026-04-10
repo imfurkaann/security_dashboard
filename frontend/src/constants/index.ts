@@ -86,4 +86,5 @@ export const STORAGE_KEYS = {
     THEME: 'theme',
     ADMIN_TOKEN: 'adminToken',
     ADMIN_USER: 'adminUser',
+    SELECTED_GATE: 'selectedGate',
 } as const;

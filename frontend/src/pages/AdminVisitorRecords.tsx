@@ -27,6 +27,7 @@ export default function AdminVisitorRecords() {
         entry_by: '',
         exit_by: '',
         status: 'all',
+        gate: 'all',
         subcontractor_worker: 'all',
         for_electric_station: 'all',
         entryDateStart: '',
@@ -99,6 +100,11 @@ export default function AdminVisitorRecords() {
                 return false;
             }
 
+            // Gate filter
+            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
+                return false;
+            }
+
             // Subcontractor filter
             if (filters.subcontractor_worker === 'yes' && !record.subcontractor_worker) {
                 return false;
@@ -155,6 +161,7 @@ export default function AdminVisitorRecords() {
             filters.entry_by !== '' ||
             filters.exit_by !== '' ||
             filters.status !== 'all' ||
+            filters.gate !== 'all' ||
             filters.subcontractor_worker !== 'all' ||
             filters.for_electric_station !== 'all' ||
             filters.entryDateStart !== '' ||
@@ -229,6 +236,7 @@ export default function AdminVisitorRecords() {
             entry_by: '',
             exit_by: '',
             status: 'all',
+            gate: 'all',
             subcontractor_worker: 'all',
             for_electric_station: 'all',
             entryDateStart: '',
@@ -434,6 +442,21 @@ export default function AdminVisitorRecords() {
                                     <option value="exited">Çıkış Yaptı</option>
                                 </select>
                             </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Kapı
+                                </label>
+                                <select
+                                    value={filters.gate}
+                                    onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    <option value="all">Tümü</option>
+                                    <option value="Ana Kapı">Ana Kapı</option>
+                                    <option value="Sahil Kapı">Sahil Kapı</option>
+                                </select>
+                            </div>
                         </div>
 
                         {/* Second Row */}
@@ -570,7 +593,22 @@ export default function AdminVisitorRecords() {
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-[1500px] table-auto divide-y divide-gray-200">
+                                <table className="mobile-stack-table w-full 2xl:w-[1850px] 2xl:min-w-[1850px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                    <colgroup>
+                                        <col style={{ width: '180px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '220px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '150px' }} />
+                                        <col style={{ width: '150px' }} />
+                                    </colgroup>
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
@@ -578,6 +616,8 @@ export default function AdminVisitorRecords() {
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
@@ -620,6 +660,12 @@ export default function AdminVisitorRecords() {
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
                                                 </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                </td>
                                                 <td className="px-6 py-4">
                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
@@ -640,8 +686,8 @@ export default function AdminVisitorRecords() {
                                                     <div className="text-sm text-gray-900">{record.phone || '-'}</div>
                                                 </td>
 
-                                                <td className="px-6 py-4 max-w-[240px]">
-                                                    <div className="text-sm text-gray-500 truncate">{record.notes || '-'}</div>
+                                                <td className="px-6 py-4">
+                                                    <div className="text-sm text-gray-500 whitespace-normal break-words">{record.notes || '-'}</div>
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -688,7 +734,22 @@ export default function AdminVisitorRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-[1500px] table-auto divide-y divide-gray-200">
+                                                <table className="mobile-stack-table w-full 2xl:w-[1850px] 2xl:min-w-[1850px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                                    <colgroup>
+                                                        <col style={{ width: '180px' }} />
+                                                        <col style={{ width: '160px' }} />
+                                                        <col style={{ width: '160px' }} />
+                                                        <col style={{ width: '160px' }} />
+                                                        <col style={{ width: '110px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '220px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '150px' }} />
+                                                        <col style={{ width: '150px' }} />
+                                                    </colgroup>
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
@@ -696,6 +757,8 @@ export default function AdminVisitorRecords() {
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
@@ -740,6 +803,14 @@ export default function AdminVisitorRecords() {
                                                                 </td>
 
                                                                 <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
                                                                     <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                                 </td>
@@ -759,8 +830,8 @@ export default function AdminVisitorRecords() {
                                                                     <div className="text-sm text-gray-900">{record.phone || '-'}</div>
                                                                 </td>
 
-                                                                <td className="px-6 py-4 max-w-[240px]">
-                                                                    <div className="text-sm text-gray-500 truncate">{record.notes || '-'}</div>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="text-sm text-gray-500 whitespace-normal break-words">{record.notes || '-'}</div>
                                                                 </td>
 
                                                                 <td className="px-6 py-4 whitespace-nowrap">

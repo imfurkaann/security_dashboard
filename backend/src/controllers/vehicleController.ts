@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, isValidLength, normalizePlate } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
+import { getGateFromRequest } from '../utils/gate';
 
 /**
  * Get all vehicles
@@ -70,6 +71,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
                 vr.return_date,
                 vr.return_time,
                 vr.destination,
+                vr.gate,
                 vr.manager_name,
                 vr.status,
                 vr.notes,
@@ -110,6 +112,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             return_date: row.return_date,
             return_time: row.return_time,
             destination: row.destination,
+            gate: row.gate,
             status: row.status,
             notes: row.notes,
             deleted_at: row.deleted_at || null,
@@ -134,6 +137,7 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
     try {
         const { vehicle_id, manager_id, manager_name, destination, notes, given_time } = req.body;
         const personnel_id = req.user?.userId;
+        const gate = getGateFromRequest(req);
 
         // Validate required fields
         if (!vehicle_id) {
@@ -270,16 +274,16 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             // If valid time provided (HH:MM format), use it
             insertQuery = `INSERT INTO vehicle_records (
                 id, vehicle_id, manager_id, manager_name, given_by,
-                given_date, given_time, destination, notes, status
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, 'in_use')`;
-            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null];
+                given_date, given_time, destination, notes, gate, status
+            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, $9, 'in_use')`;
+            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null, gate];
         } else {
             // Use current timestamp
             insertQuery = `INSERT INTO vehicle_records (
                 id, vehicle_id, manager_id, manager_name, given_by,
-                given_date, given_time, destination, notes, status
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, 'in_use')`;
-            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null];
+                given_date, given_time, destination, notes, gate, status
+            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, $8, 'in_use')`;
+            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null, gate];
         }
 
         await pool.query(insertQuery, queryParams);

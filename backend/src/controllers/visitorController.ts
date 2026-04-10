@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
+import { getGateFromRequest } from '../utils/gate';
 
 const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
     if (value === null || value === undefined) return null;
@@ -36,6 +37,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.company_name,
                 vr.visiting_person,
                 vr.person_count,
+                vr.children_count,
+                vr.gate,
                 vr.phone,
                 vr.notes,
                 vr.subcontractor_worker,
@@ -67,6 +70,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             company_name: decodeStoredHtmlEntities(row.company_name),
             visiting_person: decodeStoredHtmlEntities(row.visiting_person),
             person_count: row.person_count,
+            children_count: row.children_count ?? 0,
+            gate: row.gate,
             phone: row.phone,
             notes: decodeStoredHtmlEntities(row.notes),
             subcontractor_worker: row.subcontractor_worker,
@@ -96,9 +101,10 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station, entry_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, entry_time } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
+        const gate = getGateFromRequest(req);
 
         // GÜVENLİK: Input sanitization
         const sanitizedFullName = sanitizePlainText(full_name, 100);
@@ -155,6 +161,15 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             personCountValue = Number(person_count);
         }
 
+        let childrenCountValue = 0;
+        if (children_count !== undefined && children_count !== null && children_count !== '') {
+            if (isNaN(children_count) || Number(children_count) < 0) {
+                res.status(400).json({ success: false, message: 'Çocuk sayısı geçerli bir sayı olmalı ve en az 0 olmalıdır' });
+                return;
+            }
+            childrenCountValue = Number(children_count);
+        }
+
         const id = uuidv4();
 
         // Kullanıcı doğrulama
@@ -170,13 +185,13 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         const insertQuery = `
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
-                person_count, phone, notes, subcontractor_worker, for_electric_station,
+                person_count, children_count, gate, phone, notes, subcontractor_worker, for_electric_station,
                 entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
                 CURRENT_DATE, 
-                COALESCE($12::time, CURRENT_TIME), 
-                'inside', $13
+                COALESCE($14::time, CURRENT_TIME), 
+                'inside', $15
             )
             RETURNING entry_date, entry_time
         `;
@@ -189,6 +204,8 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             sanitizedCompanyName,
             sanitizedVisitingPerson,
             personCountToInsert,
+            childrenCountValue,
+            gate,
             normalizedPhone,
             sanitizedNotes,
             Boolean(subcontractor_worker),
@@ -256,7 +273,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, phone, notes, subcontractor_worker, for_electric_station, entry_time, exit_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, entry_time, exit_time } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -281,6 +298,16 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
+        if (person_count !== undefined && person_count !== null && person_count !== '' && (isNaN(person_count) || Number(person_count) < 1)) {
+            res.status(400).json({ success: false, message: 'Kişi sayısı geçerli bir sayı olmalı ve en az 1 olmalıdır' });
+            return;
+        }
+
+        if (children_count !== undefined && children_count !== null && children_count !== '' && (isNaN(children_count) || Number(children_count) < 0)) {
+            res.status(400).json({ success: false, message: 'Çocuk sayısı geçerli bir sayı olmalı ve en az 0 olmalıdır' });
+            return;
+        }
+
         // Opsiyonel alanlar için sadece girilmiş olanları güncelle
         const updates: string[] = [];
         const params: any[] = [];
@@ -298,6 +325,12 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             const pc = (person_count === '' || person_count === null) ? 1 : Number(person_count);
             params.push(pc);
             updates.push(`person_count = $${idx++}`);
+        }
+        if (children_count !== undefined) {
+            // DB requires non-null children_count — default to 0 when empty/null
+            const cc = (children_count === '' || children_count === null) ? 0 : Number(children_count);
+            params.push(cc);
+            updates.push(`children_count = $${idx++}`);
         }
         if (subcontractor_worker !== undefined) { updates.push(`subcontractor_worker = $${idx++}`); params.push(Boolean(subcontractor_worker)); }
         if (for_electric_station !== undefined) { updates.push(`for_electric_station = $${idx++}`); params.push(Boolean(for_electric_station)); }

@@ -15,6 +15,7 @@ interface FireAlarmRecord {
     id: string;
     alarm_number: string | null;
     location: string;
+    gate?: string | null;
     alarm_time: string;
     resolved: boolean;
     resolution_time: string | null;
@@ -37,6 +38,7 @@ export default function AdminFireAlarmRecords() {
     const [recordedBy, setRecordedBy] = useState('');
     const [resolvedBy, setResolvedBy] = useState('');
     const [status, setStatus] = useState('all');
+    const [gateFilter, setGateFilter] = useState('all');
     const [falseAlarmFilter, setFalseAlarmFilter] = useState('all');
     const [alarmDateRange, setAlarmDateRange] = useState<[Dayjs, Dayjs] | null>(null);
     const [resolutionDateRange, setResolutionDateRange] = useState<[Dayjs, Dayjs] | null>(null);
@@ -114,6 +116,7 @@ export default function AdminFireAlarmRecords() {
             if (resolvedBy && !record.resolved_by_name?.toLowerCase().includes(resolvedBy.toLowerCase())) return false;
             if (status === 'active' && record.resolved) return false;
             if (status === 'resolved' && !record.resolved) return false;
+            if (gateFilter !== 'all' && (record.gate || '') !== gateFilter) return false;
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
@@ -131,7 +134,7 @@ export default function AdminFireAlarmRecords() {
 
             return true;
         });
-    }, [records, alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
+    }, [records, alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
 
     // Check if any filter is active
     const hasActiveFilters = useMemo(() => {
@@ -141,11 +144,12 @@ export default function AdminFireAlarmRecords() {
             recordedBy ||
             resolvedBy ||
             status !== 'all' ||
+            gateFilter !== 'all' ||
             falseAlarmFilter !== 'all' ||
             alarmDateStart ||
             resolutionDateStart
         );
-    }, [alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
+    }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
 
     const sortedFilteredRecords = useMemo(() => {
         return [...filteredRecords].sort((a, b) =>
@@ -221,6 +225,7 @@ export default function AdminFireAlarmRecords() {
         setRecordedBy('');
         setResolvedBy('');
         setStatus('all');
+        setGateFilter('all');
         setFalseAlarmFilter('all');
         setAlarmDateRange(null);
         setResolutionDateRange(null);
@@ -359,6 +364,19 @@ export default function AdminFireAlarmRecords() {
                         </div>
 
                         <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kapı</label>
+                            <select
+                                value={gateFilter}
+                                onChange={(e) => setGateFilter(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
+                            </select>
+                        </div>
+
+                        <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Yanlış Alarm</label>
                             <select
                                 value={falseAlarmFilter}
@@ -419,11 +437,23 @@ export default function AdminFireAlarmRecords() {
                     ) : hasActiveFilters ? (
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                <table className="mobile-stack-table w-full 2xl:w-[1340px] 2xl:min-w-[1340px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                    <colgroup>
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '180px' }} />
+                                        <col style={{ width: '110px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '160px' }} />
+                                        <col style={{ width: '220px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '140px' }} />
+                                    </colgroup>
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
@@ -443,6 +473,9 @@ export default function AdminFireAlarmRecords() {
                                                     {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                     <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                                 </td>
@@ -457,7 +490,7 @@ export default function AdminFireAlarmRecords() {
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-900 max-w-xs truncate" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-normal break-words" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     {record.resolved ? (
@@ -495,11 +528,23 @@ export default function AdminFireAlarmRecords() {
                                             </div>
 
                                             <div className="overflow-x-auto">
-                                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                                <table className="mobile-stack-table w-full 2xl:w-[1340px] 2xl:min-w-[1340px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                                    <colgroup>
+                                                        <col style={{ width: '110px' }} />
+                                                        <col style={{ width: '180px' }} />
+                                                        <col style={{ width: '110px' }} />
+                                                        <col style={{ width: '160px' }} />
+                                                        <col style={{ width: '160px' }} />
+                                                        <col style={{ width: '220px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                    </colgroup>
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
@@ -519,6 +564,9 @@ export default function AdminFireAlarmRecords() {
                                                                     {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                                     <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                                                 </td>
@@ -533,7 +581,7 @@ export default function AdminFireAlarmRecords() {
                                                                     )}
                                                                 </td>
                                                                 <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-900 max-w-xs truncate" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
+                                                                    <div className="text-sm text-gray-900 whitespace-normal break-words" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.resolved ? (

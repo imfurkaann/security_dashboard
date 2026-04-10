@@ -42,6 +42,7 @@ export interface VehicleUsage {
     given_by: string | null;  // Aracı teslim eden personel
     returned_by: string | null;  // Aracı geri alan personel
     destination: string;
+    gate?: string | null;
     given_date: string;
     given_time: string;
     return_date: string | null;
@@ -60,6 +61,8 @@ export interface VisitorRecord {
     company_name: string | null;
     visiting_person: string | null;
     person_count: number | null;
+    children_count: number;
+    gate?: string | null;
     phone: string | null;
     notes: string | null;
     subcontractor_worker?: boolean;
@@ -73,6 +76,32 @@ export interface VisitorRecord {
     exit_by: string | null;  // Çıkışı kaydeden personel
     deleted_at?: string | null;
     created_at: string | null;
+}
+
+export interface GuestRegistryRecord {
+    id: string;
+    excel_file_name: string;
+    sheet_name: string;
+    row_number: number;
+    row_data: Record<string, unknown>;
+    voucher: string | null;
+    acenta: string | null;
+    hitap: string | null;
+    adi: string | null;
+    soyadi: string | null;
+    oda: string | null;
+    yetiskin: string | null;
+    cocuk: string | null;
+    free: string | null;
+    konaklama: string | null;
+    giris_tarihi: string | null;
+    geceleme: string | null;
+    cikis_tarihi: string | null;
+    giris_saati: string | null;
+    istenen: string | null;
+    verilen: string | null;
+    ulke: string | null;
+    created_at: string;
 }
 
 // Manager Types
@@ -90,6 +119,7 @@ export interface ManagerRecord {
     manager_id?: string | null;
     manager: string | null;
     manager_title: string | null;
+    gate?: string | null;
     entry_date: string | null;
     entry_time: string | null;
     exit_date?: string | null;
@@ -170,6 +200,7 @@ export interface VisitorFormData {
     company_name: string;
     visiting_person: string;
     person_count: string | number;
+    children_count: string | number;
     phone: string;
     notes: string;
     subcontractor_worker: boolean;
