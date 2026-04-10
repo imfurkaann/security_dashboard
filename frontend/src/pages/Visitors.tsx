@@ -644,16 +644,16 @@ export default function Visitors() {
                                     <div className="flex items-center gap-6 md:col-span-2 pt-2">
                                         <label className="inline-flex items-center">
                                             <input type="checkbox" checked={!!formData.subcontractor_worker} onChange={(e) => setFormData({ ...formData, subcontractor_worker: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Taşeron işçi</span>
+                                            <span className="text-sm">Taşeron İşçi</span>
                                         </label>
                                         <label className="inline-flex items-center">
                                             <input type="checkbox" checked={!!formData.for_electric_station} onChange={(e) => setFormData({ ...formData, for_electric_station: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Elektrik istasyonu için</span>
+                                            <span className="text-sm">Şarj İstasyonu</span>
                                         </label>
                                         {!isEditing && (
                                             <label className="inline-flex items-center">
                                                 <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
-                                                <span className="text-sm text-green-700 font-medium">📱 WhatsApp Bildirimi Gönder</span>
+                                                <span className="text-sm text-green-700 font-medium">WhatsApp Bildirimi Gönder</span>
                                             </label>
                                         )}
                                     </div>

@@ -16,14 +16,14 @@ function LogoutOverlay() {
 }
 
 const menuItems = [
-    { title: 'Dashboard', path: '/dashboard' },
-    { title: 'Araç Yönetimi', path: '/vehicles' },
-    { title: 'Ziyaretçi Yönetimi', path: '/visitors' },
-    { title: 'Müdür Yönetimi', path: '/managers' },
-    { title: 'Misafir Kayıtları', path: '/misafir-kayitlari' },
-    { title: 'Yangın Alarmları', path: '/fire-alarms' },
-    { title: 'Olaylar', path: '/incidents' },
-    { title: 'SGK', path: '/sgk' },
+    { title: 'Anasayfa', path: '/dashboard' },
+    { title: 'Araç Kayıtları Yönetimi', path: '/vehicles' },
+    { title: 'Ziyaretçi Kayıtları Yönetimi', path: '/visitors' },
+    { title: 'Müdür Kayıtları Yönetimi', path: '/managers' },
+    { title: 'Misafir Kayıtları Yönetimi', path: '/misafir-kayitlari' },
+    { title: 'Yangın Alarmları Yönetimi', path: '/fire-alarms' },
+    { title: 'Vardiya Rapor Yönetimi', path: '/incidents' },
+    { title: 'SGK Belge Yönetimi', path: '/sgk' },
 ];
 
 export default function UserSidebarLayout() {
@@ -37,7 +37,7 @@ export default function UserSidebarLayout() {
 
     const sidebarWidth = useMemo(() => {
         const longestLabel = Math.max(
-            'Güvenlik Paneli'.length,
+            'Güvenlik Kayıt Paneli'.length,
             ...menuItems.map((item) => item.title.length)
         );
         // Adds space for paddings and ensures a practical minimum/maximum width.
@@ -83,7 +83,7 @@ export default function UserSidebarLayout() {
             <aside className={`fixed left-0 top-0 h-screen w-[var(--sidebar-width)] bg-slate-900 border-r border-slate-700 shadow-md p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
                 <div className="mb-4 pb-3 border-b border-slate-700">
-                    <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Güvenlik Paneli</h1>
+                    <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Güvenlik Kayıt Paneli</h1>
                 </div>
 
                 <nav className="space-y-1 flex-1 overflow-y-auto">

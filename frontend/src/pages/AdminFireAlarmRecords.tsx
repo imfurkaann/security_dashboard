@@ -1,13 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
-import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { API_URL } from '../constants';
-import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -30,6 +28,8 @@ interface FireAlarmRecord {
 export default function AdminFireAlarmRecords() {
     const [records, setRecords] = useState<FireAlarmRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const latestFetchId = useRef(0);
     const navigate = useNavigate();
 
     // Filter states
@@ -40,72 +40,55 @@ export default function AdminFireAlarmRecords() {
     const [status, setStatus] = useState('all');
     const [gateFilter, setGateFilter] = useState('all');
     const [falseAlarmFilter, setFalseAlarmFilter] = useState('all');
-    const [alarmDateRange, setAlarmDateRange] = useState<[Dayjs, Dayjs] | null>(null);
-    const [resolutionDateRange, setResolutionDateRange] = useState<[Dayjs, Dayjs] | null>(null);
     const [alarmDateStart, setAlarmDateStart] = useState('');
     const [alarmDateEnd, setAlarmDateEnd] = useState('');
     const [resolutionDateStart, setResolutionDateStart] = useState('');
     const [resolutionDateEnd, setResolutionDateEnd] = useState('');
 
-    // Fetch all records
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const token = localStorage.getItem('adminToken');
-                const res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setRecords(res.data?.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+    const fetchData = useCallback(async () => {
+        const fetchId = ++latestFetchId.current;
+        try {
+            const token = localStorage.getItem('adminToken');
+            const res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (fetchId !== latestFetchId.current) return;
+            setRecords(res.data?.data || []);
+        } catch (error) {
+            if (fetchId !== latestFetchId.current) return;
+            console.error('Veriler yuklenemedi:', error);
+        } finally {
+            if (fetchId !== latestFetchId.current) return;
+            setLoading(false);
+        }
     }, []);
 
-    // Date handlers for alarm date
-    const handleAlarmDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (!dates || (!dates[0] && !dates[1])) {
-            // Takvim temizlendi
-            setAlarmDateRange(null);
-            setAlarmDateStart('');
-            setAlarmDateEnd('');
-        } else if (dates[0] && dates[1]) {
-            // İki tarih de seçildi
-            setAlarmDateRange([dates[0], dates[1]]);
-            setAlarmDateStart(dates[0].format('YYYY-MM-DD'));
-            setAlarmDateEnd(dates[1].format('YYYY-MM-DD'));
-        } else if (dates[0] && !dates[1]) {
-            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-            const singleDate = dates[0].format('YYYY-MM-DD');
-            setAlarmDateRange([dates[0], dates[0]]);
-            setAlarmDateStart(singleDate);
-            setAlarmDateEnd(singleDate);
-        }
-    };
+    // Fetch all records + periodic refresh to keep list in sync
+    useEffect(() => {
+        fetchData();
+        const refreshInterval = window.setInterval(fetchData, 15000);
+        return () => window.clearInterval(refreshInterval);
+    }, [fetchData]);
 
-    // Date handlers for resolution date
-    const handleResolutionDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-        if (!dates || (!dates[0] && !dates[1])) {
-            // Takvim temizlendi
-            setResolutionDateRange(null);
-            setResolutionDateStart('');
-            setResolutionDateEnd('');
-        } else if (dates[0] && dates[1]) {
-            // İki tarih de seçildi
-            setResolutionDateRange([dates[0], dates[1]]);
-            setResolutionDateStart(dates[0].format('YYYY-MM-DD'));
-            setResolutionDateEnd(dates[1].format('YYYY-MM-DD'));
-        } else if (dates[0] && !dates[1]) {
-            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-            const singleDate = dates[0].format('YYYY-MM-DD');
-            setResolutionDateRange([dates[0], dates[0]]);
-            setResolutionDateStart(singleDate);
-            setResolutionDateEnd(singleDate);
-        }
-    };
+    useEffect(() => {
+        const handleFocus = () => {
+            fetchData();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData();
+            }
+        };
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [fetchData]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -120,13 +103,13 @@ export default function AdminFireAlarmRecords() {
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
-            // Alarm date filtering - dayjs ile yerel tarihe çevir
+            // Alarm date filtering
             if (alarmDateStart && alarmDateEnd) {
                 const alarmDate = dayjs(record.alarm_time).format('YYYY-MM-DD');
                 if (alarmDate < alarmDateStart || alarmDate > alarmDateEnd) return false;
             }
 
-            // Resolution date filtering - dayjs ile yerel tarihe çevir
+            // Resolution date filtering
             if (resolutionDateStart && resolutionDateEnd && record.resolution_time) {
                 const resolutionDate = dayjs(record.resolution_time).format('YYYY-MM-DD');
                 if (resolutionDate < resolutionDateStart || resolutionDate > resolutionDateEnd) return false;
@@ -136,87 +119,28 @@ export default function AdminFireAlarmRecords() {
         });
     }, [records, alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
 
-    // Check if any filter is active
-    const hasActiveFilters = useMemo(() => {
-        return !!(
-            alarmNumber ||
-            location ||
-            recordedBy ||
-            resolvedBy ||
-            status !== 'all' ||
-            gateFilter !== 'all' ||
-            falseAlarmFilter !== 'all' ||
-            alarmDateStart ||
-            resolutionDateStart
-        );
-    }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
-
-    const sortedFilteredRecords = useMemo(() => {
-        return [...filteredRecords].sort((a, b) =>
-            dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf()
-        );
-    }, [filteredRecords, hasActiveFilters]);
-
-    // Get month name in Turkish
-    function getMonthName(monthKey: string) {
-        return dayjs(monthKey + '-01').format('MMMM YYYY');
-    }
-
-    // Get day name in Turkish
-    function getDayName(dayKey: string) {
-        return dayjs(dayKey).format('DD MMMM YYYY dddd');
-    }
-
-    const groupedRecords = useMemo(() => {
-        if (hasActiveFilters) return [] as Array<{
-            monthKey: string;
-            monthLabel: string;
-            totalRecords: number;
-            dayGroups: Array<{
-                dayKey: string;
-                dayLabel: string;
-                records: FireAlarmRecord[];
-            }>;
-        }>;
-
-        const monthMap = new Map<string, Map<string, FireAlarmRecord[]>>();
+    // Group by day for both default and filtered views (newest day first)
+    const groupedByDay = useMemo(() => {
+        const dayGroups = new Map<string, FireAlarmRecord[]>();
 
         filteredRecords.forEach((record) => {
-            const date = dayjs(record.alarm_time);
-            const monthKey = date.format('YYYY-MM');
-            const dayKey = date.format('YYYY-MM-DD');
-
-            if (!monthMap.has(monthKey)) {
-                monthMap.set(monthKey, new Map());
+            const dayKey = dayjs(record.alarm_time).format('YYYY-MM-DD');
+            if (!dayGroups.has(dayKey)) {
+                dayGroups.set(dayKey, []);
             }
-
-            const dayMap = monthMap.get(monthKey)!;
-            if (!dayMap.has(dayKey)) {
-                dayMap.set(dayKey, []);
-            }
-
-            dayMap.get(dayKey)!.push(record);
+            dayGroups.get(dayKey)!.push(record);
         });
 
-        return Array.from(monthMap.entries())
-            .sort(([a], [b]) => b.localeCompare(a))
-            .map(([monthKey, dayMap]) => {
-                const dayGroups = Array.from(dayMap.entries())
-                    .sort(([a], [b]) => b.localeCompare(a))
-                    .map(([dayKey, records]) => ({
-                        dayKey,
-                        dayLabel: getDayName(dayKey),
-                        records: records.sort((a, b) => dayjs(b.alarm_time).valueOf() - dayjs(a.alarm_time).valueOf())
-                    }));
-
-                return {
-                    monthKey,
-                    monthLabel: getMonthName(monthKey),
-                    totalRecords: dayGroups.reduce((sum, group) => sum + group.records.length, 0),
-                    dayGroups
-                };
-            });
-    }, [filteredRecords, hasActiveFilters]);
+        return Array.from(dayGroups.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([dayKey, items]) => ({
+                dayKey,
+                dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
+                records: [...items].sort((a, b) => {
+                    return dayjs(a.alarm_time).valueOf() - dayjs(b.alarm_time).valueOf();
+                })
+            }));
+    }, [filteredRecords]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -227,8 +151,6 @@ export default function AdminFireAlarmRecords() {
         setStatus('all');
         setGateFilter('all');
         setFalseAlarmFilter('all');
-        setAlarmDateRange(null);
-        setResolutionDateRange(null);
         setAlarmDateStart('');
         setAlarmDateEnd('');
         setResolutionDateStart('');
@@ -236,7 +158,7 @@ export default function AdminFireAlarmRecords() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+        if (!confirm('Bu kaydi silmek istediginize emin misiniz?')) return;
 
         try {
             const token = localStorage.getItem('adminToken');
@@ -245,8 +167,8 @@ export default function AdminFireAlarmRecords() {
             });
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
         } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
+            console.error('Kayit silinemedi:', error);
+            alert('Kayit silinirken bir hata olustu');
         }
     };
 
@@ -258,357 +180,318 @@ export default function AdminFireAlarmRecords() {
             });
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
         } catch (error) {
-            console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
+            console.error('Kayit geri alinamadi:', error);
+            alert('Kayit geri alinirken bir hata olustu');
         }
     };
 
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
+                title="Tamamini gormek icin tiklayin"
+            >
+                {text}
+            </button>
+        );
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                    <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                        <button
-                            onClick={() => navigate('/admin/dashboard')}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                            </svg>
-                        </button>
-                        <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
-                            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button
+                                onClick={() => navigate('/admin/dashboard')}
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Yangın Alarm Kayıtları</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-1">Tüm alarm kayıtlarını filtreleyin ve inceleyin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Yangin Alarm Kayitlari</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Tum alarm kayitlarini filtreleyin ve inceleyin</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
                 {/* Filters */}
-                <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-                        <h2 className="text-xl font-semibold text-gray-900">Filtreler</h2>
-                        {hasActiveFilters && (
-                            <button
-                                onClick={clearFilters}
-                                className="text-sm text-red-600 hover:text-red-800 font-medium"
-                            >
-                                Filtreleri Temizle
-                            </button>
-                        )}
+                <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
+                        <button
+                            onClick={clearFilters}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            Temizle
+                        </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Alarm Numarası</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Alarm Numarasi</label>
                             <input
                                 type="text"
                                 value={alarmNumber}
                                 onChange={(e) => setAlarmNumber(e.target.value)}
-                                placeholder="Alarm numarası ara..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                placeholder="Alarm numarasi ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Konum</label>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Konum</label>
                             <input
                                 type="text"
                                 value={location}
                                 onChange={(e) => setLocation(e.target.value)}
                                 placeholder="Konum ara..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Kaydeden</label>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Kaydeden</label>
                             <input
                                 type="text"
                                 value={recordedBy}
                                 onChange={(e) => setRecordedBy(e.target.value)}
                                 placeholder="Kaydeden ara..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Çözümleyen</label>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Cozumleyen</label>
                             <input
                                 type="text"
                                 value={resolvedBy}
                                 onChange={(e) => setResolvedBy(e.target.value)}
-                                placeholder="Çözümleyen ara..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                placeholder="Cozumleyen ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Durum</label>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Durum</label>
                             <select
                                 value={status}
                                 onChange={(e) => setStatus(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
-                                <option value="all">Tümü</option>
+                                <option value="all">Tumu</option>
                                 <option value="active">Aktif</option>
-                                <option value="resolved">Çözüldü</option>
+                                <option value="resolved">Cozuldu</option>
                             </select>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Kapı</label>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Kapi</label>
                             <select
                                 value={gateFilter}
                                 onChange={(e) => setGateFilter(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
+                                <option value="all">Tumu</option>
+                                <option value="Ana Kapi">Ana Kapi</option>
+                                <option value="Sahil Kapi">Sahil Kapi</option>
                             </select>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Yanlış Alarm</label>
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Yanlis Alarm</label>
                             <select
                                 value={falseAlarmFilter}
                                 onChange={(e) => setFalseAlarmFilter(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
-                                <option value="all">Tümü</option>
-                                <option value="true">Yanlış Alarm</option>
-                                <option value="false">Gerçek Alarm</option>
+                                <option value="all">Tumu</option>
+                                <option value="true">Yanlis Alarm</option>
+                                <option value="false">Gercek Alarm</option>
                             </select>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Alarm Tarihi</label>
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Alarm Tarihi</label>
                             <RangePicker
-                                value={alarmDateRange}
-                                onChange={handleAlarmDateChange}
+                                value={[
+                                    alarmDateStart ? dayjs(alarmDateStart) : null,
+                                    alarmDateEnd ? dayjs(alarmDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setAlarmDateStart('');
+                                        setAlarmDateEnd('');
+                                    } else if (dates[0] && dates[1]) {
+                                        setAlarmDateStart(dates[0].format('YYYY-MM-DD'));
+                                        setAlarmDateEnd(dates[1].format('YYYY-MM-DD'));
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setAlarmDateStart(singleDate);
+                                        setAlarmDateEnd(singleDate);
+                                    }
+                                }}
                                 allowEmpty={[false, true]}
                                 format="DD/MM/YYYY"
-                                placeholder={['Başlangıç', 'Bitiş']}
+                                placeholder={['Baslangic', 'Bitis']}
                                 className="w-full"
+                                size="small"
                             />
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Çözüm Tarihi</label>
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Cozum Tarihi</label>
                             <RangePicker
-                                value={resolutionDateRange}
-                                onChange={handleResolutionDateChange}
+                                value={[
+                                    resolutionDateStart ? dayjs(resolutionDateStart) : null,
+                                    resolutionDateEnd ? dayjs(resolutionDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setResolutionDateStart('');
+                                        setResolutionDateEnd('');
+                                    } else if (dates[0] && dates[1]) {
+                                        setResolutionDateStart(dates[0].format('YYYY-MM-DD'));
+                                        setResolutionDateEnd(dates[1].format('YYYY-MM-DD'));
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setResolutionDateStart(singleDate);
+                                        setResolutionDateEnd(singleDate);
+                                    }
+                                }}
                                 allowEmpty={[false, true]}
                                 format="DD/MM/YYYY"
-                                placeholder={['Başlangıç', 'Bitiş']}
+                                placeholder={['Baslangic', 'Bitis']}
                                 className="w-full"
+                                size="small"
                             />
                         </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between">
-                        <p className="text-sm text-gray-600">
-                            Toplam <span className="font-semibold text-gray-900">{filteredRecords.length}</span> kayıt bulundu
-                        </p>
                     </div>
                 </div>
 
                 {/* Records */}
-                <div className="bg-white rounded-lg shadow-md border border-gray-200">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                         </div>
                     ) : filteredRecords.length === 0 ? (
                         <div className="text-center py-12">
                             <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <p className="text-gray-500 text-lg">Kayıt bulunamadı</p>
-                        </div>
-                    ) : hasActiveFilters ? (
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                <table className="mobile-stack-table w-full 2xl:w-[1340px] 2xl:min-w-[1340px] table-auto 2xl:table-fixed divide-y divide-gray-200">
-                                    <colgroup>
-                                        <col style={{ width: '110px' }} />
-                                        <col style={{ width: '180px' }} />
-                                        <col style={{ width: '110px' }} />
-                                        <col style={{ width: '160px' }} />
-                                        <col style={{ width: '160px' }} />
-                                        <col style={{ width: '220px' }} />
-                                        <col style={{ width: '120px' }} />
-                                        <col style={{ width: '140px' }} />
-                                        <col style={{ width: '140px' }} />
-                                    </colgroup>
-                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {sortedFilteredRecords.map(record => (
-                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm font-bold text-gray-900">{record.location}</div>
-                                                    {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                    <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.resolution_time ? (
-                                                        <>
-                                                            <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                            <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-sm text-gray-400">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-900 whitespace-normal break-words" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.resolved ? (
-                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <p className="text-gray-500">Filtrelere uygun kayit bulunamadi</p>
                         </div>
                     ) : (
-                        <div className="divide-y divide-gray-200">
-                            {groupedRecords.map((monthGroup) => (
-                                <div key={monthGroup.monthKey} className="mb-8 last:mb-0">
-                                    <div className="sticky top-0 bg-gradient-to-r from-red-600 to-red-500 px-6 py-3 z-10 shadow-md">
-                                        <h2 className="text-lg font-bold text-white">{monthGroup.monthLabel}</h2>
-                                        <p className="text-sm text-red-100">{monthGroup.totalRecords} kayıt</p>
+                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                            {groupedByDay.map((dayGroup) => (
+                                <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
+                                    <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
+                                        <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    {monthGroup.dayGroups.map((dayGroup) => (
-                                        <div key={dayGroup.dayKey} className="border-b border-gray-200 last:border-b-0">
-                                            <div className="sticky top-14 bg-gray-100 px-6 py-2 border-l-4 border-red-500 z-10 shadow-sm">
-                                                <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
-                                                <p className="text-xs text-gray-600">{dayGroup.records.length} kayıt</p>
-                                            </div>
-
-                                            <div className="overflow-x-auto">
-                                                <table className="mobile-stack-table w-full 2xl:w-[1340px] 2xl:min-w-[1340px] table-auto 2xl:table-fixed divide-y divide-gray-200">
-                                                    <colgroup>
-                                                        <col style={{ width: '110px' }} />
-                                                        <col style={{ width: '180px' }} />
-                                                        <col style={{ width: '110px' }} />
-                                                        <col style={{ width: '160px' }} />
-                                                        <col style={{ width: '160px' }} />
-                                                        <col style={{ width: '220px' }} />
-                                                        <col style={{ width: '120px' }} />
-                                                        <col style={{ width: '140px' }} />
-                                                        <col style={{ width: '140px' }} />
-                                                    </colgroup>
-                                                    <thead className="bg-gray-50 sticky top-14 z-10">
-                                                        <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="bg-white divide-y divide-gray-200">
-                                                        {dayGroup.records.map(record => (
-                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="text-sm font-bold text-gray-900">{record.location}</div>
-                                                                    {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                                    <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.resolution_time ? (
-                                                                        <>
-                                                                            <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                                            <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
-                                                                        </>
-                                                                    ) : (
-                                                                        <span className="text-sm text-gray-400">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-900 whitespace-normal break-words" title={record.resolution_notes || '-'}>{record.resolution_notes || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.resolved ? (
-                                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
-                                                                    ) : (
-                                                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    ))}
+                                    <table className="w-full min-w-[1550px] table-auto divide-y divide-gray-200">
+                                        <thead className="bg-gray-50 sticky top-10 z-10">
+                                            <tr>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapi</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamani</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozum Zamani</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozumleyen</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {dayGroup.records.map((record) => (
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
+                                                        {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlis Alarm</span>}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                        <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {record.resolution_time ? (
+                                                            <>
+                                                                <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                                <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-sm text-gray-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {renderPreviewText(record.resolution_notes, 'Notlar')}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {record.resolved ? (
+                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-green-100 text-green-800">Cozuldu</span>
+                                                        ) : (
+                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
             </main>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

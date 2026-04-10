@@ -222,31 +222,31 @@ export default function AdminExportData() {
     const noneSelected = Object.values(selectedReports).every(v => !v);
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/dashboard')}
-                                className="text-gray-600 hover:text-gray-800 transition shrink-0"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight break-words">Veri Dışa Aktarma</h1>
-                                <p className="text-sm text-gray-500">Güvenlik kayıtlarını Excel formatında indirin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Veri Dışa Aktarma</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Güvenlik kayıtlarını Excel formatında indirin</p>
                             </div>
+                        </div>
                     </div>
                 </div>
             </header>
 
-            {/* Content */}
-            <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
                 {/* Tarih Seçimi */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
                     <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                         <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -319,7 +319,7 @@ export default function AdminExportData() {
                 </div>
 
                 {/* Rapor Seçimi */}
-                <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                         <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                             <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -370,7 +370,7 @@ export default function AdminExportData() {
 
                 {/* Önizleme Sonuçları */}
                 {preview && (
-                    <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                    <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -405,7 +405,7 @@ export default function AdminExportData() {
                 )}
 
                 {/* İndirme Butonu */}
-                <div className="bg-white rounded-lg shadow-lg p-6">
+                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
                     {/* Hata Mesajı */}
                     {error && (
                         <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -469,32 +469,6 @@ export default function AdminExportData() {
                     </p>
                 </div>
 
-                {/* Bilgi Kutusu */}
-                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h3 className="font-medium text-blue-800 mb-2 flex items-center gap-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Klasör Yapısı
-                    </h3>
-                    <pre className="text-sm text-blue-700 bg-blue-100 rounded p-3 overflow-x-auto">
-                        {`📁 Guvenlik_Kayitlari_01-01-2025_15-01-2025.zip
-├── 📁 2025/
-│   └── 📁 01-Ocak/
-│       ├── 📁 01/
-│       │   ├── 📄 Arac_Kayitlari_01-01-2025.xlsx
-│       │   ├── 📄 Mudur_Kayitlari_01-01-2025.xlsx
-│       │   ├── 📄 Ziyaretci_Kayitlari_01-01-2025.xlsx
-│       │   ├── 📄 Yangin_Alarm_Kayitlari_01-01-2025.xlsx
-│       │   └── 📁 Vardiya_Raporlari/
-│       │       ├── 📄 08-16_01-01-2025.xlsx
-│       │       ├── 📄 16-24_01-01-2025.xlsx
-│       │       └── 📄 00-08_01-01-2025.xlsx
-│       └── 📁 02/
-│           └── ...
-└── 📄 OZET_RAPOR.xlsx`}
-                    </pre>
-                </div>
             </main>
         </div>
     );

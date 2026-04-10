@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../constants';
@@ -151,34 +151,44 @@ export default function AdminManageManagers() {
         return matchesFirstName && matchesLastName && matchesTitle;
     });
 
+    const sortedManagers = useMemo(() => {
+        return [...filteredManagers].sort((a, b) => {
+            const firstCompare = a.first_name.localeCompare(b.first_name, 'tr', { sensitivity: 'base' });
+            if (firstCompare !== 0) return firstCompare;
+            return a.last_name.localeCompare(b.last_name, 'tr', { sensitivity: 'base' });
+        });
+    }, [filteredManagers]);
+
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                <div className="text-xl">Yükleniyor...</div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-600">Yükleniyor...</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/dashboard')}
-                                className="text-gray-600 hover:text-gray-800 transition"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-2xl font-bold text-gray-900">Müdür Yönetimi</h1>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Müdür Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Müdürleri ekleyin, düzenleyin veya silin</p>
+                            </div>
                         </div>
                         <button
                             onClick={openAddModal}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -189,131 +199,131 @@ export default function AdminManageManagers() {
                 </div>
             </header>
 
-            {/* Content */}
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {/* Filters */}
-                <div className="bg-white rounded-lg shadow mb-6 p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
+                        <button
+                            onClick={() => {
+                                setFirstNameFilter('');
+                                setLastNameFilter('');
+                                setTitleFilter('');
+                            }}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            Temizle
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                İsim
-                            </label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">İsim</label>
                             <input
                                 type="text"
                                 placeholder="İsim ile filtrele..."
                                 value={firstNameFilter}
                                 onChange={(e) => setFirstNameFilter(e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Soyisim
-                            </label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Soyisim</label>
                             <input
                                 type="text"
                                 placeholder="Soyisim ile filtrele..."
                                 value={lastNameFilter}
                                 onChange={(e) => setLastNameFilter(e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Ünvan
-                            </label>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Ünvan</label>
                             <input
                                 type="text"
                                 placeholder="Ünvan ile filtrele..."
                                 value={titleFilter}
                                 onChange={(e) => setTitleFilter(e.target.value)}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* Table */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900">
-                            Müdür Listesi ({filteredManagers.length} / {managers.length})
-                        </h2>
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Müdür Listesi</h2>
+                            <p className="text-sm text-gray-500 mt-1">Kayıtlar yukarıdan aşağıya sıralanır</p>
+                        </div>
+                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{sortedManagers.length} / {managers.length} kayıt</span>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Ad Soyad
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Ünvan
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Kayıt Tarihi
-                                    </th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        İşlemler
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredManagers.map((manager) => (
-                                    <tr key={manager.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">
-                                                {manager.first_name} {manager.last_name}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-600">{manager.title || '-'}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-600">
-                                                {new Date(manager.created_at).toLocaleDateString('tr-TR')}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex justify-end gap-2">
-                                                <ActionButton
-                                                    onClick={() => openEditModal(manager)}
-                                                    variant="primary"
-                                                    title="Düzenle"
-                                                >
-                                                    Düzenle
-                                                </ActionButton>
-                                                <ActionButton
-                                                    onClick={() => handleDelete(manager.id, `${manager.first_name} ${manager.last_name}`)}
-                                                    variant="danger"
-                                                    title="Sil"
-                                                >
-                                                    Sil
-                                                </ActionButton>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-
-                        {filteredManagers.length === 0 && (
-                            <div className="p-8 text-center text-gray-500">
+                    {sortedManagers.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p className="text-gray-500">
                                 {(firstNameFilter || lastNameFilter || titleFilter)
                                     ? 'Arama kriterlerine uygun müdür bulunamadı.'
                                     : 'Henüz kayıtlı müdür bulunmamaktadır.'}
-                            </div>
-                        )}
-                    </div>
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3 overflow-auto pr-1">
+                            {sortedManagers.map((manager) => {
+                                const fullName = `${manager.first_name} ${manager.last_name}`.trim();
+
+                                return (
+                                    <div key={manager.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 shadow-sm hover:shadow transition-shadow">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="h-11 w-11 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A9 9 0 1118.88 4.046a9 9 0 01-13.758 13.758zM15 11a3 3 0 11-6 0 3 3 0 016 0zm2 7a7 7 0 10-10 0h10z" />
+                                                    </svg>
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <h3 className="text-lg font-bold text-gray-900 break-words">{fullName}</h3>
+                                                    <p className="text-sm text-gray-600 break-words">{manager.title || '-'}</p>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        {new Date(manager.created_at).toLocaleDateString('tr-TR')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-row items-center gap-2 shrink-0">
+                                            <ActionButton
+                                                onClick={() => openEditModal(manager)}
+                                                variant="primary"
+                                                title="Düzenle"
+                                                className="shrink-0"
+                                            >
+                                                Düzenle
+                                            </ActionButton>
+                                            <ActionButton
+                                                onClick={() => handleDelete(manager.id, fullName)}
+                                                variant="danger"
+                                                title="Sil"
+                                                className="shrink-0"
+                                            >
+                                                Sil
+                                            </ActionButton>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </main>
 
             {/* Add/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-md w-full">
-                        <div className="px-6 py-4 border-b border-gray-200">
+                    <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+                        <div className="px-6 py-4 border-b border-gray-200 sticky top-0 bg-white">
                             <h2 className="text-xl font-semibold text-gray-900">
                                 {editingManager ? 'Müdür Düzenle' : 'Yeni Müdür Ekle'}
                             </h2>

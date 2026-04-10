@@ -41,11 +41,16 @@ export const createVehicleReturnMessage = (data: {
     vehiclePlate: string;
     managerName: string;
     returnTime: string;
+    destination?: string;
+    driveDuration?: string;
 }): string => {
+    const locationLine = data.destination ? `Konum: ${data.destination}\n` : '';
+    const durationLine = data.driveDuration ? `Sürüş Süresi: ${data.driveDuration}\n` : '';
+
     return `ARAÇ TESLİM ALMA BİLDİRİMİ
 Araç: ${data.vehiclePlate}
 Kişi: ${data.managerName}
-Saat: ${data.returnTime}
+${locationLine}${durationLine}Saat: ${data.returnTime}
 
 Teslim alınmıştır.`;
 };
@@ -59,6 +64,7 @@ export const createVisitorRecordMessage = (data: {
     visitingPerson?: string;
     entryDate: string;
     entryTime: string;
+    gate?: string;
     vehiclePlate?: string;
     personCount?: number;
     phone?: string;
@@ -87,6 +93,11 @@ export const createVisitorRecordMessage = (data: {
     // Araç Plakası
     if (data.vehiclePlate) {
         lines.push(`Araç Plakası: ${data.vehiclePlate}`);
+    }
+
+    // Kapı
+    if (data.gate) {
+        lines.push(`Kapı: ${data.gate}`);
     }
 
     // Kişi Sayısı

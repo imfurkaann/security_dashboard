@@ -8,7 +8,6 @@ import AdminSidebarLayout from './components/AdminSidebarLayout';
 import UserSidebarLayout from './components/UserSidebarLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import AdminDashboard from './pages/AdminDashboard';
 import Vehicles from './pages/Vehicles';
 import VehicleRecords from './pages/VehicleRecords';
 import AdminVehicleRecords from './pages/AdminVehicleRecords';
@@ -56,8 +55,8 @@ function App() {
                 <AdminSidebarLayout />
               </AdminProtectedRoute>
             }>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route index element={<Navigate to="vehicle-records" replace />} />
+              <Route path="dashboard" element={<Navigate to="/admin/vehicle-records" replace />} />
               <Route path="vehicle-records" element={<AdminVehicleRecords />} />
               <Route path="manage-vehicles" element={<AdminManageVehicles />} />
               <Route path="visitor-records" element={<AdminVisitorRecords />} />

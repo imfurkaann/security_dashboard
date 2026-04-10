@@ -2,12 +2,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
-import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
-import type { VehicleUsage, Vehicle } from '../types'; import { API_URL } from '../constants';
-import ActionButton from '../components/ActionButton';
+import type { VehicleUsage, Vehicle } from '../types';
+import { API_URL } from '../constants';
 const { RangePicker } = DatePicker;
 
 export default function AdminVehicleRecords() {
@@ -143,59 +142,29 @@ export default function AdminVehicleRecords() {
             filters.returnDateEnd !== '';
     }, [filters]);
 
-    // Group records by month and day (oldest month/day first, newest last) - only when no filters active
-    const groupedRecords = useMemo(() => {
-        const monthGroups: { [key: string]: { [key: string]: VehicleUsage[] } } = {};
+    // Group by day for both default and filtered views (newest day first)
+    const groupedByDay = useMemo(() => {
+        const dayGroups = new Map<string, VehicleUsage[]>();
 
-        filteredRecords.forEach(record => {
-            const date = dayjs(record.given_date);
-            const monthKey = date.format('YYYY-MM');
-            const dayKey = date.format('YYYY-MM-DD');
-
-            if (!monthGroups[monthKey]) {
-                monthGroups[monthKey] = {};
+        filteredRecords.forEach((record) => {
+            const dayKey = dayjs(record.given_date).format('YYYY-MM-DD');
+            if (!dayGroups.has(dayKey)) {
+                dayGroups.set(dayKey, []);
             }
-
-            if (!monthGroups[monthKey][dayKey]) {
-                monthGroups[monthKey][dayKey] = [];
-            }
-
-            monthGroups[monthKey][dayKey].push(record);
+            dayGroups.get(dayKey)!.push(record);
         });
 
-        // Sort months in descending order (newest first, oldest last)
-        const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
-
-        return sortedMonths.map(monthKey => {
-            // Sort days within month in descending order (newest first)
-            const sortedDays = Object.keys(monthGroups[monthKey]).sort((a, b) => b.localeCompare(a));
-
-            const dayGroups = sortedDays.map(dayKey => ({
+        return Array.from(dayGroups.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([dayKey, items]) => ({
                 dayKey,
                 dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
-                records: monthGroups[monthKey][dayKey].sort((a, b) =>
-                    // Sort records by time in ascending order (earliest first)
-                    a.given_time.localeCompare(b.given_time)
-                )
+                records: [...items].sort((a, b) => {
+                    const dateCompare = a.given_date.localeCompare(b.given_date);
+                    if (dateCompare !== 0) return dateCompare;
+                    return a.given_time.localeCompare(b.given_time);
+                })
             }));
-
-            return {
-                monthKey,
-                monthLabel: dayjs(monthKey + '-01').format('MMMM YYYY'),
-                dayGroups,
-                totalRecords: sortedDays.reduce((sum, dayKey) => sum + monthGroups[monthKey][dayKey].length, 0)
-            };
-        });
-    }, [filteredRecords]);
-
-    // Sorted records for filtered view (without grouping)
-    const sortedFilteredRecords = useMemo(() => {
-        return [...filteredRecords].sort((a, b) => {
-            // Sort by date first, then by time
-            const dateCompare = a.given_date.localeCompare(b.given_date);
-            if (dateCompare !== 0) return dateCompare;
-            return a.given_time.localeCompare(b.given_time);
-        });
     }, [filteredRecords]);
 
     // Clear all filters
@@ -264,26 +233,26 @@ export default function AdminVehicleRecords() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/dashboard')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Araç Kayıtları</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Araç Kayıtları</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 w-full lg:w-auto">
+                        <div className="w-full lg:w-auto flex justify-start lg:justify-end">
                             <button
                                 onClick={() => navigate('/admin/manage-vehicles')}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
@@ -291,20 +260,17 @@ export default function AdminVehicleRecords() {
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                                 </svg>
-                                Yeni Araç Ekle
+                                Araç Ekle / Sil
                             </button>
-                            <div className="text-sm text-gray-600 sm:text-right">
-                                Toplam: <span className="font-bold text-gray-900">{filteredRecords.length}</span> kayıt
-                            </div>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
                 {/* Filters Panel */}
-                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
+                <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                    <div className="flex justify-between items-center mb-3">
                         <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
                         <button
                             onClick={clearFilters}
@@ -314,211 +280,171 @@ export default function AdminVehicleRecords() {
                         </button>
                     </div>
 
-                    <div className="space-y-3">
-                        {/* First Row - Basic Filters */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                            {/* Vehicle Plate Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Araç Plakası
-                                </label>
-                                <select
-                                    value={filters.vehicle_plate}
-                                    onChange={(e) => setFilters({ ...filters, vehicle_plate: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="">Tüm Araçlar</option>
-                                    {vehicles.map(vehicle => (
-                                        <option key={vehicle.id} value={vehicle.plate}>
-                                            {vehicle.plate}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Manager Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Müdür
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.manager}
-                                    onChange={(e) => setFilters({ ...filters, manager: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Destination Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Gidilen Yer
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.destination}
-                                    onChange={(e) => setFilters({ ...filters, destination: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Status Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Durum
-                                </label>
-                                <select
-                                    value={filters.status}
-                                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="in_use">Kullanımda</option>
-                                    <option value="returned">Teslim Alındı</option>
-                                </select>
-                            </div>
-
-                            {/* Given By Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Teslim Eden
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.given_by}
-                                    onChange={(e) => setFilters({ ...filters, given_by: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Kapı
-                                </label>
-                                <select
-                                    value={filters.gate}
-                                    onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="Ana Kapı">Ana Kapı</option>
-                                    <option value="Sahil Kapı">Sahil Kapı</option>
-                                </select>
-                            </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Araç Plakası</label>
+                            <select
+                                value={filters.vehicle_plate}
+                                onChange={(e) => setFilters({ ...filters, vehicle_plate: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Tüm Araçlar</option>
+                                {vehicles.map(vehicle => (
+                                    <option key={vehicle.id} value={vehicle.plate}>{vehicle.plate}</option>
+                                ))}
+                            </select>
                         </div>
 
-                        {/* Second Row - Date Ranges */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {/* Returned By Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Teslim Alan
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.returned_by}
-                                    onChange={(e) => setFilters({ ...filters, returned_by: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Teslim Edilen</label>
+                            <input
+                                type="text"
+                                value={filters.manager}
+                                onChange={(e) => setFilters({ ...filters, manager: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
 
-                            {/* Given Date Range */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Teslim Tarihi
-                                </label>
-                                <RangePicker
-                                    value={[
-                                        filters.givenDateStart ? dayjs(filters.givenDateStart) : null,
-                                        filters.givenDateEnd ? dayjs(filters.givenDateEnd) : null
-                                    ]}
-                                    onChange={(dates) => {
-                                        if (!dates || (!dates[0] && !dates[1])) {
-                                            // Takvim temizlendi - filtreleri sıfırla
-                                            setFilters({
-                                                ...filters,
-                                                givenDateStart: '',
-                                                givenDateEnd: ''
-                                            });
-                                        } else if (dates[0] && dates[1]) {
-                                            // İki tarih de seçildi
-                                            setFilters({
-                                                ...filters,
-                                                givenDateStart: dates[0].format('YYYY-MM-DD'),
-                                                givenDateEnd: dates[1].format('YYYY-MM-DD')
-                                            });
-                                        } else if (dates[0] && !dates[1]) {
-                                            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-                                            const singleDate = dates[0].format('YYYY-MM-DD');
-                                            setFilters({
-                                                ...filters,
-                                                givenDateStart: singleDate,
-                                                givenDateEnd: singleDate
-                                            });
-                                        }
-                                    }}
-                                    allowEmpty={[false, true]}
-                                    format="DD/MM/YYYY"
-                                    placeholder={['Başlangıç', 'Bitiş']}
-                                    className="w-full"
-                                    size="small"
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Gidilen Yer</label>
+                            <input
+                                type="text"
+                                value={filters.destination}
+                                onChange={(e) => setFilters({ ...filters, destination: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
 
-                            {/* Return Date Range */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    İade Tarihi
-                                </label>
-                                <RangePicker
-                                    value={[
-                                        filters.returnDateStart ? dayjs(filters.returnDateStart) : null,
-                                        filters.returnDateEnd ? dayjs(filters.returnDateEnd) : null
-                                    ]}
-                                    onChange={(dates) => {
-                                        if (!dates || (!dates[0] && !dates[1])) {
-                                            // Takvim temizlendi - filtreleri sıfırla
-                                            setFilters({
-                                                ...filters,
-                                                returnDateStart: '',
-                                                returnDateEnd: ''
-                                            });
-                                        } else if (dates[0] && dates[1]) {
-                                            // İki tarih de seçildi
-                                            setFilters({
-                                                ...filters,
-                                                returnDateStart: dates[0].format('YYYY-MM-DD'),
-                                                returnDateEnd: dates[1].format('YYYY-MM-DD')
-                                            });
-                                        } else if (dates[0] && !dates[1]) {
-                                            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-                                            const singleDate = dates[0].format('YYYY-MM-DD');
-                                            setFilters({
-                                                ...filters,
-                                                returnDateStart: singleDate,
-                                                returnDateEnd: singleDate
-                                            });
-                                        }
-                                    }}
-                                    allowEmpty={[false, true]}
-                                    format="DD/MM/YYYY"
-                                    placeholder={['Başlangıç', 'Bitiş']}
-                                    className="w-full"
-                                    size="small"
-                                    style={{ width: '100%' }}
-                                />
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Durum</label>
+                            <select
+                                value={filters.status}
+                                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="in_use">Kullanımda</option>
+                                <option value="returned">Teslim Alındı</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
+                            <select
+                                value={filters.gate}
+                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Teslim Eden</label>
+                            <input
+                                type="text"
+                                value={filters.given_by}
+                                onChange={(e) => setFilters({ ...filters, given_by: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Teslim Alan</label>
+                            <input
+                                type="text"
+                                value={filters.returned_by}
+                                onChange={(e) => setFilters({ ...filters, returned_by: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Teslim Tarihi</label>
+                            <RangePicker
+                                value={[
+                                    filters.givenDateStart ? dayjs(filters.givenDateStart) : null,
+                                    filters.givenDateEnd ? dayjs(filters.givenDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setFilters({
+                                            ...filters,
+                                            givenDateStart: '',
+                                            givenDateEnd: ''
+                                        });
+                                    } else if (dates[0] && dates[1]) {
+                                        setFilters({
+                                            ...filters,
+                                            givenDateStart: dates[0].format('YYYY-MM-DD'),
+                                            givenDateEnd: dates[1].format('YYYY-MM-DD')
+                                        });
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setFilters({
+                                            ...filters,
+                                            givenDateStart: singleDate,
+                                            givenDateEnd: singleDate
+                                        });
+                                    }
+                                }}
+                                allowEmpty={[false, true]}
+                                format="DD/MM/YYYY"
+                                placeholder={['Başlangıç', 'Bitiş']}
+                                className="w-full"
+                                size="small"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">İade Tarihi</label>
+                            <RangePicker
+                                value={[
+                                    filters.returnDateStart ? dayjs(filters.returnDateStart) : null,
+                                    filters.returnDateEnd ? dayjs(filters.returnDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setFilters({
+                                            ...filters,
+                                            returnDateStart: '',
+                                            returnDateEnd: ''
+                                        });
+                                    } else if (dates[0] && dates[1]) {
+                                        setFilters({
+                                            ...filters,
+                                            returnDateStart: dates[0].format('YYYY-MM-DD'),
+                                            returnDateEnd: dates[1].format('YYYY-MM-DD')
+                                        });
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setFilters({
+                                            ...filters,
+                                            returnDateStart: singleDate,
+                                            returnDateEnd: singleDate
+                                        });
+                                    }
+                                }}
+                                allowEmpty={[false, true]}
+                                format="DD/MM/YYYY"
+                                placeholder={['Başlangıç', 'Bitiş']}
+                                className="w-full"
+                                size="small"
+                                style={{ width: '100%' }}
+                            />
                         </div>
                     </div>
                 </div>
 
                 {/* Records Table */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -530,222 +456,86 @@ export default function AdminVehicleRecords() {
                             </svg>
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
-                    ) : hasActiveFilters ? (
-                        // Filtered view - simple table without grouping
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                <table className="mobile-stack-table w-full 2xl:w-[1520px] 2xl:min-w-[1520px] table-auto 2xl:table-fixed divide-y divide-gray-200">
-                                    <colgroup>
-                                        <col style={{ width: '180px' }} />
-                                        <col style={{ width: '170px' }} />
-                                        <col style={{ width: '170px' }} />
-                                        <col style={{ width: '120px' }} />
-                                        <col style={{ width: '140px' }} />
-                                        <col style={{ width: '140px' }} />
-                                        <col style={{ width: '130px' }} />
-                                        <col style={{ width: '130px' }} />
-                                        <col style={{ width: '120px' }} />
-                                        <col style={{ width: '220px' }} />
-                                    </colgroup>
-                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {sortedFilteredRecords.map((record) => (
-                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <div className="p-2 bg-blue-100 rounded">
-                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                            </svg>
-                                                        </div>
-                                                        <div className="ml-3">
-                                                            <div className="text-sm font-bold text-gray-900">{record.vehicle_plate}</div>
-                                                            <div className="text-xs text-gray-500">{record.vehicle_brand}</div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
-                                                    <div className="text-xs text-gray-500">{record.manager_title}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
-                                                    <div className="text-xs text-gray-500">{formatTime(record.given_time)}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.return_date ? (
-                                                        <>
-                                                            <div className="text-sm text-gray-900">{formatDate(record.return_date)}</div>
-                                                            <div className="text-xs text-gray-500">{formatTime(record.return_time)}</div>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-gray-400">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.status === 'in_use' ? (
-                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
-                                                            Kullanımda
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                            Teslim Alındı
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    {renderPreviewText(record.notes, 'Açıklama')}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
                     ) : (
-                        // Grouped view by month and day
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                {groupedRecords.map((monthGroup) => (
-                                    <div key={monthGroup.monthKey} className="mb-8 last:mb-0">
-                                        {/* Month Header */}
-                                        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 z-10 shadow-md">
-                                            <h2 className="text-lg font-bold">{monthGroup.monthLabel}</h2>
-                                            <p className="text-sm text-blue-100">{monthGroup.totalRecords} kayıt</p>
-                                        </div>
-
-                                        {/* Day Groups */}
-                                        {monthGroup.dayGroups.map((dayGroup) => (
-                                            <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
-                                                {/* Day Header */}
-                                                <div className="sticky top-14 bg-gray-100 px-6 py-2 border-l-4 border-blue-500 z-9 shadow-sm">
-
-                                                    <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
-                                                    <p className="text-xs text-gray-600">{dayGroup.records.length} kayıt</p>
-                                                </div>
-
-                                                {/* Records Table */}
-                                                <table className="mobile-stack-table w-full 2xl:w-[1520px] 2xl:min-w-[1520px] table-auto 2xl:table-fixed divide-y divide-gray-200">
-                                                    <colgroup>
-                                                        <col style={{ width: '180px' }} />
-                                                        <col style={{ width: '170px' }} />
-                                                        <col style={{ width: '170px' }} />
-                                                        <col style={{ width: '120px' }} />
-                                                        <col style={{ width: '140px' }} />
-                                                        <col style={{ width: '140px' }} />
-                                                        <col style={{ width: '130px' }} />
-                                                        <col style={{ width: '130px' }} />
-                                                        <col style={{ width: '120px' }} />
-                                                        <col style={{ width: '220px' }} />
-                                                    </colgroup>
-                                                    <thead className="bg-gray-50 sticky top-14 z-10">
-                                                        <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="bg-white divide-y divide-gray-200">
-                                                        {dayGroup.records.map((record) => (
-                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="flex items-center">
-                                                                        <div className="p-2 bg-blue-100 rounded">
-                                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div className="ml-3">
-                                                                            <div className="text-sm font-bold text-gray-900">{record.vehicle_plate}</div>
-                                                                            <div className="text-xs text-gray-500">{record.vehicle_brand}</div>
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
-                                                                    <div className="text-xs text-gray-500">{record.manager_title}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
-                                                                    <div className="text-xs text-gray-500">{formatTime(record.given_time)}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.return_date ? (
-                                                                        <>
-                                                                            <div className="text-sm text-gray-900">{formatDate(record.return_date)}</div>
-                                                                            <div className="text-xs text-gray-500">{formatTime(record.return_time)}</div>
-                                                                        </>
-                                                                    ) : (
-                                                                        <span className="text-gray-400">-</span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
-                                                                </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.status === 'in_use' ? (
-                                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
-                                                                            Kullanımda
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                                            Teslim Alındı
-                                                                        </span>
-                                                                    )}
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    {renderPreviewText(record.notes, 'Açıklama')}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ))}
+                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                            {groupedByDay.map((dayGroup) => (
+                                <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
+                                    <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
+                                        <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
-                                ))}
-                            </div>
+
+                                    <table className="w-full min-w-[1520px] table-auto divide-y divide-gray-200">
+                                        <thead className="bg-gray-50 sticky top-10 z-10">
+                                            <tr>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {dayGroup.records.map((record) => (
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-bold text-gray-900">{record.vehicle_plate}</div>
+                                                        <div className="text-xs text-gray-500">{record.vehicle_brand}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
+                                                        <div className="text-xs text-gray-500">{record.manager_title}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
+                                                        <div className="text-xs text-gray-500">{formatTime(record.given_time)}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {record.return_date ? (
+                                                            <>
+                                                                <div className="text-sm text-gray-900">{formatDate(record.return_date)}</div>
+                                                                <div className="text-xs text-gray-500">{formatTime(record.return_time)}</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-gray-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {record.status === 'in_use' ? (
+                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                                                                Kullanımda
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                                Teslim Alındı
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {renderPreviewText(record.notes, 'Açıklama')}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>

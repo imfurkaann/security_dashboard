@@ -308,7 +308,7 @@ export default function GuestRegistry() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-lg shadow overflow-hidden w-full flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
@@ -318,48 +318,48 @@ export default function GuestRegistry() {
                     ) : (
                         <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
                             <div className="min-h-full">
-                                <table className="w-full min-w-full table-fixed divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
+                                <table className="w-full min-w-[1900px] table-auto divide-y divide-gray-200">
+                                    <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="w-[70px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Hitap</th>
-                                            <th className="w-[130px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Adi</th>
-                                            <th className="w-[130px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Soyadi</th>
-                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Tarihi</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Giris Saati</th>
-                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cikis Tarihi</th>
-                                            <th className="w-[70px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Yetiskin</th>
-                                            <th className="w-[60px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Cocuk</th>
-                                            <th className="w-[60px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Free</th>
-                                            <th className="w-[110px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Konaklama</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Oda</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Geceleme</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Istenen</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Verilen</th>
-                                            <th className="w-[90px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Voucher</th>
-                                            <th className="w-[120px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Acenta</th>
-                                            <th className="w-[100px] px-3 py-3 text-left text-xs font-semibold uppercase text-gray-600 border-r border-gray-200 last:border-r-0">Ulke</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hitap</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adi</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soyadi</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giris Tarihi</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giris Saati</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cikis Tarihi</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yetiskin</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cocuk</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Free</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konaklama</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oda</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geceleme</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Istenen</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Verilen</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voucher</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acenta</th>
+                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ulke</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="bg-white divide-y divide-gray-200">
                                         {records.map((record) => (
-                                            <tr key={record.id} className="hover:bg-blue-50/40 even:bg-gray-50/40">
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.hitap || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.adi || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.soyadi || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.giris_tarihi)}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayTime(record.giris_saati)}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{formatDisplayDate(record.cikis_tarihi)}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.yetiskin || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.cocuk || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0">{record.free || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.konaklama || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.oda || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.geceleme || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.istenen || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.verilen || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-900 border-r border-gray-100 last:border-r-0 break-words">{record.voucher || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.acenta || '-'}</td>
-                                                <td className="px-3 py-3 text-sm text-gray-700 border-r border-gray-100 last:border-r-0 break-words">{record.ulke || '-'}</td>
+                                            <tr key={record.id} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.hitap || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.adi || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.soyadi || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayDate(record.giris_tarihi)}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayTime(record.giris_saati)}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayDate(record.cikis_tarihi)}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.yetiskin || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.cocuk || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.free || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.konaklama || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.oda || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.geceleme || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.istenen || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.verilen || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{record.voucher || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.acenta || '-'}</td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.ulke || '-'}</td>
                                             </tr>
                                         ))}
                                     </tbody>

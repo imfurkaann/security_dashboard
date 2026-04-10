@@ -245,6 +245,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                     visitingPerson: sanitizedVisitingPerson || undefined,
                     entryDate,
                     entryTime,
+                    gate: gate || undefined,
                     vehiclePlate: normalizedPlate || undefined,
                     personCount: personCountToInsert,
                     phone: normalizedPhone || undefined,

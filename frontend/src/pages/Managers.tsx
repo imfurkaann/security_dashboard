@@ -498,19 +498,6 @@ export default function Managers() {
                                             <option key={p.id} value={p.id}>{p.first_name ? `${p.first_name} ${p.last_name} - ${p.title}` : p.full_name}</option>
                                         ))}
                                     </select>
-
-                                    {selectedManagerId && (() => {
-                                        const p = managersList.find(x => x.id === selectedManagerId);
-                                        if (!p) return null;
-                                        const name = p.first_name ? `${p.first_name} ${p.last_name}` : p.full_name;
-                                        const title = p.title || p.department || '';
-                                        return (
-                                            <div className="mt-4 p-3 border border-gray-100 rounded bg-gray-50">
-                                                <div className="text-sm font-medium text-gray-900">{name}</div>
-                                                <div className="text-xs text-gray-600">{title || '-'} • {p.phone || '-'} • {p.email || '-'}</div>
-                                            </div>
-                                        );
-                                    })()}
                                 </div>
 
                                 {/* Entry Time */}
