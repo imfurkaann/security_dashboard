@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -30,6 +30,9 @@ export default function AdminManagerRecords() {
     const [editNotes, setEditNotes] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
     const navigate = useNavigate();
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -332,6 +335,46 @@ export default function AdminManagerRecords() {
         }
     };
 
+    useEffect(() => {
+        const updateScrollbarWidth = () => {
+            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+        };
+
+        updateScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+        if (tableScrollRef.current) resizeObserver.observe(tableScrollRef.current);
+        if (bottomScrollRef.current) resizeObserver.observe(bottomScrollRef.current);
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', updateScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [filteredRecords.length, loading]);
+
+    const syncTableScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+
+        if (!tableNode || !barNode) return;
+        if (barNode.scrollLeft !== tableNode.scrollLeft) {
+            barNode.scrollLeft = tableNode.scrollLeft;
+        }
+    };
+
+    const syncBottomScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+
+        if (!tableNode || !barNode) return;
+        if (tableNode.scrollLeft !== barNode.scrollLeft) {
+            tableNode.scrollLeft = barNode.scrollLeft;
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
@@ -376,7 +419,7 @@ export default function AdminManagerRecords() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 {/* Filter Panel */}
                 <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                     <div className="flex justify-between items-center mb-3">
@@ -534,7 +577,7 @@ export default function AdminManagerRecords() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -547,7 +590,11 @@ export default function AdminManagerRecords() {
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div
+                            ref={tableScrollRef}
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                        >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
@@ -629,6 +676,12 @@ export default function AdminManagerRecords() {
                     )}
                 </div>
             </main>
+
+            <div className="fixed bottom-0 left-0 right-0 lg:left-[var(--sidebar-width)] z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div ref={bottomScrollRef} onScroll={syncBottomScroll} className="h-5 overflow-x-scroll overflow-y-hidden">
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
 
             {showEditModal && editingRecord && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

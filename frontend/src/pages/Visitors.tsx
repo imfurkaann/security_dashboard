@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
@@ -40,7 +40,10 @@ export default function Visitors() {
     });
     const [formData, setFormData] = useState<VisitorFormData>(INITIAL_FORM_DATA);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     // Fetch visitor records
     const fetchData = useCallback(async () => {
@@ -256,6 +259,44 @@ export default function Visitors() {
         );
     };
 
+    useEffect(() => {
+        const updateScrollbarWidth = () => {
+            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+        };
+
+        updateScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+        if (tableScrollRef.current) resizeObserver.observe(tableScrollRef.current);
+        if (bottomScrollRef.current) resizeObserver.observe(bottomScrollRef.current);
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', updateScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [filteredRecords.length, loading]);
+
+    const syncTableScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+        if (barNode.scrollLeft !== tableNode.scrollLeft) {
+            barNode.scrollLeft = tableNode.scrollLeft;
+        }
+    };
+
+    const syncBottomScroll = () => {
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+        if (tableNode.scrollLeft !== barNode.scrollLeft) {
+            tableNode.scrollLeft = barNode.scrollLeft;
+        }
+    };
+
     const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
     const dashboardIconBase = 'p-2 bg-white/20 rounded-lg border shrink-0 text-white';
     const dashboardLabelBase = 'text-[11px] font-medium text-white/90 uppercase tracking-wider leading-none';
@@ -300,7 +341,7 @@ export default function Visitors() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-20 flex flex-col gap-4">
                 <div className="w-full">
                     {/* Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2.5">
@@ -419,7 +460,7 @@ export default function Visitors() {
                     {/* Table (large bordered, scrollable container) */}
                 </div>
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 overflow-visible">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -429,8 +470,8 @@ export default function Visitors() {
                             <p className="text-gray-500">Kayıt bulunmuyor</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
+                        <div ref={tableScrollRef} onScroll={syncTableScroll} className="overflow-x-auto pb-2">
+                            <div>
                                 <table className="w-full min-w-[1800px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
@@ -555,6 +596,12 @@ export default function Visitors() {
                     )}
                 </div>
             </main>
+
+            <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div ref={bottomScrollRef} onScroll={syncBottomScroll} className="h-5 overflow-x-scroll overflow-y-hidden">
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
 
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
