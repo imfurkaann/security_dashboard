@@ -34,3 +34,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# WhatsApp Baileys auth/session files (sensitive)
+.baileys_auth/
+.baileys_auth/**

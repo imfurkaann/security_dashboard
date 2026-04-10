@@ -45,3 +45,7 @@ backend\sgk_kayitlari
 
 # TypeScript
 *.tsbuildinfo
+
+# WhatsApp Baileys auth/session files (sensitive)
+backend/.baileys_auth/
+backend/.baileys_auth/**
