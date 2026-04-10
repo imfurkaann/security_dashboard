@@ -411,6 +411,7 @@ export default function Vehicles() {
                                             <th className="w-[80px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="w-[180px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
+                                            <th className="w-[180px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                             <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Edilme</th>
                                             <th className="w-[140px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alınma</th>
                                             <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
@@ -450,6 +451,9 @@ export default function Vehicles() {
                                                 <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="text-sm text-gray-900 break-words">{usage.manager || '-'}</div>
                                                     <div className="text-xs text-gray-500 break-words">{usage.manager_title}</div>
+                                                </td>
+                                                <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <div className="text-sm text-gray-900 break-words">{usage.destination || '-'}</div>
                                                 </td>
                                                 <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{formatDate(usage.given_date)}</div>

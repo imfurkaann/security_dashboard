@@ -411,7 +411,7 @@ export default function FireAlarms() {
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
-                                                <th className="w-[70px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
                                                 <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
                                                 <th className="w-[120px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
@@ -450,8 +450,8 @@ export default function FireAlarms() {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
-                                                        <div className="text-sm text-gray-900 break-words">{record.gate || '-'}</div>
+                                                    <td className="px-3 lg:px-4 py-4 align-top whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
                                                     </td>
                                                     <td className="px-3 lg:px-4 py-4 align-top">
                                                         <div className="text-sm font-medium text-gray-900 break-words">{record.alarm_number || '-'}</div>
