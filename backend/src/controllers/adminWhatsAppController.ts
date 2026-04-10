@@ -131,6 +131,15 @@ export const updateAdminWhatsAppTargetGroup = async (req: Request, res: Response
 
 export const reconnectAdminWhatsApp = async (_req: Request, res: Response): Promise<void> => {
     try {
+        const status = getWhatsAppConnectionStatus();
+        if (!status.enabled) {
+            res.status(400).json({
+                success: false,
+                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
+            });
+            return;
+        }
+
         restartWhatsAppConnection();
         res.status(200).json({
             success: true,
@@ -144,6 +153,15 @@ export const reconnectAdminWhatsApp = async (_req: Request, res: Response): Prom
 
 export const resetAdminWhatsAppSession = async (_req: Request, res: Response): Promise<void> => {
     try {
+        const status = getWhatsAppConnectionStatus();
+        if (!status.enabled) {
+            res.status(400).json({
+                success: false,
+                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
+            });
+            return;
+        }
+
         resetWhatsAppSession();
         res.status(200).json({
             success: true,
@@ -158,6 +176,19 @@ export const resetAdminWhatsAppSession = async (_req: Request, res: Response): P
 export const getAdminWhatsAppQr = async (_req: Request, res: Response): Promise<void> => {
     try {
         const status = getWhatsAppConnectionStatus();
+        if (!status.enabled) {
+            res.status(400).json({
+                success: false,
+                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
+                data: {
+                    connected: false,
+                    qr: null,
+                    lastQrAt: status.lastQrAt,
+                },
+            });
+            return;
+        }
+
         const qrPayload = getWhatsAppQrPayload();
 
         if (status.connected) {
