@@ -24,7 +24,8 @@ const menuItems = [
     { title: 'Yangın Yönetimi', path: '/admin/fire-alarm-records' },
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
     { title: 'Veri Dışa Aktarma', path: '/admin/export-data' },
-    { title: 'İstatistikler', path: '/admin/statistics' }
+    { title: 'İstatistikler', path: '/admin/statistics' },
+    { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' }
 ];
 
 export default function AdminSidebarLayout() {
@@ -57,6 +58,7 @@ export default function AdminSidebarLayout() {
         } finally {
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
+            localStorage.removeItem('selectedGate');
             navigate('/login');
         }
     };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -14,6 +14,7 @@ interface FireAlarmRecord {
     id: string;
     alarm_number: string | null;
     location: string;
+    gate?: string | null;
     alarm_time: string;
     resolved: boolean;
     resolution_time: string | null;
@@ -28,6 +29,8 @@ interface FireAlarmRecord {
 export default function FireAlarmRecords() {
     const [records, setRecords] = useState<FireAlarmRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const latestFetchId = useRef(0);
     const navigate = useNavigate();
 
     // Filter states
@@ -36,6 +39,7 @@ export default function FireAlarmRecords() {
     const [recordedBy, setRecordedBy] = useState('');
     const [resolvedBy, setResolvedBy] = useState('');
     const [status, setStatus] = useState('all');
+    const [gateFilter, setGateFilter] = useState('all');
     const [falseAlarmFilter, setFalseAlarmFilter] = useState('all');
     const [alarmDateRange, setAlarmDateRange] = useState<[Dayjs, Dayjs] | null>(null);
     const [resolutionDateRange, setResolutionDateRange] = useState<[Dayjs, Dayjs] | null>(null);
@@ -44,20 +48,47 @@ export default function FireAlarmRecords() {
     const [resolutionDateStart, setResolutionDateStart] = useState('');
     const [resolutionDateEnd, setResolutionDateEnd] = useState('');
 
-    // Fetch all records
+    const fetchData = useCallback(async () => {
+        const fetchId = ++latestFetchId.current;
+        try {
+            const res = await api.get(`/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`);
+            if (fetchId !== latestFetchId.current) return;
+            setRecords(res.data?.data || []);
+        } catch (error) {
+            if (fetchId !== latestFetchId.current) return;
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            if (fetchId !== latestFetchId.current) return;
+            setLoading(false);
+        }
+    }, []);
+
+    // Fetch all records + periodic refresh to keep list in sync
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await api.get('/fire-alarms/records?includeDeleted=true');
-                setRecords(res.data?.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
+        fetchData();
+        const refreshInterval = window.setInterval(fetchData, 15000);
+        return () => window.clearInterval(refreshInterval);
+    }, [fetchData]);
+
+    useEffect(() => {
+        const handleFocus = () => {
+            fetchData();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData();
             }
         };
-        fetchData();
-    }, []);
+
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [fetchData]);
 
     // Date handlers for alarm date
     const handleAlarmDateChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
@@ -110,6 +141,7 @@ export default function FireAlarmRecords() {
             if (resolvedBy && !record.resolved_by_name?.toLowerCase().includes(resolvedBy.toLowerCase())) return false;
             if (status === 'active' && record.resolved) return false;
             if (status === 'resolved' && !record.resolved) return false;
+            if (gateFilter !== 'all' && (record.gate || '') !== gateFilter) return false;
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
@@ -127,7 +159,7 @@ export default function FireAlarmRecords() {
 
             return true;
         });
-    }, [records, alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
+    }, [records, alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
 
     // Check if any filter is active
     const hasActiveFilters = useMemo(() => {
@@ -137,11 +169,12 @@ export default function FireAlarmRecords() {
             recordedBy ||
             resolvedBy ||
             status !== 'all' ||
+            gateFilter !== 'all' ||
             falseAlarmFilter !== 'all' ||
             alarmDateStart ||
             resolutionDateStart
         );
-    }, [alarmNumber, location, recordedBy, resolvedBy, status, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
+    }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, resolutionDateStart]);
 
     // Group records by month and day (only when no filters)
     // Group records by month and day (only when no filters)
@@ -201,6 +234,7 @@ export default function FireAlarmRecords() {
         setRecordedBy('');
         setResolvedBy('');
         setStatus('all');
+        setGateFilter('all');
         setFalseAlarmFilter('all');
         setAlarmDateRange(null);
         setResolutionDateRange(null);
@@ -230,6 +264,26 @@ export default function FireAlarmRecords() {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
         }
+    };
+
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
     };
 
     return (
@@ -264,14 +318,22 @@ export default function FireAlarmRecords() {
                 <div className="bg-white rounded-lg shadow-md p-6 mb-6">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-semibold text-gray-900">Filtreler</h2>
-                        {hasActiveFilters && (
+                        <div className="flex items-center gap-3">
                             <button
-                                onClick={clearFilters}
-                                className="text-sm text-red-600 hover:text-red-800 font-medium"
+                                onClick={fetchData}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                             >
-                                Filtreleri Temizle
+                                Yenile
                             </button>
-                        )}
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={clearFilters}
+                                    className="text-sm text-red-600 hover:text-red-800 font-medium"
+                                >
+                                    Filtreleri Temizle
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -329,6 +391,19 @@ export default function FireAlarmRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="active">Aktif</option>
                                 <option value="resolved">Çözüldü</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kapı</label>
+                            <select
+                                value={gateFilter}
+                                onChange={(e) => setGateFilter(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
                             </select>
                         </div>
 
@@ -393,17 +468,18 @@ export default function FireAlarmRecords() {
                     ) : hasActiveFilters ? (
                         // Flat table view when filters are active
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
+                            <table className="w-full min-w-[1550px] table-auto divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                        <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                        <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -412,9 +488,12 @@ export default function FireAlarmRecords() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm font-bold text-gray-900">{record.location}</div>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
                                                 {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="text-sm text-gray-900">{record.gate || '-'}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
@@ -430,8 +509,8 @@ export default function FireAlarmRecords() {
                                                     <span className="text-sm text-gray-400">-</span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
+                                            <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                {renderPreviewText(record.resolution_notes, 'Notlar')}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {record.resolved ? (
@@ -465,17 +544,18 @@ export default function FireAlarmRecords() {
                                                 <h4 className="text-sm font-medium text-red-800">{getDayName(dayKey)}</h4>
                                             </div>
                                             <div className="overflow-x-auto">
-                                                <table className="min-w-full">
+                                                <table className="w-full min-w-[1550px] table-auto divide-y divide-gray-200">
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 z-8 bg-gray-50">Alarm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-24 z-8 bg-gray-50">Çözüm Zamanı</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -484,15 +564,18 @@ export default function FireAlarmRecords() {
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="text-sm font-bold text-gray-900">{record.location}</div>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
                                                                     {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-0 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                                </td>
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
                                                                     <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
                                                                 </td>
-                                                                <td className="px-6 py-4 whitespace-nowrap sticky left-24 z-8 bg-white">
+                                                                <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.resolution_time ? (
                                                                         <>
                                                                             <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
@@ -502,8 +585,8 @@ export default function FireAlarmRecords() {
                                                                         <span className="text-sm text-gray-400">-</span>
                                                                     )}
                                                                 </td>
-                                                                <td className="px-6 py-4">
-                                                                    <div className="text-sm text-gray-900 max-w-xs truncate">{record.resolution_notes || '-'}</div>
+                                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                                    {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                                 </td>
                                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                                     {record.resolved ? (
@@ -521,6 +604,26 @@ export default function FireAlarmRecords() {
                                                             </tr>
                                                         ))}
                                                     </tbody>
+
+                                                    {textPreview && (
+                                                        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                                                            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                                                                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                                                                    <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setTextPreview(null)}
+                                                                        className="text-gray-500 hover:text-gray-700"
+                                                                    >
+                                                                        Kapat
+                                                                    </button>
+                                                                </div>
+                                                                <div className="px-4 py-4">
+                                                                    <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </table>
                                             </div>
                                         </div>

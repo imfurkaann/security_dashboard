@@ -49,8 +49,38 @@ function Get-HostIPv4 {
 function Test-PortFree {
     param([int]$Port)
 
-    $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
-    return -not [bool]$listener
+    $existingListener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($existingListener) {
+        return $false
+    }
+
+    try {
+        $ipv6Socket = [System.Net.Sockets.Socket]::new(
+            [System.Net.Sockets.AddressFamily]::InterNetworkV6,
+            [System.Net.Sockets.SocketType]::Stream,
+            [System.Net.Sockets.ProtocolType]::Tcp
+        )
+
+        $ipv6Socket.DualMode = $true
+        $ipv6Socket.Bind([System.Net.IPEndPoint]::new([System.Net.IPAddress]::IPv6Any, $Port))
+        $ipv6Socket.Listen(1)
+        $ipv6Socket.Close()
+
+        $ipv4Socket = [System.Net.Sockets.Socket]::new(
+            [System.Net.Sockets.AddressFamily]::InterNetwork,
+            [System.Net.Sockets.SocketType]::Stream,
+            [System.Net.Sockets.ProtocolType]::Tcp
+        )
+
+        $ipv4Socket.Bind([System.Net.IPEndPoint]::new([System.Net.IPAddress]::Any, $Port))
+        $ipv4Socket.Listen(1)
+        $ipv4Socket.Close()
+
+        return $true
+    }
+    catch {
+        return $false
+    }
 }
 
 function Get-FreePort {
@@ -90,7 +120,7 @@ function Ensure-FirewallRule {
 }
 
 $hostIp = Get-HostIPv4
-$backendPort = Get-FreePort -Preferred 5000 -RangeStart 5001 -RangeEnd 5099
+$backendPort = Get-FreePort -Preferred 5001 -RangeStart 5001 -RangeEnd 5099
 $frontendPort = Get-FreePort -Preferred 5173 -RangeStart 5174 -RangeEnd 5199
 $apiUrl = "http://${hostIp}:$backendPort/api"
 
@@ -114,7 +144,7 @@ else {
     Write-Host "[UYARI] Yönetici olarak acilmadi; firewall engeli varsa mobil erisimde timeout olabilir." -ForegroundColor Yellow
 }
 
-$backendCmd = "Set-Location '$backendPath'; `$env:PORT='$backendPort'; npm run dev"
+$backendCmd = "Set-Location '$backendPath'; `$env:PORT='$backendPort'; `$env:PORT_FALLBACK='$backendPort'; `$env:PORT_ATTEMPT_COUNT='1'; npm run dev"
 $frontendCmd = "Set-Location '$frontendPath'; `$env:VITE_API_URL='$apiUrl'; .\\node_modules\\.bin\\vite.cmd --host 0.0.0.0 --port $frontendPort"
 
 Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $backendCmd)

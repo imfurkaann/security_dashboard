@@ -71,6 +71,7 @@ export default function Login() {
                 const { token } = checkResponse.data.data;
                 localStorage.setItem(STORAGE_KEYS.TOKEN, token);
                 localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+                localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
                 navigate('/equipment-check', { replace: true });
             }
         } catch (err) {

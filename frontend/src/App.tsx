@@ -31,6 +31,7 @@ import FireAlarms from './pages/FireAlarms';
 import FireAlarmRecords from './pages/FireAlarmRecords';
 import Sgk from './pages/Sgk';
 import EquipmentCheck from './pages/EquipmentCheck';
+import GuestRegistry from './pages/GuestRegistry';
 
 function App() {
   return (
@@ -67,6 +68,7 @@ function App() {
               <Route path="manage-managers" element={<AdminManageManagers />} />
               <Route path="export-data" element={<AdminExportData />} />
               <Route path="statistics" element={<AdminStatistics />} />
+              <Route path="misafir-kayitlari" element={<GuestRegistry />} />
             </Route>
 
             {/* Protected Routes - Authentication gerekli */}
@@ -87,6 +89,7 @@ function App() {
               <Route path="fire-alarms" element={<FireAlarms />} />
               <Route path="fire-alarm-records" element={<FireAlarmRecords />} />
               <Route path="sgk" element={<Sgk />} />
+              <Route path="misafir-kayitlari" element={<GuestRegistry />} />
             </Route>
 
             {/* Default redirect */}

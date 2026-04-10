@@ -20,6 +20,7 @@ const INITIAL_EQUIPMENT: EquipmentItem[] = [
 
 export default function EquipmentCheck() {
     const [equipment, setEquipment] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
+    const [selectedGate, setSelectedGate] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -54,6 +55,11 @@ export default function EquipmentCheck() {
             return false;
         }
 
+        if (!selectedGate) {
+            setError('Lütfen giriş yaptığınız kapıyı seçiniz');
+            return false;
+        }
+
         // Check if rejected items have reasons
         const rejectedWithoutReason = equipment.some(
             item => item.status === false && !item.reason.trim()
@@ -64,7 +70,7 @@ export default function EquipmentCheck() {
         }
 
         return true;
-    }, [equipment]);
+    }, [equipment, selectedGate]);
 
     // Handle form submission
     const handleSubmit = useCallback(async (e: FormEvent) => {
@@ -89,6 +95,8 @@ export default function EquipmentCheck() {
 
             const response = await api.post('/equipment-check', formData);
 
+            localStorage.setItem(STORAGE_KEYS.SELECTED_GATE, selectedGate);
+
             // Show WhatsApp modal
             if (response.data?.data?.whatsappMessage) {
                 setWhatsappMessage(response.data.data.whatsappMessage);
@@ -102,7 +110,7 @@ export default function EquipmentCheck() {
         } finally {
             setLoading(false);
         }
-    }, [equipment, validateForm, navigate]);
+    }, [equipment, validateForm, navigate, selectedGate]);
 
     // Handle WhatsApp modal close
     const handleWhatsAppClose = useCallback(() => {
@@ -188,6 +196,32 @@ export default function EquipmentCheck() {
                                     )}
                                 </div>
                             ))}
+                        </div>
+
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-300 mb-2">Giriş Kapısı</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedGate('ana_kapi')}
+                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${selectedGate === 'ana_kapi'
+                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    Ana Kapı
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedGate('sahil_kapi')}
+                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${selectedGate === 'sahil_kapi'
+                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                        }`}
+                                >
+                                    Sahil Kapı
+                                </button>
+                            </div>
                         </div>
 
                         <div className="mt-4">

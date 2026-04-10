@@ -39,6 +39,18 @@ const getToken = (): string | null => {
     return localStorage.getItem(STORAGE_KEYS.TOKEN);
 };
 
+const getSelectedGate = (): string | null => {
+    const isAdminPath = window.location.pathname.startsWith('/admin');
+    if (isAdminPath) return null;
+
+    const gate = localStorage.getItem(STORAGE_KEYS.SELECTED_GATE);
+    if (gate === 'ana_kapi' || gate === 'sahil_kapi') {
+        return gate;
+    }
+
+    return null;
+};
+
 /**
  * Validates token format
  */
@@ -56,6 +68,11 @@ api.interceptors.request.use(
         // Add token if valid
         if (isValidToken(token)) {
             config.headers.Authorization = `Bearer ${token}`;
+        }
+
+        const gate = getSelectedGate();
+        if (gate) {
+            config.headers['X-Selected-Gate'] = gate;
         }
 
         // Request body size validation (client-side DoS prevention)

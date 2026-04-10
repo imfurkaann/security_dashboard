@@ -193,6 +193,7 @@ export const validateVisitorForm = (data: {
     company_name?: string;
     visiting_person?: string;
     person_count?: string | number;
+    children_count?: string | number;
     phone?: string;
     notes?: string;
 }): ValidationResult => {
@@ -236,6 +237,11 @@ export const validateVisitorForm = (data: {
         {
             condition: !data.person_count || data.person_count === '' || isValidNumber(data.person_count, { min: 1, max: 999, integer: true }),
             message: 'Kişi sayısı 1-999 arasında bir tam sayı olmalıdır'
+        },
+        // Çocuk sayısı (opsiyonel ama girilmişse geçerli olmalı)
+        {
+            condition: data.children_count === undefined || data.children_count === '' || isValidNumber(data.children_count, { min: 0, max: 999, integer: true }),
+            message: 'Çocuk sayısı 0-999 arasında bir tam sayı olmalıdır'
         }
     ];
 

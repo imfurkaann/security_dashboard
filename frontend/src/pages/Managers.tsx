@@ -32,6 +32,7 @@ export default function Managers() {
     const [exitDate, setExitDate] = useState('');
     const [entryTime, setEntryTime] = useState('');
     const [exitTime, setExitTime] = useState('');
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
     const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const navigate = useNavigate();
@@ -249,6 +250,26 @@ export default function Managers() {
         return available;
     }, [managersList, records, isEditing, editingId]);
 
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -373,15 +394,17 @@ export default function Managers() {
                     ) : (
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-full table-auto divide-y divide-gray-200">
+                                <table className="w-full min-w-[1450px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
@@ -404,6 +427,10 @@ export default function Managers() {
                                                             <ActionButton onClick={() => handleDelete(rec.id)} variant="danger">Sil</ActionButton>
                                                         )}
                                                     </div>
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{rec.gate || '-'}</div>
                                                 </td>
 
                                                 {/* İsim Soyisim */}
@@ -431,6 +458,10 @@ export default function Managers() {
                                                 </td>
 
                                                 {/* Giriş Yapan */}
+                                                <td className="px-6 py-4 align-top whitespace-nowrap w-[260px]">
+                                                    {renderPreviewText(rec.notes, 'Açıklama')}
+                                                </td>
+
                                                 <td className="px-6 py-4 align-top">
                                                     <div className="text-sm text-gray-900">{rec.entry_by || '-'}</div>
                                                 </td>
@@ -562,6 +593,26 @@ export default function Managers() {
                                     <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
                         </div>
                     </div>
                 </div>

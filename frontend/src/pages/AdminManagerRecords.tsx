@@ -38,6 +38,7 @@ export default function AdminManagerRecords() {
         entry_by: '',
         exit_by: '',
         status: 'all',
+        gate: 'all',
         entryDateStart: '',
         entryDateEnd: '',
         exitDateStart: '',
@@ -92,6 +93,11 @@ export default function AdminManagerRecords() {
                 return false;
             }
 
+            // Gate filter
+            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
+                return false;
+            }
+
             // Entry date range filter - dayjs ile yerel tarihe çevir
             const entryDateOnly = record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '';
             if (filters.entryDateStart && entryDateOnly) {
@@ -128,6 +134,7 @@ export default function AdminManagerRecords() {
             filters.entry_by !== '' ||
             filters.exit_by !== '' ||
             filters.status !== 'all' ||
+            filters.gate !== 'all' ||
             filters.entryDateStart !== '' ||
             filters.entryDateEnd !== '' ||
             filters.exitDateStart !== '' ||
@@ -198,6 +205,7 @@ export default function AdminManagerRecords() {
             entry_by: '',
             exit_by: '',
             status: 'all',
+            gate: 'all',
             entryDateStart: '',
             entryDateEnd: '',
             exitDateStart: '',
@@ -546,6 +554,22 @@ export default function AdminManagerRecords() {
                             </select>
                         </div>
 
+                        {/* Gate */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Kapı
+                            </label>
+                            <select
+                                value={filters.gate}
+                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
+                            </select>
+                        </div>
+
                         {/* Entry Date Range */}
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -600,10 +624,21 @@ export default function AdminManagerRecords() {
                     <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
                         <div className="overflow-x-auto">
                             <div className="max-h-[600px] overflow-y-auto">
-                                <table className="min-w-[1100px] table-auto divide-y divide-gray-200">
+                                <table className="mobile-stack-table w-full 2xl:w-[1210px] 2xl:min-w-[1210px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                    <colgroup>
+                                        <col style={{ width: '170px' }} />
+                                        <col style={{ width: '120px' }} />
+                                        <col style={{ width: '220px' }} />
+                                        <col style={{ width: '150px' }} />
+                                        <col style={{ width: '150px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '140px' }} />
+                                        <col style={{ width: '120px' }} />
+                                    </colgroup>
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -631,6 +666,10 @@ export default function AdminManagerRecords() {
                                                             <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
                                                         )}
                                                     </div>
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -709,11 +748,22 @@ export default function AdminManagerRecords() {
                                                 </div>
 
                                                 {/* Records Table */}
-                                                <table className="min-w-[1100px] table-auto divide-y divide-gray-200">
+                                                <table className="mobile-stack-table w-full 2xl:w-[1210px] 2xl:min-w-[1210px] table-auto 2xl:table-fixed divide-y divide-gray-200">
+                                                    <colgroup>
+                                                        <col style={{ width: '170px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                        <col style={{ width: '220px' }} />
+                                                        <col style={{ width: '150px' }} />
+                                                        <col style={{ width: '150px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '140px' }} />
+                                                        <col style={{ width: '120px' }} />
+                                                    </colgroup>
                                                     <thead className="bg-gray-50 sticky top-14 z-10">
                                                         <tr>
 
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
@@ -741,6 +791,10 @@ export default function AdminManagerRecords() {
                                                                             <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
                                                                         )}
                                                                     </div>
+                                                                </td>
+
+                                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
                                                                 </td>
 
                                                                 <td className="px-6 py-4 whitespace-nowrap">

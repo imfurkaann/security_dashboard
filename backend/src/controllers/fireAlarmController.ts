@@ -5,10 +5,14 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
+import { getGateFromRequest } from '../utils/gate';
 
 // Tüm yangın alarm kayıtlarını getir
 export const getFireAlarms = async (req: Request, res: Response) => {
     try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         const includeDeleted = req.query.includeDeleted === 'true';
         const deletedAtSelect = includeDeleted ? 'fa.deleted_at,' : '';
         const deletedAtFilter = includeDeleted ? '' : 'WHERE fa.deleted_at IS NULL';
@@ -18,6 +22,7 @@ export const getFireAlarms = async (req: Request, res: Response) => {
                 fa.id,
                 fa.alarm_number,
                 fa.location,
+                fa.gate,
                 fa.alarm_time,
                 fa.resolved,
                 fa.resolution_time,
@@ -31,7 +36,7 @@ export const getFireAlarms = async (req: Request, res: Response) => {
             LEFT JOIN personnel pr ON fa.recorded_by = pr.id
             LEFT JOIN personnel ps ON fa.resolved_by = ps.id
             ${deletedAtFilter}
-            ORDER BY fa.created_at DESC
+            ORDER BY fa.created_at DESC, fa.id DESC
             LIMIT 1000
         `);
         res.json({ success: true, data: result.rows });
@@ -47,6 +52,7 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         const { alarm_number, location, alarm_time, false_alarm, resolution_notes } = req.body;
         const userId = req.user?.userId;
         const clientIp = getClientIp(req);
+        const gate = getGateFromRequest(req);
 
         if (!userId) {
             return res.status(401).json({ success: false, message: 'Yetkilendirme gerekli' });
@@ -79,12 +85,12 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         const result = await pool.query(
             `INSERT INTO fire_alarms (
                 id, alarm_number, location, alarm_time, false_alarm, 
-                resolution_notes, recorded_by
+                resolution_notes, recorded_by, gate
             ) VALUES ($1, $2, $3, 
                 CURRENT_DATE + COALESCE($4::time, CURRENT_TIME), 
-                $5, $6, $7) 
+                $5, $6, $7, $8) 
             RETURNING *`,
-            [id, sanitizedAlarmNumber, sanitizedLocation, alarm_time || null, !!false_alarm, sanitizedNotes, userId]
+            [id, sanitizedAlarmNumber, sanitizedLocation, alarm_time || null, !!false_alarm, sanitizedNotes, userId, gate]
         );
 
         await logDataChange(

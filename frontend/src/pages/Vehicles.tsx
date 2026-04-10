@@ -27,6 +27,7 @@ export default function Vehicles() {
     const [formData, setFormData] = useState<VehicleFormData>(INITIAL_FORM_DATA);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingUsage, setEditingUsage] = useState<VehicleUsage | null>(null);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
 
     // Fetch all data in parallel
@@ -198,6 +199,26 @@ export default function Vehicles() {
     const inUseCount = useMemo(() => usages.filter(u => u.status === 'in_use').length, [usages]);
     const availableVehicles = useMemo(() => vehicles.filter(v => v.status === 'available'), [vehicles]);
 
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -338,11 +359,12 @@ export default function Vehicles() {
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alan Kişi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Edilme Tarihi</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alınma Tarihi</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[260px]">Açıklama</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
                                         </tr>
@@ -366,6 +388,9 @@ export default function Vehicles() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{usage.gate || '-'}</div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="flex items-center">
                                                         <div className="p-2 bg-blue-100 rounded">
                                                             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -379,7 +404,7 @@ export default function Vehicles() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-bold text-gray-900">{usage.manager}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.manager || '-'}</div>
                                                     <div className="text-xs text-gray-500">{usage.manager_title}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -396,14 +421,14 @@ export default function Vehicles() {
                                                         <span className="text-gray-400">-</span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm text-gray-500">{usage.notes || '-'}</div>
+                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
+                                                    {renderPreviewText(usage.notes, 'Açıklama')}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{usage.given_by || '-'}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.given_by || '-'}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{usage.returned_by || '-'}</div>
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.returned_by || '-'}</div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -799,6 +824,26 @@ export default function Vehicles() {
                             >
                                 Kapat
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
                         </div>
                     </div>
                 </div>

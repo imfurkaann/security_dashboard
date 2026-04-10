@@ -16,6 +16,7 @@ import equipmentCheckRoutes from './routes/equipmentCheck';
 import personnelRoutes from './routes/personnel';
 import exportRoutes from './routes/export';
 import statisticsRoutes from './routes/statistics';
+import guestRegistryRoutes from './routes/guestRegistry';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
 
@@ -25,7 +26,9 @@ dotenv.config();
 process.env.TZ = 'Europe/Istanbul';
 
 const app: Application = express();
-const PORT = process.env.PORT || 5000;
+const PRIMARY_PORT = Number(process.env.PORT || 5000);
+const FALLBACK_PORT = Number(process.env.PORT_FALLBACK || PRIMARY_PORT + 1);
+const PORT_ATTEMPT_COUNT = Number(process.env.PORT_ATTEMPT_COUNT || 10);
 
 const UNLIMITED_LOGIN_PATHS = new Set(['/api/auth/login', '/api/admin/login']);
 const isUnlimitedLoginRequest = (req: Request): boolean => {
@@ -91,7 +94,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate'],
     maxAge: 86400 // 24 saat önbellekleme
 }));
 
@@ -136,6 +139,7 @@ app.use('/api/equipment-check', equipmentCheckRoutes);
 app.use('/api/personnel', personnelRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/statistics', statisticsRoutes);
+app.use('/api/guest-registry', guestRegistryRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -241,12 +245,52 @@ const startServer = async () => {
             return;
         }
 
-        // Sunucuyu başlat
-        app.listen(PORT, () => {
-            console.log(`🚀 Server is running on port ${PORT}`);
-            console.log(`📝 Environment: ${process.env.NODE_ENV}`);
-            console.log(`🔗 API URL: http://localhost:${PORT}`);
-        });
+        const startListening = (port: number): Promise<number> => {
+            return new Promise((resolve, reject) => {
+                const server = app.listen(port, () => resolve(port));
+                server.once('error', (error: NodeJS.ErrnoException) => reject(error));
+            });
+        };
+
+        const candidatePorts: number[] = [PRIMARY_PORT];
+        if (FALLBACK_PORT !== PRIMARY_PORT) {
+            candidatePorts.push(FALLBACK_PORT);
+        }
+
+        let nextPort = Math.max(PRIMARY_PORT, FALLBACK_PORT) + 1;
+        while (candidatePorts.length < PORT_ATTEMPT_COUNT) {
+            candidatePorts.push(nextPort);
+            nextPort += 1;
+        }
+
+        let runningPort: number | null = null;
+        let lastError: NodeJS.ErrnoException | null = null;
+
+        for (const port of candidatePorts) {
+            try {
+                if (port !== PRIMARY_PORT) {
+                    console.warn(`⚠️ Port ${port - 1} kullanımda. Port ${port} deneniyor...`);
+                }
+
+                runningPort = await startListening(port);
+                break;
+            } catch (error) {
+                const listenError = error as NodeJS.ErrnoException;
+                lastError = listenError;
+
+                if (listenError.code !== 'EADDRINUSE') {
+                    throw error;
+                }
+            }
+        }
+
+        if (!runningPort) {
+            throw lastError || new Error('Uygun port bulunamadı');
+        }
+
+        console.log(`🚀 Server is running on port ${runningPort}`);
+        console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+        console.log(`🔗 API URL: http://localhost:${runningPort}`);
     } catch (error) {
         console.error('❌ Sunucu başlatma hatası:', error);
         process.exit(1);
