@@ -2,12 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
-import type { Dayjs } from 'dayjs';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
-import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -145,78 +143,29 @@ export default function VisitorRecords() {
         });
     }, [records, filters]);
 
-    // Check if any filter is active
-    const hasActiveFilters = useMemo(() => {
-        return filters.full_name !== '' ||
-            filters.company_name !== '' ||
-            filters.vehicle_plate !== '' ||
-            filters.visiting_person !== '' ||
-            filters.phone !== '' ||
-            filters.entry_by !== '' ||
-            filters.exit_by !== '' ||
-            filters.status !== 'all' ||
-            filters.gate !== 'all' ||
-            filters.subcontractor_worker !== 'all' ||
-            filters.for_electric_station !== 'all' ||
-            filters.entryDateStart !== '' ||
-            filters.entryDateEnd !== '' ||
-            filters.exitDateStart !== '' ||
-            filters.exitDateEnd !== '';
-    }, [filters]);
+    // Group by day for both default and filtered views (newest day first)
+    const groupedByDay = useMemo(() => {
+        const dayGroups = new Map<string, VisitorRecord[]>();
 
-    // Group records by month and day - only when no filters active
-    const groupedRecords = useMemo(() => {
-        const monthGroups: { [key: string]: { [key: string]: VisitorRecord[] } } = {};
-
-        filteredRecords.forEach(record => {
-            const date = dayjs(record.entry_date);
-            const monthKey = date.format('YYYY-MM');
-            const dayKey = date.format('YYYY-MM-DD');
-
-            if (!monthGroups[monthKey]) {
-                monthGroups[monthKey] = {};
+        filteredRecords.forEach((record) => {
+            const dayKey = dayjs(record.entry_date).format('YYYY-MM-DD');
+            if (!dayGroups.has(dayKey)) {
+                dayGroups.set(dayKey, []);
             }
-
-            if (!monthGroups[monthKey][dayKey]) {
-                monthGroups[monthKey][dayKey] = [];
-            }
-
-            monthGroups[monthKey][dayKey].push(record);
+            dayGroups.get(dayKey)!.push(record);
         });
 
-        // Sort months in descending order (newest first)
-        const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
-
-        return sortedMonths.map(monthKey => {
-            // Sort days within month in descending order (newest first)
-            const sortedDays = Object.keys(monthGroups[monthKey]).sort((a, b) => b.localeCompare(a));
-
-            const dayGroups = sortedDays.map(dayKey => ({
+        return Array.from(dayGroups.entries())
+            .sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([dayKey, items]) => ({
                 dayKey,
                 dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
-                records: monthGroups[monthKey][dayKey].sort((a, b) =>
-                    // Sort records by time in ascending order (earliest first)
-                    (a.entry_time || '').localeCompare(b.entry_time || '')
-                )
+                records: [...items].sort((a, b) => {
+                    const dateCompare = (a.entry_date || '').localeCompare(b.entry_date || '');
+                    if (dateCompare !== 0) return dateCompare;
+                    return (a.entry_time || '').localeCompare(b.entry_time || '');
+                })
             }));
-
-            return {
-                monthKey,
-                monthLabel: dayjs(monthKey + '-01').format('MMMM YYYY'),
-                dayGroups,
-                totalRecords: sortedDays.reduce((sum, dayKey) => sum + monthGroups[monthKey][dayKey].length, 0)
-            };
-        });
-    }, [filteredRecords]);
-
-    // Sorted records for filtered view (newest first)
-    const sortedFilteredRecords = useMemo(() => {
-        return [...filteredRecords].sort((a, b) => {
-            // Sort by date (newest first), then by time
-            const dateCompare = (b.entry_date || '').localeCompare(a.entry_date || '');
-            if (dateCompare !== 0) return dateCompare;
-            return (b.entry_time || '').localeCompare(a.entry_time || '');
-        });
     }, [filteredRecords]);
 
     // Clear all filters
@@ -238,60 +187,6 @@ export default function VisitorRecords() {
             exitDateStart: '',
             exitDateEnd: ''
         });
-    };
-
-    // Handle date range change for entry dates
-    const handleEntryDateChange = (dates: null | [Dayjs | null, Dayjs | null], dateStrings: [string, string]) => {
-        if (!dates || (!dates[0] && !dates[1])) {
-            // Takvim temizlendi
-            setFilters({
-                ...filters,
-                entryDateStart: '',
-                entryDateEnd: ''
-            });
-        } else if (dates[0] && dates[1]) {
-            // İki tarih de seçildi
-            setFilters({
-                ...filters,
-                entryDateStart: dates[0].format('YYYY-MM-DD'),
-                entryDateEnd: dates[1].format('YYYY-MM-DD')
-            });
-        } else if (dates[0] && !dates[1]) {
-            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-            const singleDate = dates[0].format('YYYY-MM-DD');
-            setFilters({
-                ...filters,
-                entryDateStart: singleDate,
-                entryDateEnd: singleDate
-            });
-        }
-    };
-
-    // Handle date range change for exit dates
-    const handleExitDateChange = (dates: null | [Dayjs | null, Dayjs | null], dateStrings: [string, string]) => {
-        if (!dates || (!dates[0] && !dates[1])) {
-            // Takvim temizlendi
-            setFilters({
-                ...filters,
-                exitDateStart: '',
-                exitDateEnd: ''
-            });
-        } else if (dates[0] && dates[1]) {
-            // İki tarih de seçildi
-            setFilters({
-                ...filters,
-                exitDateStart: dates[0].format('YYYY-MM-DD'),
-                exitDateEnd: dates[1].format('YYYY-MM-DD')
-            });
-        } else if (dates[0] && !dates[1]) {
-            // Sadece başlangıç tarihi seçili - tek gün olarak kullan
-            const singleDate = dates[0].format('YYYY-MM-DD');
-            setFilters({
-                ...filters,
-                exitDateStart: singleDate,
-                exitDateEnd: singleDate
-            });
-        }
     };
 
     const handleDeleteRecord = async (id: string) => {
@@ -321,14 +216,14 @@ export default function VisitorRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -337,35 +232,32 @@ export default function VisitorRecords() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-4">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/visitors')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-900">Ziyaretçi Kayıtları</h1>
-                                <p className="text-gray-600 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Ziyaretçi Kayıtları</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            Toplam: <span className="font-bold text-gray-900">{filteredRecords.length}</span> kayıt
                         </div>
                     </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
                 {/* Filters Panel */}
-                <div className="bg-white rounded-lg shadow-md p-4 mb-4">
+                <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                     <div className="flex justify-between items-center mb-3">
                         <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
                         <button
@@ -376,466 +268,317 @@ export default function VisitorRecords() {
                         </button>
                     </div>
 
-                    <div className="space-y-3">
-                        {/* First Row - Basic Filters */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                            {/* Full Name Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Ad Soyad
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.full_name}
-                                    onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Company Name Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Firma Adı
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.company_name}
-                                    onChange={(e) => setFilters({ ...filters, company_name: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Vehicle Plate Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Araç Plakası
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.vehicle_plate}
-                                    onChange={(e) => setFilters({ ...filters, vehicle_plate: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Visiting Person Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Ziyaret Edilen
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.visiting_person}
-                                    onChange={(e) => setFilters({ ...filters, visiting_person: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Status Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Durum
-                                </label>
-                                <select
-                                    value={filters.status}
-                                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="inside">İçeride</option>
-                                    <option value="exited">Çıkış Yaptı</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Kapı
-                                </label>
-                                <select
-                                    value={filters.gate}
-                                    onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="Ana Kapı">Ana Kapı</option>
-                                    <option value="Sahil Kapı">Sahil Kapı</option>
-                                </select>
-                            </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Ad Soyad</label>
+                            <input
+                                type="text"
+                                value={filters.full_name}
+                                onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
                         </div>
 
-                        {/* Second Row */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                            {/* Phone Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Telefon
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.phone}
-                                    onChange={(e) => setFilters({ ...filters, phone: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Entry By Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Giriş Kaydeden
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.entry_by}
-                                    onChange={(e) => setFilters({ ...filters, entry_by: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Exit By Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Çıkış Kaydeden
-                                </label>
-                                <input
-                                    type="text"
-                                    value={filters.exit_by}
-                                    onChange={(e) => setFilters({ ...filters, exit_by: e.target.value })}
-                                    placeholder="Ara..."
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Subcontractor Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Taşeron İşçi
-                                </label>
-                                <select
-                                    value={filters.subcontractor_worker}
-                                    onChange={(e) => setFilters({ ...filters, subcontractor_worker: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="yes">Evet</option>
-                                    <option value="no">Hayır</option>
-                                </select>
-                            </div>
-
-                            {/* Electric Station Filter */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Elektrik İstasyonu
-                                </label>
-                                <select
-                                    value={filters.for_electric_station}
-                                    onChange={(e) => setFilters({ ...filters, for_electric_station: e.target.value })}
-                                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                >
-                                    <option value="all">Tümü</option>
-                                    <option value="yes">Evet</option>
-                                    <option value="no">Hayır</option>
-                                </select>
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Firma Adı</label>
+                            <input
+                                type="text"
+                                value={filters.company_name}
+                                onChange={(e) => setFilters({ ...filters, company_name: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
                         </div>
 
-                        {/* Third Row - Date Filters */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {/* Entry Date Range */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Giriş Tarihi
-                                </label>
-                                <RangePicker
-                                    value={[
-                                        filters.entryDateStart ? dayjs(filters.entryDateStart) : null,
-                                        filters.entryDateEnd ? dayjs(filters.entryDateEnd) : null
-                                    ]}
-                                    onChange={handleEntryDateChange}
-                                    allowEmpty={[false, true]}
-                                    format="DD/MM/YYYY"
-                                    placeholder={['Başlangıç', 'Bitiş']}
-                                    className="w-full text-sm"
-                                    style={{ height: '34px' }}
-                                />
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Araç Plakası</label>
+                            <input
+                                type="text"
+                                value={filters.vehicle_plate}
+                                onChange={(e) => setFilters({ ...filters, vehicle_plate: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
 
-                            {/* Exit Date Range */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1">
-                                    Çıkış Tarihi
-                                </label>
-                                <RangePicker
-                                    value={[
-                                        filters.exitDateStart ? dayjs(filters.exitDateStart) : null,
-                                        filters.exitDateEnd ? dayjs(filters.exitDateEnd) : null
-                                    ]}
-                                    onChange={handleExitDateChange}
-                                    allowEmpty={[false, true]}
-                                    format="DD/MM/YYYY"
-                                    placeholder={['Başlangıç', 'Bitiş']}
-                                    className="w-full text-sm"
-                                    style={{ height: '34px' }}
-                                />
-                            </div>
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Ziyaret Edilen</label>
+                            <input
+                                type="text"
+                                value={filters.visiting_person}
+                                onChange={(e) => setFilters({ ...filters, visiting_person: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Durum</label>
+                            <select
+                                value={filters.status}
+                                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="inside">İçeride</option>
+                                <option value="exited">Çıkış Yaptı</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
+                            <select
+                                value={filters.gate}
+                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="Ana Kapı">Ana Kapı</option>
+                                <option value="Sahil Kapı">Sahil Kapı</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Telefon</label>
+                            <input
+                                type="text"
+                                value={filters.phone}
+                                onChange={(e) => setFilters({ ...filters, phone: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Giriş Yapan</label>
+                            <input
+                                type="text"
+                                value={filters.entry_by}
+                                onChange={(e) => setFilters({ ...filters, entry_by: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Çıkış Yapan</label>
+                            <input
+                                type="text"
+                                value={filters.exit_by}
+                                onChange={(e) => setFilters({ ...filters, exit_by: e.target.value })}
+                                placeholder="Ara..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Taşeron İşçi</label>
+                            <select
+                                value={filters.subcontractor_worker}
+                                onChange={(e) => setFilters({ ...filters, subcontractor_worker: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="yes">Evet</option>
+                                <option value="no">Hayır</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Şarj İstasyonu</label>
+                            <select
+                                value={filters.for_electric_station}
+                                onChange={(e) => setFilters({ ...filters, for_electric_station: e.target.value })}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="all">Tümü</option>
+                                <option value="yes">Evet</option>
+                                <option value="no">Hayır</option>
+                            </select>
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Giriş Tarihi</label>
+                            <RangePicker
+                                value={[
+                                    filters.entryDateStart ? dayjs(filters.entryDateStart) : null,
+                                    filters.entryDateEnd ? dayjs(filters.entryDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setFilters({
+                                            ...filters,
+                                            entryDateStart: '',
+                                            entryDateEnd: ''
+                                        });
+                                    } else if (dates[0] && dates[1]) {
+                                        setFilters({
+                                            ...filters,
+                                            entryDateStart: dates[0].format('YYYY-MM-DD'),
+                                            entryDateEnd: dates[1].format('YYYY-MM-DD')
+                                        });
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setFilters({
+                                            ...filters,
+                                            entryDateStart: singleDate,
+                                            entryDateEnd: singleDate
+                                        });
+                                    }
+                                }}
+                                allowEmpty={[false, true]}
+                                format="DD/MM/YYYY"
+                                placeholder={['Başlangıç', 'Bitiş']}
+                                className="w-full"
+                                size="small"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Çıkış Tarihi</label>
+                            <RangePicker
+                                value={[
+                                    filters.exitDateStart ? dayjs(filters.exitDateStart) : null,
+                                    filters.exitDateEnd ? dayjs(filters.exitDateEnd) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (!dates || (!dates[0] && !dates[1])) {
+                                        setFilters({
+                                            ...filters,
+                                            exitDateStart: '',
+                                            exitDateEnd: ''
+                                        });
+                                    } else if (dates[0] && dates[1]) {
+                                        setFilters({
+                                            ...filters,
+                                            exitDateStart: dates[0].format('YYYY-MM-DD'),
+                                            exitDateEnd: dates[1].format('YYYY-MM-DD')
+                                        });
+                                    } else if (dates[0] && !dates[1]) {
+                                        const singleDate = dates[0].format('YYYY-MM-DD');
+                                        setFilters({
+                                            ...filters,
+                                            exitDateStart: singleDate,
+                                            exitDateEnd: singleDate
+                                        });
+                                    }
+                                }}
+                                allowEmpty={[false, true]}
+                                format="DD/MM/YYYY"
+                                placeholder={['Başlangıç', 'Bitiş']}
+                                className="w-full"
+                                size="small"
+                                style={{ width: '100%' }}
+                            />
                         </div>
                     </div>
                 </div>
 
-                {loading ? (
-                    <div className="text-center py-8">
-                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                        <p className="mt-2 text-gray-600">Yükleniyor...</p>
-                    </div>
-                ) : filteredRecords.length === 0 ? (
-                    <div className="bg-white rounded-lg shadow p-8 text-center">
-                        <p className="text-gray-500">Kayıt bulunamadı</p>
-                    </div>
-                ) : hasActiveFilters ? (
-                    /* Flat table view when filters are active */
-                    <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
-                                    <thead className="bg-gray-50 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
-                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {sortedFilteredRecords.map((record) => (
-                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="p-2 bg-blue-100 rounded">
-                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                            </svg>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</span>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div>
-                                                        <span className="text-sm font-bold text-gray-900">{record.full_name || '-'}</span>
-                                                    </div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.company_name || '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.visiting_person || '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
-                                                    <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {record.exit_date ? (
-                                                        <>
-                                                            <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
-                                                            <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-gray-400">-</span>
-                                                    )}
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.phone || '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
-                                                    {renderPreviewText(record.notes, 'Açıklama')}
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
-                                                        {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
-                                                    </span>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.entry_by || '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{record.exit_by || '-'}</div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                    {loading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                         </div>
-                    </div>
-                ) : (
-                    /* Grouped view by month and day */
-                    <div className="bg-white rounded-lg shadow overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <div className="max-h-[600px] overflow-y-auto">
-                                {groupedRecords.map((monthGroup) => (
-                                    <div key={monthGroup.monthKey} className="mb-8 last:mb-0">
-                                        {/* Month Header */}
-                                        <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 z-10 shadow-md">
-                                            <h2 className="text-lg font-bold">{monthGroup.monthLabel}</h2>
-                                            <p className="text-sm text-blue-100">{monthGroup.totalRecords} kayıt</p>
-                                        </div>
-
-                                        {/* Day Groups */}
-                                        {monthGroup.dayGroups.map((dayGroup) => (
-                                            <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
-                                                {/* Day Header */}
-                                                <div className="sticky top-14 bg-gray-100 px-6 py-2 border-l-4 border-blue-500 z-9 shadow-sm">
-                                                    <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
-                                                    <p className="text-xs text-gray-600">{dayGroup.records.length} kayıt</p>
-                                                </div>
-
-                                                {/* Records Table */}
-                                                <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
-                                                    <thead className="bg-gray-50">
-                                                        <tr>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="bg-white divide-y divide-gray-200">
-                                                        {dayGroup.records.map((record) => (
-                                                            <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="p-2 bg-blue-100 rounded">
-                                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div>
-                                                                            <span className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div>
-                                                                        <span className="text-sm font-bold text-gray-900">{record.full_name || '-'}</span>
-                                                                    </div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.company_name || '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.visiting_person || '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.children_count ?? ''}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.gate || '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
-                                                                    <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    {record.exit_date ? (
-                                                                        <>
-                                                                            <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
-                                                                            <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
-                                                                        </>
-                                                                    ) : (
-                                                                        <span className="text-gray-400">-</span>
-                                                                    )}
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.phone || '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap w-[260px]">
-                                                                    {renderPreviewText(record.notes, 'Açıklama')}
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
-                                                                        {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
-                                                                    </span>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.entry_by || '-'}</div>
-                                                                </td>
-
-                                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                                    <div className="text-sm text-gray-900">{record.exit_by || '-'}</div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ))}
+                    ) : filteredRecords.length === 0 ? (
+                        <div className="text-center py-12">
+                            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
+                        </div>
+                    ) : (
+                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                            {groupedByDay.map((dayGroup) => (
+                                <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
+                                    <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
+                                        <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
-                                ))}
-                            </div>
+
+                                    <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
+                                        <thead className="bg-gray-50 sticky top-10 z-10">
+                                            <tr>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {dayGroup.records.map((record) => (
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm font-bold text-gray-900">{record.full_name || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.company_name || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.visiting_person || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.children_count ?? '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
+                                                        <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        {record.exit_date ? (
+                                                            <>
+                                                                <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
+                                                                <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="text-gray-400">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.phone || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {renderPreviewText(record.notes, 'Açıklama')}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <span className={`px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                                            {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.entry_by || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.exit_by || '-'}</div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </main>
 
             {textPreview && (

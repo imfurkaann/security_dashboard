@@ -132,11 +132,11 @@ const AdminStatistics = () => {
     };
 
     const StatCardComponent = ({ title, value, icon, color, change }: StatCard) => (
-        <div className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 hover:shadow-md transition-shadow`}>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
                 <div className="min-w-0">
-                    <p className="text-xs sm:text-sm text-gray-500 mb-1 break-words">{title}</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-gray-800">{value.toLocaleString('tr-TR')}</p>
+                    <p className="mb-1 break-words text-xs sm:text-sm text-slate-500">{title}</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-slate-900">{value.toLocaleString('tr-TR')}</p>
                     {change !== undefined && (
                         <div className={`flex items-center mt-2 text-xs sm:text-sm ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
@@ -144,7 +144,7 @@ const AdminStatistics = () => {
                         </div>
                     )}
                 </div>
-                <div className={`p-3 sm:p-4 rounded-xl shrink-0 ${color}`}>
+                <div className={`shrink-0 rounded-xl p-3 sm:p-4 ${color}`}>
                     {icon}
                 </div>
             </div>
@@ -353,11 +353,11 @@ const AdminStatistics = () => {
                     const pdfWidth = (colWidth - 2) * 3.78; // Convert mm to px
                     const originalWidth = element.style.width;
                     const originalDisplay = element.style.display;
-                    
+
                     // Store original styles for tables (for compact PDF rendering)
                     const tables = element.querySelectorAll('table');
                     const tableOriginalStyles: { element: HTMLElement; styles: string }[] = [];
-                    
+
                     tables.forEach(table => {
                         tableOriginalStyles.push({
                             element: table as HTMLElement,
@@ -371,11 +371,11 @@ const AdminStatistics = () => {
                             (cell as HTMLElement).style.padding = '2px';
                         });
                     });
-                    
+
                     // Temporarily set width
                     element.style.width = `${pdfWidth}px`;
                     element.style.display = 'block';
-                    
+
                     // Wait for chart to render with new dimensions
                     await new Promise(resolve => setTimeout(resolve, 200));
 
@@ -517,301 +517,821 @@ const AdminStatistics = () => {
     }
 
     return (
-        <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
-            {/* Header */}
-            <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="min-w-0">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-1 sm:mb-2 break-words">📊 İstatistikler & Grafikler</h1>
-                    <p className="text-sm sm:text-base text-gray-500">Güvenlik verilerinizin detaylı analizi</p>
-                </div>
-                {/* Export Button */}
-                <button
-                    onClick={() => {
-                        setSelectedCharts([]);
-                        setShowExportModal(true);
-                    }}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                >
-                    <Download size={20} />
-                    PDF İndir
-                </button>
-            </div>
-
-            {/* Kontroller */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
-                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                    {/* Gün Aralığı */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-gray-500">Son</span>
-                        <select
-                            value={days}
-                            onChange={(e) => setDays(Number(e.target.value))}
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Admin Paneli</p>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">İstatistikler & Grafikler</h1>
+                            <p className="text-sm sm:text-base text-slate-200 mt-1">Güvenlik verilerinin dönemsel görünümü ve kategori analizleri</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setSelectedCharts([]);
+                                setShowExportModal(true);
+                            }}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
                         >
-                            <option value={7}>7 gün</option>
-                            <option value={30}>30 gün</option>
-                            <option value={90}>3 ay</option>
-                            <option value={180}>6 ay</option>
-                            <option value={365}>1 yıl</option>
-                        </select>
+                            <Download size={20} />
+                            PDF İndir
+                        </button>
                     </div>
+                </div>
+            </header>
 
-                    {/* Yenile Butonu */}
-                    <button
-                        onClick={fetchData}
-                        disabled={loading}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                        Yenile
-                    </button>
-
-                    {/* Tab Seçimi */}
-                    <div className="w-full lg:flex-1 lg:flex lg:justify-end">
-                        <div className="w-full lg:w-auto flex flex-wrap bg-gray-100 rounded-lg p-1 gap-1">
-                            {[
-                                { key: 'overview', label: 'Genel Bakış' },
-                                { key: 'visitors', label: 'Ziyaretçiler' },
-                                { key: 'vehicles', label: 'Araçlar' },
-                                { key: 'fire-alarms', label: 'Yangın Alarmları' },
-                                { key: 'incidents', label: 'Olaylar' }
-                            ].map((tab) => (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => setActiveTab(tab.key as any)}
-                                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab.key
-                                        ? 'bg-white text-blue-600 shadow-sm'
-                                        : 'text-gray-600 hover:text-gray-800'
-                                        }`}
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap text-sm text-slate-600">
+                                <span className="font-medium text-slate-500">Son</span>
+                                <select
+                                    value={days}
+                                    onChange={(e) => setDays(Number(e.target.value))}
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
                                 >
-                                    {tab.label}
-                                </button>
-                            ))}
+                                    <option value={7}>7 gün</option>
+                                    <option value={30}>30 gün</option>
+                                    <option value={90}>3 ay</option>
+                                    <option value={180}>6 ay</option>
+                                    <option value={365}>1 yıl</option>
+                                </select>
+                            </div>
+
+                            <button
+                                onClick={fetchData}
+                                disabled={loading}
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                                Yenile
+                            </button>
+                        </div>
+
+                        <div className="xl:ml-auto w-full xl:w-auto overflow-x-auto pb-1">
+                            <div className="inline-flex min-w-full xl:min-w-0 rounded-xl border border-slate-200 bg-slate-100 p-1 gap-1">
+                                {[
+                                    { key: 'overview', label: 'Genel Bakış' },
+                                    { key: 'visitors', label: 'Ziyaretçiler' },
+                                    { key: 'vehicles', label: 'Araçlar' },
+                                    { key: 'fire-alarms', label: 'Yangın Alarmları' },
+                                    { key: 'incidents', label: 'Olaylar' }
+                                ].map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => setActiveTab(tab.key as any)}
+                                        className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${activeTab === tab.key
+                                            ? 'bg-white text-slate-900 shadow-sm'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Overview Tab */}
-            {activeTab === 'overview' && generalStats && (
-                <>
-                    {/* Dönem Bazlı Değişim Kartları */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-sm text-blue-700">📅 <strong>{getDaysLabel()}</strong> verilerini görüntülüyorsunuz</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        {/* Ziyaretçi Değişimi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="p-3 bg-blue-100 rounded-xl">
-                                    <Users size={24} className="text-blue-600" />
+                {/* Overview Tab */}
+                {activeTab === 'overview' && generalStats && (
+                    <>
+                        {/* Dönem Bazlı Değişim Kartları */}
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <p className="text-sm text-slate-600">📅 <strong className="text-slate-900">{getDaysLabel()}</strong> verilerini görüntülüyorsunuz</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            {/* Ziyaretçi Değişimi */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="p-3 bg-blue-100 rounded-xl">
+                                        <Users size={24} className="text-blue-600" />
+                                    </div>
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                        const current = parseInt(record?.[currentKey]) || 0;
+                                        const previous = parseInt(record?.[previousKey]) || 0;
+                                        const change = getChangePercent(current, previous);
+                                        return (
+                                            <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                                {change >= 0 ? '+' : ''}{change}%
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
-                                    const current = parseInt(record?.[currentKey]) || 0;
-                                    const previous = parseInt(record?.[previousKey]) || 0;
-                                    const change = getChangePercent(current, previous);
-                                    return (
-                                        <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                                            {change >= 0 ? '+' : ''}{change}%
-                                        </span>
-                                    );
-                                })()}
+                                <p className="text-2xl font-bold text-gray-800">
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                        return parseInt(record?.[currentKey]) || 0;
+                                    })()}
+                                </p>
+                                <p className="text-sm text-gray-500">{getComparisonLabel().current} Ziyaretçi</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {getComparisonLabel().previous}: {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'visitors');
+                                        return parseInt(record?.[previousKey]) || 0;
+                                    })()}
+                                </p>
                             </div>
-                            <p className="text-2xl font-bold text-gray-800">
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
-                                    return parseInt(record?.[currentKey]) || 0;
-                                })()}
-                            </p>
-                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Ziyaretçi</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'visitors');
-                                    return parseInt(record?.[previousKey]) || 0;
-                                })()}
-                            </p>
+
+                            {/* Araç Değişimi */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="p-3 bg-green-100 rounded-xl">
+                                        <Car size={24} className="text-green-600" />
+                                    </div>
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                        const current = parseInt(record?.[currentKey]) || 0;
+                                        const previous = parseInt(record?.[previousKey]) || 0;
+                                        const change = getChangePercent(current, previous);
+                                        return (
+                                            <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                                {change >= 0 ? '+' : ''}{change}%
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                                <p className="text-2xl font-bold text-gray-800">
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                        return parseInt(record?.[currentKey]) || 0;
+                                    })()}
+                                </p>
+                                <p className="text-sm text-gray-500">{getComparisonLabel().current} Araç</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {getComparisonLabel().previous}: {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
+                                        return parseInt(record?.[previousKey]) || 0;
+                                    })()}
+                                </p>
+                            </div>
+
+                            {/* Alarm Değişimi */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="p-3 bg-red-100 rounded-xl">
+                                        <Flame size={24} className="text-red-600" />
+                                    </div>
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                        const current = parseInt(record?.[currentKey]) || 0;
+                                        const previous = parseInt(record?.[previousKey]) || 0;
+                                        const change = getChangePercent(current, previous);
+                                        return (
+                                            <span className={`flex items-center text-sm font-medium ${change <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                                {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                                                {change >= 0 ? '+' : ''}{change}%
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                                <p className="text-2xl font-bold text-gray-800">
+                                    {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                        return parseInt(record?.[currentKey]) || 0;
+                                    })()}
+                                </p>
+                                <p className="text-sm text-gray-500">{getComparisonLabel().current} Alarm</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                    {getComparisonLabel().previous}: {(() => {
+                                        const comparisonType = getComparisonLabel().type;
+                                        const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                        const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
+                                        const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
+                                        return parseInt(record?.[previousKey]) || 0;
+                                    })()}
+                                </p>
+                            </div>
                         </div>
 
-                        {/* Araç Değişimi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="p-3 bg-green-100 rounded-xl">
-                                    <Car size={24} className="text-green-600" />
-                                </div>
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
-                                    const current = parseInt(record?.[currentKey]) || 0;
-                                    const previous = parseInt(record?.[previousKey]) || 0;
-                                    const change = getChangePercent(current, previous);
-                                    return (
-                                        <span className={`flex items-center text-sm font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                                            {change >= 0 ? '+' : ''}{change}%
-                                        </span>
-                                    );
-                                })()}
-                            </div>
-                            <p className="text-2xl font-bold text-gray-800">
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
-                                    return parseInt(record?.[currentKey]) || 0;
-                                })()}
-                            </p>
-                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Araç</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'vehicles');
-                                    return parseInt(record?.[previousKey]) || 0;
-                                })()}
-                            </p>
+                        {/* Dönemsel Karşılaştırma */}
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="comparison">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Dönemsel Karşılaştırma ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={(() => {
+                                    const comparisonData = days <= 14 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                    const currentKey = days <= 14 ? 'current_week' : 'current_month';
+                                    const previousKey = days <= 14 ? 'previous_week' : 'previous_month';
+
+                                    return (comparisonData || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
+                                        ...item,
+                                        current: parseInt(item[currentKey]) || 0,
+                                        previous: parseInt(item[previousKey]) || 0
+                                    }));
+                                })()}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis
+                                        dataKey="category"
+                                        tickFormatter={(v) => {
+                                            const labels: Record<string, string> = {
+                                                visitors: 'Ziyaretçi',
+                                                vehicles: 'Araç',
+                                                fire_alarms: 'Alarm'
+                                            };
+                                            return labels[v] || v;
+                                        }}
+                                    />
+                                    <YAxis />
+                                    <Tooltip content={<CustomTooltip />} />
+                                    <Legend />
+                                    <Bar dataKey="current" name={getComparisonLabel().current} fill={CHART_COLORS.warning} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="previous" name={getComparisonLabel().previous} fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
 
-                        {/* Alarm Değişimi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="p-3 bg-red-100 rounded-xl">
-                                    <Flame size={24} className="text-red-600" />
-                                </div>
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
-                                    const current = parseInt(record?.[currentKey]) || 0;
-                                    const previous = parseInt(record?.[previousKey]) || 0;
-                                    const change = getChangePercent(current, previous);
-                                    return (
-                                        <span className={`flex items-center text-sm font-medium ${change <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                            {change >= 0 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                                            {change >= 0 ? '+' : ''}{change}%
-                                        </span>
-                                    );
-                                })()}
+                        {/* Tüm Kategoriler Trendi */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            {/* Ziyaretçi Trendi */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-trend">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Ziyaretçi Trendi ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <AreaChart data={visitorTrends.trend}>
+                                        <defs>
+                                            <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
+                                        <YAxis tick={{ fontSize: 10 }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="total_persons"
+                                            name="Kişi Sayısı"
+                                            stroke={CHART_COLORS.primary}
+                                            fillOpacity={1}
+                                            fill="url(#colorVisitors)"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
                             </div>
-                            <p className="text-2xl font-bold text-gray-800">
-                                {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
-                                    return parseInt(record?.[currentKey]) || 0;
-                                })()}
-                            </p>
-                            <p className="text-sm text-gray-500">{getComparisonLabel().current} Alarm</p>
-                            <p className="text-xs text-gray-400 mt-1">
-                                {getComparisonLabel().previous}: {(() => {
-                                    const comparisonType = getComparisonLabel().type;
-                                    const comparisonArray = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                    const previousKey = comparisonType === 'weekly' ? 'previous_week' : 'previous_month';
-                                    const record = comparisonArray?.find((c: any) => c.category === 'fire_alarms');
-                                    return parseInt(record?.[previousKey]) || 0;
-                                })()}
-                            </p>
+
+                            {/* Araç Trendi */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-trend">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <AreaChart data={vehicleStats.trend}>
+                                        <defs>
+                                            <linearGradient id="colorVehiclesOverview" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
+                                                <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
+                                        <YAxis tick={{ fontSize: 10 }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="count"
+                                            name="Kullanım Sayısı"
+                                            stroke={CHART_COLORS.secondary}
+                                            fillOpacity={1}
+                                            fill="url(#colorVehiclesOverview)"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Dönemsel Karşılaştırma */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="comparison">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Dönemsel Karşılaştırma ({getDaysLabel()})</h3>
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={(() => {
-                                const comparisonData = days <= 14 ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                const currentKey = days <= 14 ? 'current_week' : 'current_month';
-                                const previousKey = days <= 14 ? 'previous_week' : 'previous_month';
+                        {/* Olay Kategori Dağılımı Pasta Grafiği */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-distribution">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Olay Kategori Dağılımı ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Hırsızlık', value: parseInt(incidentStats?.categoryStats?.theft_total) || 0 },
+                                                { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
+                                                { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
+                                                { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
+                                                { name: 'Kaza', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
+                                                { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
+                                            ].filter(item => item.value > 0)}
+                                            cx="50%"
+                                            cy="50%"
+                                            labelLine={false}
+                                            label={({ name, percent }) => (percent && percent > 0.05) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                            outerRadius={100}
+                                            dataKey="value"
+                                        >
+                                            <Cell fill="#EF4444" />
+                                            <Cell fill="#F59E0B" />
+                                            <Cell fill="#3B82F6" />
+                                            <Cell fill="#8B5CF6" />
+                                            <Cell fill="#10B981" />
+                                            <Cell fill="#EC4899" />
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
 
-                                return (comparisonData || []).filter((item: any) => ['visitors', 'vehicles', 'fire_alarms'].includes(item.category)).map((item: any) => ({
-                                    ...item,
-                                    current: parseInt(item[currentKey]) || 0,
-                                    previous: parseInt(item[previousKey]) || 0
-                                }));
-                            })()}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis
-                                    dataKey="category"
-                                    tickFormatter={(v) => {
-                                        const labels: Record<string, string> = {
-                                            visitors: 'Ziyaretçi',
-                                            vehicles: 'Araç',
-                                            fire_alarms: 'Alarm'
-                                        };
-                                        return labels[v] || v;
-                                    }}
-                                />
-                                <YAxis />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Legend />
-                                <Bar dataKey="current" name={getComparisonLabel().current} fill={CHART_COLORS.warning} radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="previous" name={getComparisonLabel().previous} fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
+                            {/* Dönem Özeti */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 {getDaysLabel()} Toplam</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                                        <p className="text-3xl font-bold text-blue-600">
+                                            {(() => {
+                                                const comparisonType = getComparisonLabel().type;
+                                                const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                                const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                                const visitorData = comparisonData?.find((c: any) => c.category === 'visitors');
+                                                return parseInt(visitorData?.[currentKey]) || 0;
+                                            })()}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">Ziyaretçi</p>
+                                    </div>
+                                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                                        <p className="text-3xl font-bold text-green-600">
+                                            {(() => {
+                                                const comparisonType = getComparisonLabel().type;
+                                                const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                                const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                                const vehicleData = comparisonData?.find((c: any) => c.category === 'vehicles');
+                                                return parseInt(vehicleData?.[currentKey]) || 0;
+                                            })()}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">Araç Kullanımı</p>
+                                    </div>
+                                    <div className="text-center p-4 bg-red-50 rounded-lg">
+                                        <p className="text-3xl font-bold text-red-600">
+                                            {(() => {
+                                                const comparisonType = getComparisonLabel().type;
+                                                const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
+                                                const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
+                                                const alarmData = comparisonData?.find((c: any) => c.category === 'fire_alarms');
+                                                return parseInt(alarmData?.[currentKey]) || 0;
+                                            })()}
+                                        </p>
+                                        <p className="text-sm text-gray-600 mt-1">Yangın Alarmı</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
-                    {/* Tüm Kategoriler Trendi */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        {/* Ziyaretçi Trendi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-trend">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Ziyaretçi Trendi ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={250}>
+                        {/* En Yoğun Günler */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Ziyaretçi En Yoğun */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="busy-days-visitor">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 Ziyaretçi - En Yoğun Günler ({getDaysLabel()})</h3>
+                                {visitorTrends.trend && visitorTrends.trend.length > 0 && (
+                                    <div className="space-y-2">
+                                        {[...visitorTrends.trend]
+                                            .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
+                                            .slice(0, 5)
+                                            .map((day: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
+                                                            }`}>
+                                                            {index + 1}
+                                                        </span>
+                                                        <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-gray-800">{parseInt(day.total_persons || 0)} kişi</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Araç En Yoğun */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="busy-days-vehicle">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç - En Yoğun Günler ({getDaysLabel()})</h3>
+                                {vehicleStats.trend && vehicleStats.trend.length > 0 && (
+                                    <div className="space-y-2">
+                                        {[...vehicleStats.trend]
+                                            .sort((a: any, b: any) => parseInt(String(b.count || 0)) - parseInt(String(a.count || 0)))
+                                            .slice(0, 5)
+                                            .map((day: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
+                                                            }`}>
+                                                            {index + 1}
+                                                        </span>
+                                                        <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-gray-800">{parseInt(day.count || 0)} araç</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Günlük Ortalamalar */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="daily-averages">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Ziyaretçi</span>
+                                        <span className="text-xl font-bold text-blue-600">
+                                            {visitorTrends.trend && visitorTrends.trend.length > 0
+                                                ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
+                                                : 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Araç</span>
+                                        <span className="text-xl font-bold text-green-600">
+                                            {vehicleStats.trend && vehicleStats.trend.length > 0
+                                                ? Math.round(vehicleStats.trend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / vehicleStats.trend.length)
+                                                : 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Alarm</span>
+                                        <span className="text-xl font-bold text-red-600">
+                                            {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0
+                                                ? (fireAlarmStats.dailyTrend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / fireAlarmStats.dailyTrend.length).toFixed(1)
+                                                : 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* Visitors Tab */}
+                {activeTab === 'visitors' && visitorTrends && (
+                    <div className="space-y-6">
+                        {/* Dönem Bilgisi Başlık */}
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <p className="text-sm font-medium text-slate-600">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+                        </div>
+
+                        {/* 1. Toplam İnsan Trafiği - Zaman Serisi */}
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-daily-trend">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={400}>
                                 <AreaChart data={visitorTrends.trend}>
                                     <defs>
-                                        <linearGradient id="colorVisitors" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
+                                        <linearGradient id="colorPersons" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.8} />
+                                            <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0.1} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
-                                    <YAxis tick={{ fontSize: 10 }} />
+                                    <XAxis dataKey="date" tickFormatter={formatDate} />
+                                    <YAxis yAxisId="left" label={{ value: 'Kayıt Sayısı', angle: -90, position: 'insideLeft' }} />
+                                    <YAxis yAxisId="right" orientation="right" label={{ value: 'Toplam Kişi', angle: 90, position: 'insideRight' }} />
                                     <Tooltip content={<CustomTooltip />} />
+                                    <Legend />
                                     <Area
+                                        yAxisId="right"
                                         type="monotone"
                                         dataKey="total_persons"
-                                        name="Kişi Sayısı"
+                                        name="Toplam Kişi Sayısı"
                                         stroke={CHART_COLORS.primary}
+                                        strokeWidth={3}
                                         fillOpacity={1}
-                                        fill="url(#colorVisitors)"
+                                        fill="url(#colorPersons)"
+                                    />
+                                    <Line
+                                        yAxisId="left"
+                                        type="monotone"
+                                        dataKey="count"
+                                        name="Kayıt Sayısı"
+                                        stroke={CHART_COLORS.secondary}
+                                        strokeWidth={2}
+                                        dot={{ fill: CHART_COLORS.secondary, r: 4 }}
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
 
-                        {/* Araç Trendi */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-trend">
+                        {/* 2. Giriş Saati Yoğunluğu - Isı Haritası */}
+                        {visitorTrends.hourlyHeatmap && visitorTrends.hourlyHeatmap.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-hourly-distribution">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Giriş Saati Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
+                                                {Array.from({ length: 24 }, (_, i) => (
+                                                    <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
+                                                const dayData = visitorTrends.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
+                                                const maxCount = Math.max(...visitorTrends.hourlyHeatmap.map((h: any) => parseInt(h.total_persons || h.visit_count || 0)), 1);
+
+                                                return (
+                                                    <tr key={dayIndex}>
+                                                        <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
+                                                        {Array.from({ length: 24 }, (_, hour) => {
+                                                            const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
+                                                            const count = hourData ? parseInt(hourData.total_persons || hourData.visit_count || 0) : 0;
+                                                            const intensity = count / maxCount;
+                                                            const bgColor = count === 0 ? '#f3f4f6' :
+                                                                intensity < 0.25 ? '#dbeafe' :
+                                                                    intensity < 0.5 ? '#93c5fd' :
+                                                                        intensity < 0.75 ? '#3b82f6' : '#1e40af';
+                                                            const textColor = intensity > 0.5 ? 'white' : 'black';
+
+                                                            return (
+                                                                <td
+                                                                    key={hour}
+                                                                    className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                                                                    style={{ backgroundColor: bgColor, color: textColor }}
+                                                                    title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} kişi`}
+                                                                >
+                                                                    {count > 0 ? count : ''}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                                    <span>Daha az</span>
+                                    <div className="flex gap-1">
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#dbeafe' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#93c5fd' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#3b82f6' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#1e40af' }}></div>
+                                    </div>
+                                    <span>Daha çok</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 3. Ortalama Ziyaret Süresi & Dağılım */}
+                        {visitorTrends.avgDuration && (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Süre İstatistikleri */}
+                                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-duration-stats">
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⏱️ Ziyaret Süresi İstatistikleri ({getDaysLabel()})</h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                                            <span className="text-gray-700">Ortalama Süre</span>
+                                            <span className="text-2xl font-bold text-blue-600">
+                                                {visitorTrends.avgDuration?.avg_hours ?
+                                                    `${Number(visitorTrends.avgDuration.avg_hours).toFixed(1)} saat` : 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
+                                            <span className="text-gray-700">En Kısa Ziyaret</span>
+                                            <span className="text-xl font-bold text-green-600">
+                                                {visitorTrends.avgDuration?.min_hours ?
+                                                    `${(Number(visitorTrends.avgDuration.min_hours) * 60).toFixed(0)} dk` : 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg">
+                                            <span className="text-gray-700">En Uzun Ziyaret</span>
+                                            <span className="text-xl font-bold text-amber-600">
+                                                {visitorTrends.avgDuration?.max_hours ?
+                                                    `${Number(visitorTrends.avgDuration.max_hours).toFixed(1)} saat` : 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
+                                            <span className="text-gray-700">Tamamlanan Ziyaret</span>
+                                            <span className="text-xl font-bold text-purple-600">
+                                                {visitorTrends.avgDuration?.completed_visits || 0}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Süre Dağılımı */}
+                                {visitorTrends.durationDistribution && visitorTrends.durationDistribution.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-duration-distribution">
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaret Süresi Dağılımı ({getDaysLabel()})</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
+                                                const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
+                                                return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
+                                            })}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis dataKey="duration_range" tick={{ fontSize: 12 }} />
+                                                <YAxis />
+                                                <Tooltip />
+                                                <Bar dataKey="count" name="Ziyaret Sayısı" fill={CHART_COLORS.purple} radius={[8, 8, 0, 0]}>
+                                                    {[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
+                                                        const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
+                                                        return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
+                                                    }).map((_: any, index: number) => (
+                                                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 5. Kime Gelindiği Bazlı Analizler */}
+                        {visitorTrends.hostDistribution && visitorTrends.hostDistribution.length > 0 && (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Host Dağılımı */}
+                                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-top-managers">
+                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Ziyaret Edilen Kişiler ({getDaysLabel()})</h3>
+                                    <ResponsiveContainer width="100%" height={350}>
+                                        <BarChart data={visitorTrends.hostDistribution} layout="vertical">
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis type="number" />
+                                            <YAxis dataKey="host" type="category" width={150} tick={{ fontSize: 11 }} />
+                                            <Tooltip />
+                                            <Bar dataKey="visit_count" name="Ziyaret Sayısı" fill={CHART_COLORS.primary} radius={[0, 8, 8, 0]}>
+                                                {visitorTrends.hostDistribution.map((_: any, index: number) => (
+                                                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Kategori Karşılaştırması */}
+                                {visitorTrends.categoryComparison && visitorTrends.categoryComparison.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-category-comparison">
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaretçi Kategori Dağılımı ({getDaysLabel()})</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={visitorTrends.categoryComparison}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis dataKey="category" />
+                                                <YAxis />
+                                                <Tooltip content={<CustomTooltip />} />
+                                                <Legend />
+                                                <Bar dataKey="count" name="Ziyaret Sayısı" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+                                                <Bar dataKey="total_persons" name="Gelen Kişi Sayısı" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+
+                                {/* Elektrik İstasyonu Ziyaretleri */}
+                                {visitorTrends.electricStationVisitors && visitorTrends.electricStationVisitors.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()})</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={visitorTrends.electricStationVisitors}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis dataKey="date" tickFormatter={formatDate} />
+                                                <YAxis />
+                                                <Tooltip content={<CustomTooltip />} />
+                                                <Legend />
+                                                <Bar dataKey="total_persons" name="Kişi Sayısı" fill={CHART_COLORS.warning} radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+
+                                {/* Taşeron İşçi Ziyaretleri */}
+                                {visitorTrends.subcontractorVisitors && visitorTrends.subcontractorVisitors.length > 0 && (
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri ({getDaysLabel()})</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={visitorTrends.subcontractorVisitors}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                <XAxis dataKey="date" tickFormatter={formatDate} />
+                                                <YAxis />
+                                                <Tooltip content={<CustomTooltip />} />
+                                                <Legend />
+                                                <Bar dataKey="total_persons" name="Kişi Sayısı" fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Özet Kartlar */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Günlük Ort. Kayıt</span>
+                                        <span className="text-xl font-bold text-blue-600">
+                                            {visitorTrends.trend && visitorTrends.trend.length > 0
+                                                ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) / visitorTrends.trend.length)
+                                                : 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Günlük Ort. Kişi</span>
+                                        <span className="text-xl font-bold text-green-600">
+                                            {visitorTrends.trend && visitorTrends.trend.length > 0
+                                                ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
+                                                : 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-total-stats">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Toplam İstatistikler ({getDaysLabel()})</h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Toplam Kayıt</span>
+                                        <span className="text-xl font-bold text-purple-600">
+                                            {visitorTrends.trend ? visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) : 0}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <span className="text-gray-600 text-sm">Toplam Kişi</span>
+                                        <span className="text-xl font-bold text-indigo-600">
+                                            {visitorTrends.trend ? visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) : 0}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="visitor-busy-days">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Yoğun Gün ({getDaysLabel()})</h3>
+                                {visitorTrends.trend && visitorTrends.trend.length > 0 && (
+                                    <div className="space-y-2">
+                                        {[...visitorTrends.trend]
+                                            .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
+                                            .slice(0, 3)
+                                            .map((day: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-amber-600'
+                                                            }`}>
+                                                            {index + 1}
+                                                        </span>
+                                                        <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-gray-800">{day.total_persons} kişi</span>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Vehicles Tab */}
+                {activeTab === 'vehicles' && vehicleStats && (
+                    <div className="space-y-6">
+                        {/* Dönem Bilgisi Başlık */}
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <p className="text-sm font-medium text-slate-600">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+                        </div>
+
+                        {/* Araç Kullanım Trendi */}
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-daily-trend">
                             <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={250}>
+                            <ResponsiveContainer width="100%" height={350}>
                                 <AreaChart data={vehicleStats.trend}>
                                     <defs>
-                                        <linearGradient id="colorVehiclesOverview" x1="0" y1="0" x2="0" y2="1">
+                                        <linearGradient id="colorVehicles" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
                                             <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} tick={{ fontSize: 10 }} />
-                                    <YAxis tick={{ fontSize: 10 }} />
+                                    <XAxis dataKey="date" tickFormatter={formatDate} />
+                                    <YAxis />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Area
                                         type="monotone"
@@ -819,18 +1339,409 @@ const AdminStatistics = () => {
                                         name="Kullanım Sayısı"
                                         stroke={CHART_COLORS.secondary}
                                         fillOpacity={1}
-                                        fill="url(#colorVehiclesOverview)"
+                                        fill="url(#colorVehicles)"
                                     />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
-                    </div>
 
-                    {/* Olay Kategori Dağılımı Pasta Grafiği */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-distribution">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Olay Kategori Dağılımı ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* En Çok Kullanılan Araçlar */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-top-vehicles">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Çok Kullanılan Araçlar ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={vehicleStats.topVehicles} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="number" />
+                                        <YAxis
+                                            dataKey="plate"
+                                            type="category"
+                                            width={100}
+                                            tick={{ fontSize: 12 }}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="usage_count" name="Kullanım" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]}>
+                                            {vehicleStats.topVehicles.map((_: any, index: number) => (
+                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+
+                            {/* En Çok Araç Alan Yöneticiler */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-top-managers">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Araç Alan Yöneticiler ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={vehicleStats.topManagers} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="number" />
+                                        <YAxis
+                                            dataKey="manager_name"
+                                            type="category"
+                                            width={120}
+                                            tick={{ fontSize: 11 }}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="usage_count" name="Kullanım" fill={CHART_COLORS.warning} radius={[0, 4, 4, 0]}>
+                                            {vehicleStats.topManagers.map((_: any, index: number) => (
+                                                <Cell key={index} fill={COLORS[(index + 3) % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* En Çok Gidilen Lokasyonlar */}
+                        {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-top-destinations">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Gidilen Yerler ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={vehicleStats.topDestinations} layout="horizontal">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="category" dataKey="destination" angle={-45} textAnchor="end" height={100} tick={{ fontSize: 10 }} />
+                                        <YAxis type="number" />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Sefer Sayısı" fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]}>
+                                            {vehicleStats.topDestinations.map((_: any, index: number) => (
+                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+
+                        {/* Gün x Saat Isı Haritası */}
+                        {vehicleStats.hourlyHeatmap && vehicleStats.hourlyHeatmap.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-hourly-heatmap">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Araç Kullanım Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full border-collapse">
+                                        <thead>
+                                            <tr>
+                                                <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
+                                                {Array.from({ length: 24 }, (_, i) => (
+                                                    <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
+                                                const dayData = vehicleStats.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
+                                                const maxCount = Math.max(...vehicleStats.hourlyHeatmap.map((h: any) => parseInt(h.count || 0)), 1);
+
+                                                return (
+                                                    <tr key={dayIndex}>
+                                                        <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
+                                                        {Array.from({ length: 24 }, (_, hour) => {
+                                                            const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
+                                                            const count = hourData ? parseInt(hourData.count || 0) : 0;
+                                                            const intensity = count / maxCount;
+                                                            const bgColor = count === 0 ? '#f3f4f6' :
+                                                                intensity < 0.25 ? '#d1fae5' :
+                                                                    intensity < 0.5 ? '#6ee7b7' :
+                                                                        intensity < 0.75 ? '#10b981' : '#047857';
+                                                            const textColor = intensity > 0.5 ? 'white' : 'black';
+
+                                                            return (
+                                                                <td
+                                                                    key={hour}
+                                                                    className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                                                                    style={{ backgroundColor: bgColor, color: textColor }}
+                                                                    title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} araç`}
+                                                                >
+                                                                    {count > 0 ? count : ''}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                                    <span>Daha az</span>
+                                    <div className="flex gap-1">
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#d1fae5' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#6ee7b7' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#10b981' }}></div>
+                                        <div className="w-4 h-4 border" style={{ backgroundColor: '#047857' }}></div>
+                                    </div>
+                                    <span>Daha çok</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Kelime Bulutu - En Çok Gidilen Yerler */}
+                        {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="vehicle-destinations-cloud">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Hedef Lokasyonlar ({getDaysLabel()})</h3>
+                                <div className="w-full flex justify-center overflow-auto">
+                                    <div className="w-full" style={{ minWidth: '100%', maxWidth: '100%' }}>
+                                        <WordCloud
+                                            data={vehicleStats.topDestinations.map((item: any) => ({
+                                                text: item.destination,
+                                                value: item.count
+                                            }))}
+                                            width={getWordCloudWidth()}
+                                            height={300}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+
+                    </div>
+                )}
+
+                {/* Managers Tab */}
+                {/* Fire Alarms Tab */}
+                {activeTab === 'fire-alarms' && (
+                    <div className="space-y-6">
+                        {/* Dönem Bilgisi Başlık */}
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <p className="text-sm font-medium text-slate-600">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+                        </div>
+
+                        {/* Özet Kartlar */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-gray-600 text-sm">Toplam Alarm ({getDaysLabel()})</p>
+                                        <p className="text-3xl font-bold text-red-600 mt-2">
+                                            {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0}
+                                        </p>
+                                    </div>
+                                    <Flame size={32} className="text-red-500" />
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-gray-600 text-sm">Gerçek Alarm ({getDaysLabel()})</p>
+                                        <p className="text-3xl font-bold text-orange-600 mt-2">
+                                            {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0}
+                                        </p>
+                                    </div>
+                                    <Flame size={32} className="text-orange-500" />
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-gray-600 text-sm">Yanlış Alarm ({getDaysLabel()})</p>
+                                        <p className="text-3xl font-bold text-green-600 mt-2">
+                                            {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.false_alarms || 0), 0) || 0}
+                                        </p>
+                                    </div>
+                                    <Flame size={32} className="text-green-500" />
+                                </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-gray-600 text-sm">Doğruluk Oranı ({getDaysLabel()})</p>
+                                        <p className="text-3xl font-bold text-blue-600 mt-2">
+                                            {(() => {
+                                                const total = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0;
+                                                const real = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0;
+                                                return total > 0 ? `${((real / total) * 100).toFixed(0)}%` : '0%';
+                                            })()}
+                                        </p>
+                                    </div>
+                                    <TrendingUp size={32} className="text-blue-500" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Günlük Alarm Sayısı - Bar Chart */}
+                        {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="fire-alarm-daily-trend">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Alarm Sayısı ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={fireAlarmStats.dailyTrend}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="date" tickFormatter={formatDate} />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Toplam Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+
+                        {/* Saatlik Alarm Çalma Trendi */}
+                        {fireAlarmStats.hourlyTrend && fireAlarmStats.hourlyTrend.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="fire-alarm-hourly-trend">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🕔 Saatlik Alarm Çalma Trendi ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={fireAlarmStats.hourlyTrend.map((item: any) => ({
+                                        ...item,
+                                        total: (parseInt(item.real_alarms || 0) + parseInt(item.false_alarms || 0))
+                                    }))}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="hour"
+                                            tickFormatter={(hour) => `${hour}:00`}
+                                        />
+                                        <YAxis />
+                                        <Tooltip
+                                            content={<CustomTooltip />}
+                                            labelFormatter={(hour) => `Saat: ${hour}:00`}
+                                        />
+                                        <Bar dataKey="total" name="Toplam Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+
+                        {/* Lokasyon Kelime Bulutu */}
+                        {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="fire-alarm-locations-cloud">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Alarm Lokasyonları ({getDaysLabel()})</h3>
+                                <div className="w-full flex justify-center overflow-auto">
+                                    <div className="w-full" style={{ minWidth: '100%', maxWidth: '100%' }}>
+                                        <WordCloud
+                                            data={fireAlarmStats.locationDistribution.map((item: any) => ({
+                                                text: item.location,
+                                                value: item.count
+                                            }))}
+                                            width={getWordCloudWidth()}
+                                            height={300}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Lokasyon Bar Chart */}
+                        {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="fire-alarm-locations-chart">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Alarm Olan Lokasyonlar ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart data={fireAlarmStats.locationDistribution.slice(0, 10)} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="number" />
+                                        <YAxis dataKey="location" type="category" width={150} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Alarm Sayısı" fill={CHART_COLORS.danger} radius={[0, 4, 4, 0]}>
+                                            {fireAlarmStats.locationDistribution.slice(0, 10).map((_: any, index: number) => (
+                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        )}
+
+                    </div>
+                )}
+
+                {/* Incidents Tab */}
+                {activeTab === 'incidents' && (
+                    <div className="space-y-6">
+                        {/* Dönem Bilgisi Başlık */}
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                            <p className="text-sm font-medium text-slate-600">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+                        </div>
+
+                        {/* Kategori İstatistikleri - Ana Kartlar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-red-100 rounded-lg">
+                                        <span className="text-2xl">🚨</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Hırsızlık</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.theft_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-orange-100 rounded-lg">
+                                        <span className="text-2xl">👊</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Saldırı/Kavga</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.assault_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-yellow-100 rounded-lg">
+                                        <span className="text-2xl">⚕️</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Tıbbi Acil</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.medical_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-purple-100 rounded-lg">
+                                        <span className="text-2xl">🔨</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Vandalizm</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.vandalism_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-blue-100 rounded-lg">
+                                        <span className="text-2xl">🚑</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Kaza</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.accident_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-pink-100 rounded-lg">
+                                        <span className="text-2xl">💊</span>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Madde Kullanımı</p>
+                                        <p className="text-2xl font-bold text-gray-900">
+                                            {parseInt(incidentStats?.categoryStats?.substance_total) || 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Ana Kategori Dağılımı - Pasta Grafiği */}
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-category-distribution">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Kategori Bazlı Olay Dağılımı ({getDaysLabel()})</h3>
+                            <ResponsiveContainer width="100%" height={400}>
                                 <PieChart>
                                     <Pie
                                         data={[
@@ -838,14 +1749,14 @@ const AdminStatistics = () => {
                                             { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
                                             { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
                                             { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
-                                            { name: 'Kaza', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
+                                            { name: 'Kaza/Yaralanma', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
                                             { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
-                                        ].filter(item => item.value > 0)}
+                                        ]}
                                         cx="50%"
                                         cy="50%"
                                         labelLine={false}
-                                        label={({ name, percent }) => (percent && percent > 0.05) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                                        outerRadius={100}
+                                        label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        outerRadius={120}
                                         dataKey="value"
                                     >
                                         <Cell fill="#EF4444" />
@@ -861,1201 +1772,293 @@ const AdminStatistics = () => {
                             </ResponsiveContainer>
                         </div>
 
-                        {/* Dönem Özeti */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📅 {getDaysLabel()} Toplam</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                                    <p className="text-3xl font-bold text-blue-600">
-                                        {(() => {
-                                            const comparisonType = getComparisonLabel().type;
-                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                            const visitorData = comparisonData?.find((c: any) => c.category === 'visitors');
-                                            return parseInt(visitorData?.[currentKey]) || 0;
-                                        })()}
-                                    </p>
-                                    <p className="text-sm text-gray-600 mt-1">Ziyaretçi</p>
-                                </div>
-                                <div className="text-center p-4 bg-green-50 rounded-lg">
-                                    <p className="text-3xl font-bold text-green-600">
-                                        {(() => {
-                                            const comparisonType = getComparisonLabel().type;
-                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                            const vehicleData = comparisonData?.find((c: any) => c.category === 'vehicles');
-                                            return parseInt(vehicleData?.[currentKey]) || 0;
-                                        })()}
-                                    </p>
-                                    <p className="text-sm text-gray-600 mt-1">Araç Kullanımı</p>
-                                </div>
-                                <div className="text-center p-4 bg-red-50 rounded-lg">
-                                    <p className="text-3xl font-bold text-red-600">
-                                        {(() => {
-                                            const comparisonType = getComparisonLabel().type;
-                                            const comparisonData = comparisonType === 'weekly' ? comparison?.weeklyComparison : comparison?.monthlyComparison;
-                                            const currentKey = comparisonType === 'weekly' ? 'current_week' : 'current_month';
-                                            const alarmData = comparisonData?.find((c: any) => c.category === 'fire_alarms');
-                                            return parseInt(alarmData?.[currentKey]) || 0;
-                                        })()}
-                                    </p>
-                                    <p className="text-sm text-gray-600 mt-1">Yangın Alarmı</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* En Yoğun Günler */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Ziyaretçi En Yoğun */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="busy-days-visitor">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 Ziyaretçi - En Yoğun Günler ({getDaysLabel()})</h3>
-                            {visitorTrends.trend && visitorTrends.trend.length > 0 && (
-                                <div className="space-y-2">
-                                    {[...visitorTrends.trend]
-                                        .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
-                                        .slice(0, 5)
-                                        .map((day: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
-                                                        }`}>
-                                                        {index + 1}
-                                                    </span>
-                                                    <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
-                                                </div>
-                                                <span className="text-sm font-bold text-gray-800">{parseInt(day.total_persons || 0)} kişi</span>
-                                            </div>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Araç En Yoğun */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="busy-days-vehicle">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç - En Yoğun Günler ({getDaysLabel()})</h3>
-                            {vehicleStats.trend && vehicleStats.trend.length > 0 && (
-                                <div className="space-y-2">
-                                    {[...vehicleStats.trend]
-                                        .sort((a: any, b: any) => parseInt(String(b.count || 0)) - parseInt(String(a.count || 0)))
-                                        .slice(0, 5)
-                                        .map((day: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-600' : 'bg-gray-300'
-                                                        }`}>
-                                                        {index + 1}
-                                                    </span>
-                                                    <span className="text-sm text-gray-700 truncate">{formatDate(day.date)}</span>
-                                                </div>
-                                                <span className="text-sm font-bold text-gray-800">{parseInt(day.count || 0)} araç</span>
-                                            </div>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Günlük Ortalamalar */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="daily-averages">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Ziyaretçi</span>
-                                    <span className="text-xl font-bold text-blue-600">
-                                        {visitorTrends.trend && visitorTrends.trend.length > 0
-                                            ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
-                                            : 0}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Araç</span>
-                                    <span className="text-xl font-bold text-green-600">
-                                        {vehicleStats.trend && vehicleStats.trend.length > 0
-                                            ? Math.round(vehicleStats.trend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / vehicleStats.trend.length)
-                                            : 0}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Alarm</span>
-                                    <span className="text-xl font-bold text-red-600">
-                                        {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0
-                                            ? (fireAlarmStats.dailyTrend.reduce((a: number, b: any) => a + parseInt(String(b.count || 0)), 0) / fireAlarmStats.dailyTrend.length).toFixed(1)
-                                            : 0}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {/* Visitors Tab */}
-            {activeTab === 'visitors' && visitorTrends && (
-                <div className="space-y-6">
-                    {/* Dönem Bilgisi Başlık */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
-                    </div>
-
-                    {/* 1. Toplam İnsan Trafiği - Zaman Serisi */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-daily-trend">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Toplam İnsan Trafiği ({getDaysLabel()})</h3>
-                        <ResponsiveContainer width="100%" height={400}>
-                            <AreaChart data={visitorTrends.trend}>
-                                <defs>
-                                    <linearGradient id="colorPersons" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.8} />
-                                        <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0.1} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis dataKey="date" tickFormatter={formatDate} />
-                                <YAxis yAxisId="left" label={{ value: 'Kayıt Sayısı', angle: -90, position: 'insideLeft' }} />
-                                <YAxis yAxisId="right" orientation="right" label={{ value: 'Toplam Kişi', angle: 90, position: 'insideRight' }} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Legend />
-                                <Area
-                                    yAxisId="right"
-                                    type="monotone"
-                                    dataKey="total_persons"
-                                    name="Toplam Kişi Sayısı"
-                                    stroke={CHART_COLORS.primary}
-                                    strokeWidth={3}
-                                    fillOpacity={1}
-                                    fill="url(#colorPersons)"
-                                />
-                                <Line
-                                    yAxisId="left"
-                                    type="monotone"
-                                    dataKey="count"
-                                    name="Kayıt Sayısı"
-                                    stroke={CHART_COLORS.secondary}
-                                    strokeWidth={2}
-                                    dot={{ fill: CHART_COLORS.secondary, r: 4 }}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    {/* 2. Giriş Saati Yoğunluğu - Isı Haritası */}
-                    {visitorTrends.hourlyHeatmap && visitorTrends.hourlyHeatmap.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-hourly-distribution">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Giriş Saati Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full border-collapse">
-                                    <thead>
-                                        <tr>
-                                            <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
-                                            {Array.from({ length: 24 }, (_, i) => (
-                                                <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
-                                            const dayData = visitorTrends.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
-                                            const maxCount = Math.max(...visitorTrends.hourlyHeatmap.map((h: any) => parseInt(h.total_persons || h.visit_count || 0)), 1);
-
-                                            return (
-                                                <tr key={dayIndex}>
-                                                    <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
-                                                    {Array.from({ length: 24 }, (_, hour) => {
-                                                        const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
-                                                        const count = hourData ? parseInt(hourData.total_persons || hourData.visit_count || 0) : 0;
-                                                        const intensity = count / maxCount;
-                                                        const bgColor = count === 0 ? '#f3f4f6' :
-                                                            intensity < 0.25 ? '#dbeafe' :
-                                                                intensity < 0.5 ? '#93c5fd' :
-                                                                    intensity < 0.75 ? '#3b82f6' : '#1e40af';
-                                                        const textColor = intensity > 0.5 ? 'white' : 'black';
-
-                                                        return (
-                                                            <td
-                                                                key={hour}
-                                                                className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                                                                style={{ backgroundColor: bgColor, color: textColor }}
-                                                                title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} kişi`}
-                                                            >
-                                                                {count > 0 ? count : ''}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-                                <span>Daha az</span>
-                                <div className="flex gap-1">
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#dbeafe' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#93c5fd' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#3b82f6' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#1e40af' }}></div>
-                                </div>
-                                <span>Daha çok</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 3. Ortalama Ziyaret Süresi & Dağılım */}
-                    {visitorTrends.avgDuration && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Süre İstatistikleri */}
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-duration-stats">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-4">⏱️ Ziyaret Süresi İstatistikleri ({getDaysLabel()})</h3>
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                                        <span className="text-gray-700">Ortalama Süre</span>
-                                        <span className="text-2xl font-bold text-blue-600">
-                                            {visitorTrends.avgDuration?.avg_hours ?
-                                                `${Number(visitorTrends.avgDuration.avg_hours).toFixed(1)} saat` : 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-                                        <span className="text-gray-700">En Kısa Ziyaret</span>
-                                        <span className="text-xl font-bold text-green-600">
-                                            {visitorTrends.avgDuration?.min_hours ?
-                                                `${(Number(visitorTrends.avgDuration.min_hours) * 60).toFixed(0)} dk` : 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg">
-                                        <span className="text-gray-700">En Uzun Ziyaret</span>
-                                        <span className="text-xl font-bold text-amber-600">
-                                            {visitorTrends.avgDuration?.max_hours ?
-                                                `${Number(visitorTrends.avgDuration.max_hours).toFixed(1)} saat` : 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg">
-                                        <span className="text-gray-700">Tamamlanan Ziyaret</span>
-                                        <span className="text-xl font-bold text-purple-600">
-                                            {visitorTrends.avgDuration?.completed_visits || 0}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Süre Dağılımı */}
-                            {visitorTrends.durationDistribution && visitorTrends.durationDistribution.length > 0 && (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-duration-distribution">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaret Süresi Dağılımı ({getDaysLabel()})</h3>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
-                                            const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
-                                            return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
-                                        })}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="duration_range" tick={{ fontSize: 12 }} />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <Bar dataKey="count" name="Ziyaret Sayısı" fill={CHART_COLORS.purple} radius={[8, 8, 0, 0]}>
-                                                {[...visitorTrends.durationDistribution].sort((a: any, b: any) => {
-                                                    const order = ['0-1 saat', '1-2 saat', '2-4 saat', '4-8 saat', '8+ saat'];
-                                                    return order.indexOf(a.duration_range) - order.indexOf(b.duration_range);
-                                                }).map((_: any, index: number) => (
-                                                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* 5. Kime Gelindiği Bazlı Analizler */}
-                    {visitorTrends.hostDistribution && visitorTrends.hostDistribution.length > 0 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Host Dağılımı */}
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-top-managers">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Ziyaret Edilen Kişiler ({getDaysLabel()})</h3>
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart data={visitorTrends.hostDistribution} layout="vertical">
+                            {/* Hırsızlık Detayı */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-theft">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Hırsızlık Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={[
+                                        { name: 'Misafir Eşyası', count: parseInt(incidentStats?.categoryStats?.theft_guest_property) || 0 },
+                                        { name: 'Otel Mülkiyeti', count: parseInt(incidentStats?.categoryStats?.theft_hotel_property) || 0 },
+                                        { name: 'Personel Hırsızlığı', count: parseInt(incidentStats?.categoryStats?.theft_personnel) || 0 }
+                                    ]}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                        <XAxis type="number" />
-                                        <YAxis dataKey="host" type="category" width={150} tick={{ fontSize: 11 }} />
-                                        <Tooltip />
-                                        <Bar dataKey="visit_count" name="Ziyaret Sayısı" fill={CHART_COLORS.primary} radius={[0, 8, 8, 0]}>
-                                            {visitorTrends.hostDistribution.map((_: any, index: number) => (
-                                                <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Bar>
+                                        <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay Sayısı" fill="#EF4444" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
 
-                            {/* Kategori Karşılaştırması */}
-                            {visitorTrends.categoryComparison && visitorTrends.categoryComparison.length > 0 && (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-category-comparison">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Ziyaretçi Kategori Dağılımı ({getDaysLabel()})</h3>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={visitorTrends.categoryComparison}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="category" />
-                                            <YAxis />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Legend />
-                                            <Bar dataKey="count" name="Ziyaret Sayısı" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
-                                            <Bar dataKey="total_persons" name="Gelen Kişi Sayısı" fill={CHART_COLORS.secondary} radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            )}
-
-                            {/* Elektrik İstasyonu Ziyaretleri */}
-                            {visitorTrends.electricStationVisitors && visitorTrends.electricStationVisitors.length > 0 && (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()})</h3>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={visitorTrends.electricStationVisitors}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="date" tickFormatter={formatDate} />
-                                            <YAxis />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Legend />
-                                            <Bar dataKey="total_persons" name="Kişi Sayısı" fill={CHART_COLORS.warning} radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            )}
-
-                            {/* Taşeron İşçi Ziyaretleri */}
-                            {visitorTrends.subcontractorVisitors && visitorTrends.subcontractorVisitors.length > 0 && (
-                                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👷 Taşeron İşçi Ziyaretleri ({getDaysLabel()})</h3>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <BarChart data={visitorTrends.subcontractorVisitors}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="date" tickFormatter={formatDate} />
-                                            <YAxis />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Legend />
-                                            <Bar dataKey="total_persons" name="Kişi Sayısı" fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Özet Kartlar */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Günlük Ortalamalar ({getDaysLabel()})</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Günlük Ort. Kayıt</span>
-                                    <span className="text-xl font-bold text-blue-600">
-                                        {visitorTrends.trend && visitorTrends.trend.length > 0
-                                            ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) / visitorTrends.trend.length)
-                                            : 0}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Günlük Ort. Kişi</span>
-                                    <span className="text-xl font-bold text-green-600">
-                                        {visitorTrends.trend && visitorTrends.trend.length > 0
-                                            ? Math.round(visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) / visitorTrends.trend.length)
-                                            : 0}
-                                    </span>
-                                </div>
+                            {/* Saldırı/Kavga Detayı */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-assault">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">👊 Saldırı & Kavga Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={[
+                                        { name: 'Fiziksel Saldırı', count: parseInt(incidentStats?.categoryStats?.assault_physical) || 0 },
+                                        { name: 'Sözlü Taciz', count: parseInt(incidentStats?.categoryStats?.assault_verbal) || 0 },
+                                        { name: 'Toplu Kavga', count: parseInt(incidentStats?.categoryStats?.assault_mass_fight) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay Sayısı" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
-                        </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-total-stats">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Toplam İstatistikler ({getDaysLabel()})</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Toplam Kayıt</span>
-                                    <span className="text-xl font-bold text-purple-600">
-                                        {visitorTrends.trend ? visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.count)), 0) : 0}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <span className="text-gray-600 text-sm">Toplam Kişi</span>
-                                    <span className="text-xl font-bold text-indigo-600">
-                                        {visitorTrends.trend ? visitorTrends.trend.reduce((a: number, b: any) => a + parseInt(String(b.total_persons || 0)), 0) : 0}
-                                    </span>
-                                </div>
+                            {/* Tıbbi Acil Detayı */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-medical">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">⚕️ Tıbbi Acil Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Ciddi Tıbbi Durum', value: parseInt(incidentStats?.categoryStats?.medical_serious) || 0 },
+                                                { name: 'İlk Yardım', value: parseInt(incidentStats?.categoryStats?.medical_first_aid) || 0 },
+                                                { name: 'Ambulans Çağrısı', value: parseInt(incidentStats?.categoryStats?.medical_ambulance) || 0 }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={100}
+                                            dataKey="value"
+                                            labelLine={false}
+                                            label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        >
+                                            <Cell fill="#3B82F6" />
+                                            <Cell fill="#10B981" />
+                                            <Cell fill="#F59E0B" />
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
                             </div>
-                        </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="visitor-busy-days">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Yoğun Gün ({getDaysLabel()})</h3>
-                            {visitorTrends.trend && visitorTrends.trend.length > 0 && (
-                                <div className="space-y-2">
-                                    {[...visitorTrends.trend]
-                                        .sort((a: any, b: any) => parseInt(String(b.total_persons || 0)) - parseInt(String(a.total_persons || 0)))
-                                        .slice(0, 3)
-                                        .map((day: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-amber-600'
-                                                        }`}>
-                                                        {index + 1}
-                                                    </span>
-                                                    <span className="text-sm text-gray-700">{formatDate(day.date)}</span>
-                                                </div>
-                                                <span className="text-sm font-bold text-gray-800">{day.total_persons} kişi</span>
-                                            </div>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Vehicles Tab */}
-            {activeTab === 'vehicles' && vehicleStats && (
-                <div className="space-y-6">
-                    {/* Dönem Bilgisi Başlık */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
-                    </div>
-
-                    {/* Araç Kullanım Trendi */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-daily-trend">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">🚗 Araç Kullanım Trendi ({getDaysLabel()})</h3>
-                        <ResponsiveContainer width="100%" height={350}>
-                            <AreaChart data={vehicleStats.trend}>
-                                <defs>
-                                    <linearGradient id="colorVehicles" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                <XAxis dataKey="date" tickFormatter={formatDate} />
-                                <YAxis />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Area
-                                    type="monotone"
-                                    dataKey="count"
-                                    name="Kullanım Sayısı"
-                                    stroke={CHART_COLORS.secondary}
-                                    fillOpacity={1}
-                                    fill="url(#colorVehicles)"
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* En Çok Kullanılan Araçlar */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-top-vehicles">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🏆 En Çok Kullanılan Araçlar ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={vehicleStats.topVehicles} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis type="number" />
-                                    <YAxis
-                                        dataKey="plate"
-                                        type="category"
-                                        width={100}
-                                        tick={{ fontSize: 12 }}
-                                    />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="usage_count" name="Kullanım" fill={CHART_COLORS.primary} radius={[0, 4, 4, 0]}>
-                                        {vehicleStats.topVehicles.map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* En Çok Araç Alan Yöneticiler */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-top-managers">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👤 En Çok Araç Alan Yöneticiler ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={vehicleStats.topManagers} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis type="number" />
-                                    <YAxis
-                                        dataKey="manager_name"
-                                        type="category"
-                                        width={120}
-                                        tick={{ fontSize: 11 }}
-                                    />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="usage_count" name="Kullanım" fill={CHART_COLORS.warning} radius={[0, 4, 4, 0]}>
-                                        {vehicleStats.topManagers.map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[(index + 3) % COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* En Çok Gidilen Lokasyonlar */}
-                    {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-top-destinations">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Gidilen Yerler ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={vehicleStats.topDestinations} layout="horizontal">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis type="category" dataKey="destination" angle={-45} textAnchor="end" height={100} tick={{ fontSize: 10 }} />
-                                    <YAxis type="number" />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Sefer Sayısı" fill={CHART_COLORS.purple} radius={[4, 4, 0, 0]}>
-                                        {vehicleStats.topDestinations.map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-
-                    {/* Gün x Saat Isı Haritası */}
-                    {vehicleStats.hourlyHeatmap && vehicleStats.hourlyHeatmap.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-hourly-heatmap">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔥 Araç Kullanım Yoğunluğu ({getDaysLabel()} - Gün x Saat)</h3>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full border-collapse">
-                                    <thead>
-                                        <tr>
-                                            <th className="border border-gray-300 px-2 sm:px-4 py-2 bg-gray-50 text-xs sm:text-sm">Gün \\ Saat</th>
-                                            {Array.from({ length: 24 }, (_, i) => (
-                                                <th key={i} className="border border-gray-300 px-1.5 sm:px-2 py-2 bg-gray-50 text-[10px] sm:text-xs">{String(i).padStart(2, '0')}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'].map((day, dayIndex) => {
-                                            const dayData = vehicleStats.hourlyHeatmap.filter((h: any) => parseInt(h.day_of_week) === dayIndex);
-                                            const maxCount = Math.max(...vehicleStats.hourlyHeatmap.map((h: any) => parseInt(h.count || 0)), 1);
-
-                                            return (
-                                                <tr key={dayIndex}>
-                                                    <td className="border border-gray-300 px-2 sm:px-4 py-2 font-medium bg-gray-50 text-xs sm:text-sm whitespace-nowrap">{day}</td>
-                                                    {Array.from({ length: 24 }, (_, hour) => {
-                                                        const hourData = dayData.find((h: any) => parseInt(h.hour) === hour);
-                                                        const count = hourData ? parseInt(hourData.count || 0) : 0;
-                                                        const intensity = count / maxCount;
-                                                        const bgColor = count === 0 ? '#f3f4f6' :
-                                                            intensity < 0.25 ? '#d1fae5' :
-                                                                intensity < 0.5 ? '#6ee7b7' :
-                                                                    intensity < 0.75 ? '#10b981' : '#047857';
-                                                        const textColor = intensity > 0.5 ? 'white' : 'black';
-
-                                                        return (
-                                                            <td
-                                                                key={hour}
-                                                                className="border border-gray-300 px-2 py-2 text-center text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                                                                style={{ backgroundColor: bgColor, color: textColor }}
-                                                                title={`${day} ${String(hour).padStart(2, '0')}:00 - ${count} araç`}
-                                                            >
-                                                                {count > 0 ? count : ''}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                            {/* Vandalizm Kategorileri */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-vandalism">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🔨 Vandalizm & Hasar Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={[
+                                        { name: 'Oda Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_room) || 0 },
+                                        { name: 'Ortak Alan Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="name" />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay Sayısı" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
-                            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-                                <span>Daha az</span>
-                                <div className="flex gap-1">
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#f3f4f6' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#d1fae5' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#6ee7b7' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#10b981' }}></div>
-                                    <div className="w-4 h-4 border" style={{ backgroundColor: '#047857' }}></div>
-                                </div>
-                                <span>Daha çok</span>
+
+                            {/* Madde Kullanımı Kategorileri */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-substance">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">💊 Madde Kullanımı Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Personel (Görevde)', value: parseInt(incidentStats?.categoryStats?.substance_personnel) || 0 },
+                                                { name: 'Mülkte Bulunma', value: parseInt(incidentStats?.categoryStats?.substance_property) || 0 }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            outerRadius={100}
+                                            dataKey="value"
+                                            labelLine={false}
+                                            label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                        >
+                                            <Cell fill="#EC4899" />
+                                            <Cell fill="#F472B6" />
+                                        </Pie>
+                                        <Tooltip />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
                             </div>
-                        </div>
-                    )}
 
-                    {/* Kelime Bulutu - En Çok Gidilen Yerler */}
-                    {vehicleStats.topDestinations && vehicleStats.topDestinations.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="vehicle-destinations-cloud">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Hedef Lokasyonlar ({getDaysLabel()})</h3>
-                            <div className="w-full flex justify-center overflow-auto">
-                                <div className="w-full" style={{ minWidth: '100%', maxWidth: '100%' }}>
-                                    <WordCloud
-                                        data={vehicleStats.topDestinations.map((item: any) => ({
-                                            text: item.destination,
-                                            value: item.count
-                                        }))}
-                                        width={getWordCloudWidth()}
-                                        height={300}
-                                    />
-                                </div>
+                            {/* Kaza/Yaralanma Detayı */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-accident">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">🚑 Kaza & Yaralanma Kategorileri ({getDaysLabel()})</h3>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={[
+                                        { name: 'Kayma/Düşme', count: parseInt(incidentStats?.categoryStats?.accident_slip_fall) || 0 },
+                                        { name: 'Ekipman Kazası', count: parseInt(incidentStats?.categoryStats?.accident_equipment) || 0 },
+                                        { name: 'İş Kazası', count: parseInt(incidentStats?.categoryStats?.accident_work) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+                                        <YAxis />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay Sayısı" fill="#10B981" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
-                        </div>
-                    )}
 
-
-                </div>
-            )}
-
-            {/* Managers Tab */}
-            {/* Fire Alarms Tab */}
-            {activeTab === 'fire-alarms' && (
-                <div className="space-y-6">
-                    {/* Dönem Bilgisi Başlık */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
-                    </div>
-
-                    {/* Özet Kartlar */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-gray-600 text-sm">Toplam Alarm ({getDaysLabel()})</p>
-                                    <p className="text-3xl font-bold text-red-600 mt-2">
-                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0}
-                                    </p>
-                                </div>
-                                <Flame size={32} className="text-red-500" />
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-gray-600 text-sm">Gerçek Alarm ({getDaysLabel()})</p>
-                                    <p className="text-3xl font-bold text-orange-600 mt-2">
-                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0}
-                                    </p>
-                                </div>
-                                <Flame size={32} className="text-orange-500" />
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-gray-600 text-sm">Yanlış Alarm ({getDaysLabel()})</p>
-                                    <p className="text-3xl font-bold text-green-600 mt-2">
-                                        {fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.false_alarms || 0), 0) || 0}
-                                    </p>
-                                </div>
-                                <Flame size={32} className="text-green-500" />
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-gray-600 text-sm">Doğruluk Oranı ({getDaysLabel()})</p>
-                                    <p className="text-3xl font-bold text-blue-600 mt-2">
-                                        {(() => {
-                                            const total = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.count || 0), 0) || 0;
-                                            const real = fireAlarmStats.dailyTrend?.reduce((a: number, b: any) => a + parseInt(b.real_alarms || 0), 0) || 0;
-                                            return total > 0 ? `${((real / total) * 100).toFixed(0)}%` : '0%';
-                                        })()}
-                                    </p>
-                                </div>
-                                <TrendingUp size={32} className="text-blue-500" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Günlük Alarm Sayısı - Bar Chart */}
-                    {fireAlarmStats.dailyTrend && fireAlarmStats.dailyTrend.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="fire-alarm-daily-trend">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📈 Alarm Sayısı ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={350}>
-                                <BarChart data={fireAlarmStats.dailyTrend}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="date" tickFormatter={formatDate} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Toplam Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-
-                    {/* Saatlik Alarm Çalma Trendi */}
-                    {fireAlarmStats.hourlyTrend && fireAlarmStats.hourlyTrend.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="fire-alarm-hourly-trend">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🕔 Saatlik Alarm Çalma Trendi ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={350}>
-                                <BarChart data={fireAlarmStats.hourlyTrend.map((item: any) => ({
-                                    ...item,
-                                    total: (parseInt(item.real_alarms || 0) + parseInt(item.false_alarms || 0))
-                                }))}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis
-                                        dataKey="hour"
-                                        tickFormatter={(hour) => `${hour}:00`}
-                                    />
-                                    <YAxis />
-                                    <Tooltip
-                                        content={<CustomTooltip />}
-                                        labelFormatter={(hour) => `Saat: ${hour}:00`}
-                                    />
-                                    <Bar dataKey="total" name="Toplam Alarm" fill={CHART_COLORS.danger} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-
-                    {/* Lokasyon Kelime Bulutu */}
-                    {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="fire-alarm-locations-cloud">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">☁️ Alarm Lokasyonları ({getDaysLabel()})</h3>
-                            <div className="w-full flex justify-center overflow-auto">
-                                <div className="w-full" style={{ minWidth: '100%', maxWidth: '100%' }}>
-                                    <WordCloud
-                                        data={fireAlarmStats.locationDistribution.map((item: any) => ({
-                                            text: item.location,
-                                            value: item.count
-                                        }))}
-                                        width={getWordCloudWidth()}
-                                        height={300}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Lokasyon Bar Chart */}
-                    {fireAlarmStats.locationDistribution && fireAlarmStats.locationDistribution.length > 0 && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="fire-alarm-locations-chart">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📍 En Çok Alarm Olan Lokasyonlar ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={350}>
-                                <BarChart data={fireAlarmStats.locationDistribution.slice(0, 10)} layout="vertical">
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis type="number" />
-                                    <YAxis dataKey="location" type="category" width={150} />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Alarm Sayısı" fill={CHART_COLORS.danger} radius={[0, 4, 4, 0]}>
-                                        {fireAlarmStats.locationDistribution.slice(0, 10).map((_: any, index: number) => (
-                                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    )}
-
-                </div>
-            )}
-
-            {/* Incidents Tab */}
-            {activeTab === 'incidents' && (
-                <div className="space-y-6">
-                    {/* Dönem Bilgisi Başlık */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-blue-700 text-sm font-medium">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
-                    </div>
-
-                    {/* Kategori İstatistikleri - Ana Kartlar */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-red-100 rounded-lg">
-                                    <span className="text-2xl">🚨</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Hırsızlık</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.theft_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-orange-100 rounded-lg">
-                                    <span className="text-2xl">👊</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Saldırı/Kavga</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.assault_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-yellow-100 rounded-lg">
-                                    <span className="text-2xl">⚕️</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Tıbbi Acil</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.medical_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-purple-100 rounded-lg">
-                                    <span className="text-2xl">🔨</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Vandalizm</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.vandalism_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <span className="text-2xl">🚑</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Kaza</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.accident_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-pink-100 rounded-lg">
-                                    <span className="text-2xl">💊</span>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-gray-600">Madde Kullanımı</p>
-                                    <p className="text-2xl font-bold text-gray-900">
-                                        {parseInt(incidentStats?.categoryStats?.substance_total) || 0}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Ana Kategori Dağılımı - Pasta Grafiği */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-category-distribution">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Kategori Bazlı Olay Dağılımı ({getDaysLabel()})</h3>
-                        <ResponsiveContainer width="100%" height={400}>
-                            <PieChart>
-                                <Pie
-                                    data={[
-                                        { name: 'Hırsızlık', value: parseInt(incidentStats?.categoryStats?.theft_total) || 0 },
-                                        { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
-                                        { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
-                                        { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
-                                        { name: 'Kaza/Yaralanma', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
-                                        { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
-                                    ]}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                                    outerRadius={120}
-                                    dataKey="value"
-                                >
-                                    <Cell fill="#EF4444" />
-                                    <Cell fill="#F59E0B" />
-                                    <Cell fill="#3B82F6" />
-                                    <Cell fill="#8B5CF6" />
-                                    <Cell fill="#10B981" />
-                                    <Cell fill="#EC4899" />
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Hırsızlık Detayı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-theft">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Hırsızlık Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={[
-                                    { name: 'Misafir Eşyası', count: parseInt(incidentStats?.categoryStats?.theft_guest_property) || 0 },
-                                    { name: 'Otel Mülkiyeti', count: parseInt(incidentStats?.categoryStats?.theft_hotel_property) || 0 },
-                                    { name: 'Personel Hırsızlığı', count: parseInt(incidentStats?.categoryStats?.theft_personnel) || 0 }
-                                ]}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Olay Sayısı" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Saldırı/Kavga Detayı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-assault">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">👊 Saldırı & Kavga Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={[
-                                    { name: 'Fiziksel Saldırı', count: parseInt(incidentStats?.categoryStats?.assault_physical) || 0 },
-                                    { name: 'Sözlü Taciz', count: parseInt(incidentStats?.categoryStats?.assault_verbal) || 0 },
-                                    { name: 'Toplu Kavga', count: parseInt(incidentStats?.categoryStats?.assault_mass_fight) || 0 }
-                                ]}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Olay Sayısı" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Tıbbi Acil Detayı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-medical">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">⚕️ Tıbbi Acil Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={[
-                                            { name: 'Ciddi Tıbbi Durum', value: parseInt(incidentStats?.categoryStats?.medical_serious) || 0 },
-                                            { name: 'İlk Yardım', value: parseInt(incidentStats?.categoryStats?.medical_first_aid) || 0 },
-                                            { name: 'Ambulans Çağrısı', value: parseInt(incidentStats?.categoryStats?.medical_ambulance) || 0 }
-                                        ]}
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={100}
-                                        dataKey="value"
-                                        labelLine={false}
-                                        label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                                    >
-                                        <Cell fill="#3B82F6" />
-                                        <Cell fill="#10B981" />
-                                        <Cell fill="#F59E0B" />
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Vandalizm Kategorileri */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-vandalism">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🔨 Vandalizm & Hasar Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={[
-                                    { name: 'Oda Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_room) || 0 },
-                                    { name: 'Ortak Alan Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0 }
-                                ]}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="name" />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Olay Sayısı" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Madde Kullanımı Kategorileri */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-substance">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">💊 Madde Kullanımı Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
-                                    <Pie
-                                        data={[
-                                            { name: 'Personel (Görevde)', value: parseInt(incidentStats?.categoryStats?.substance_personnel) || 0 },
-                                            { name: 'Mülkte Bulunma', value: parseInt(incidentStats?.categoryStats?.substance_property) || 0 }
-                                        ]}
-                                        cx="50%"
-                                        cy="50%"
-                                        outerRadius={100}
-                                        dataKey="value"
-                                        labelLine={false}
-                                        label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                                    >
-                                        <Cell fill="#EC4899" />
-                                        <Cell fill="#F472B6" />
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Kaza/Yaralanma Detayı */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6" data-chart-id="incident-accident">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">🚑 Kaza & Yaralanma Kategorileri ({getDaysLabel()})</h3>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={[
-                                    { name: 'Kayma/Düşme', count: parseInt(incidentStats?.categoryStats?.accident_slip_fall) || 0 },
-                                    { name: 'Ekipman Kazası', count: parseInt(incidentStats?.categoryStats?.accident_equipment) || 0 },
-                                    { name: 'İş Kazası', count: parseInt(incidentStats?.categoryStats?.accident_work) || 0 }
-                                ]}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                    <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                                    <YAxis />
-                                    <Tooltip content={<CustomTooltip />} />
-                                    <Bar dataKey="count" name="Olay Sayısı" fill="#10B981" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Diğer Kategoriler */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Diğer Kategoriler ({getDaysLabel()})</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">💊</span>
-                                        <span className="text-sm font-medium text-gray-700">Madde (Personel)</span>
+                            {/* Diğer Kategoriler */}
+                            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Diğer Kategoriler ({getDaysLabel()})</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">💊</span>
+                                            <span className="text-sm font-medium text-gray-700">Madde (Personel)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_personnel) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_personnel) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">💊</span>
-                                        <span className="text-sm font-medium text-gray-700">Madde (Mülk)</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">💊</span>
+                                            <span className="text-sm font-medium text-gray-700">Madde (Mülk)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_property) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_property) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">🔨</span>
-                                        <span className="text-sm font-medium text-gray-700">Vandalizm (Oda)</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🔨</span>
+                                            <span className="text-sm font-medium text-gray-700">Vandalizm (Oda)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_room) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_room) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">🔨</span>
-                                        <span className="text-sm font-medium text-gray-700">Vandalizm (Alan)</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🔨</span>
+                                            <span className="text-sm font-medium text-gray-700">Vandalizm (Alan)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">🚪</span>
-                                        <span className="text-sm font-medium text-gray-700">İzinsiz Giriş (Oda)</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🚪</span>
+                                            <span className="text-sm font-medium text-gray-700">İzinsiz Giriş (Oda)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_room) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_room) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">🚪</span>
-                                        <span className="text-sm font-medium text-gray-700">İzinsiz (Kısıtlı)</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🚪</span>
+                                            <span className="text-sm font-medium text-gray-700">İzinsiz (Kısıtlı)</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_restricted_area) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_restricted_area) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">📹</span>
-                                        <span className="text-sm font-medium text-gray-700">CCTV Arızası</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">📹</span>
+                                            <span className="text-sm font-medium text-gray-700">CCTV Arızası</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-blue-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.security_cctv_malfunction) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-blue-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.security_cctv_malfunction) || 0}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">📝</span>
-                                        <span className="text-sm font-medium text-gray-700">Diğer</span>
+                                    <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">📝</span>
+                                            <span className="text-sm font-medium text-gray-700">Diğer</span>
+                                        </div>
+                                        <span className="text-lg font-bold text-gray-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.other) || 0}</span>
                                     </div>
-                                    <span className="text-lg font-bold text-gray-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.other) || 0}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* PDF Export Modal */}
-            {showExportModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
-                    <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                        {/* Modal Header */}
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-gray-800">📊 Grafikleri Seç</h3>
-                            <button
-                                onClick={() => {
-                                    setShowExportModal(false);
-                                    setSelectedCharts([]);
-                                }}
-                                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                <X size={20} className="text-gray-500" />
-                            </button>
-                        </div>
-
-                        {/* Instructions */}
-                        <p className="text-sm text-gray-600 mb-4">PDF dosyasına dâhil etmek istediğiniz grafikleri seçiniz.</p>
-
-                        {/* Select All / Deselect All Buttons */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                            <button
-                                onClick={() => setSelectedCharts(getAvailableCharts().map(c => c.id))}
-                                className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
-                            >
-                                Tümünü Seç
-                            </button>
-                            <button
-                                onClick={() => setSelectedCharts([])}
-                                className="flex-1 px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                            >
-                                Tümünü Kaldır
-                            </button>
-                        </div>
-
-                        {/* Charts List */}
-                        <div className="space-y-2 max-h-64 overflow-y-auto mb-6 p-3 bg-gray-50 rounded-lg">
-                            {getAvailableCharts().map((chart) => (
-                                <label key={chart.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedCharts.includes(chart.id)}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setSelectedCharts([...selectedCharts, chart.id]);
-                                            } else {
-                                                setSelectedCharts(selectedCharts.filter(c => c !== chart.id));
-                                            }
-                                        }}
-                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                                    />
-                                    <div className="flex items-center gap-2 flex-1">
-                                        {selectedCharts.includes(chart.id) && <Check size={16} className="text-green-600" />}
-                                        <span className="text-sm text-gray-700">{chart.label}</span>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <button
-                                onClick={() => {
-                                    setShowExportModal(false);
-                                    setSelectedCharts([]);
-                                }}
-                                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                            >
-                                İptal
-                            </button>
-                            <div className="flex-1 relative group">
+                {/* PDF Export Modal */}
+                {showExportModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
+                        <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+                            {/* Modal Header */}
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-800">📊 Grafikleri Seç</h3>
                                 <button
-                                    disabled={true}
-                                    className="w-full px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 bg-gray-300 text-gray-500 cursor-not-allowed opacity-60"
-                                    title="PDF export şu anda bakım aşamasındadır"
+                                    onClick={() => {
+                                        setShowExportModal(false);
+                                        setSelectedCharts([]);
+                                    }}
+                                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
-                                    <Download size={18} />
-                                    PDF İndir
+                                    <X size={20} className="text-gray-500" />
                                 </button>
-                                <div className="absolute bottom-full left-0 right-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-50">
-                                    Bakım aşamasında
+                            </div>
+
+                            {/* Instructions */}
+                            <p className="text-sm text-gray-600 mb-4">PDF dosyasına dâhil etmek istediğiniz grafikleri seçiniz.</p>
+
+                            {/* Select All / Deselect All Buttons */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                                <button
+                                    onClick={() => setSelectedCharts(getAvailableCharts().map(c => c.id))}
+                                    className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                                >
+                                    Tümünü Seç
+                                </button>
+                                <button
+                                    onClick={() => setSelectedCharts([])}
+                                    className="flex-1 px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                                >
+                                    Tümünü Kaldır
+                                </button>
+                            </div>
+
+                            {/* Charts List */}
+                            <div className="space-y-2 max-h-64 overflow-y-auto mb-6 p-3 bg-gray-50 rounded-lg">
+                                {getAvailableCharts().map((chart) => (
+                                    <label key={chart.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedCharts.includes(chart.id)}
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    setSelectedCharts([...selectedCharts, chart.id]);
+                                                } else {
+                                                    setSelectedCharts(selectedCharts.filter(c => c !== chart.id));
+                                                }
+                                            }}
+                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                                        />
+                                        <div className="flex items-center gap-2 flex-1">
+                                            {selectedCharts.includes(chart.id) && <Check size={16} className="text-green-600" />}
+                                            <span className="text-sm text-gray-700">{chart.label}</span>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={() => {
+                                        setShowExportModal(false);
+                                        setSelectedCharts([]);
+                                    }}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    İptal
+                                </button>
+                                <div className="flex-1 relative group">
+                                    <button
+                                        disabled={true}
+                                        className="w-full px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 bg-gray-300 text-gray-500 cursor-not-allowed opacity-60"
+                                        title="PDF export şu anda bakım aşamasındadır"
+                                    >
+                                        <Download size={18} />
+                                        PDF İndir
+                                    </button>
+                                    <div className="absolute bottom-full left-0 right-0 mb-2 hidden group-hover:block bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-50">
+                                        Bakım aşamasında
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Info Text */}
-                        {selectedCharts.length === 0 && (
-                            <p className="text-xs text-gray-500 text-center mt-3">En az bir grafik seçmelisiniz</p>
-                        )}
+                            {/* Info Text */}
+                            {selectedCharts.length === 0 && (
+                                <p className="text-xs text-gray-500 text-center mt-3">En az bir grafik seçmelisiniz</p>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </main>
         </div>
     );
 };

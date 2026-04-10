@@ -62,7 +62,7 @@ export default function Login() {
 
                 // Small delay to ensure localStorage is saved before navigation
                 setTimeout(() => {
-                    navigate('/admin/dashboard', { replace: true });
+                    navigate('/admin/vehicle-records', { replace: true });
                 }, 100);
             } else {
                 // Regular users: Use token from first login - save ONLY to personnel-specific keys

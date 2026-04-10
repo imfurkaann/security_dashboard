@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { Vehicle } from '../types';
@@ -20,6 +20,14 @@ export default function AdminManageVehicles() {
         brand: ''
     });
     const navigate = useNavigate();
+
+    const sortedVehicles = useMemo(() => {
+        return [...vehicles].sort((a, b) => {
+            const brandCompare = a.brand.localeCompare(b.brand, 'tr', { sensitivity: 'base' });
+            if (brandCompare !== 0) return brandCompare;
+            return a.plate.localeCompare(b.plate, 'tr', { sensitivity: 'base' });
+        });
+    }, [vehicles]);
 
     // Fetch vehicles
     const fetchVehicles = async () => {
@@ -128,23 +136,22 @@ export default function AdminManageVehicles() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            {/* Header */}
-            <header className="bg-white shadow-md">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                    <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 sm:gap-4">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
                                 onClick={() => navigate('/admin/vehicle-records')}
-                                className="p-2 hover:bg-gray-100 rounded-lg transition shrink-0"
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight break-words">Araç Yönetimi</h1>
-                                <p className="text-sm sm:text-base text-gray-600 mt-1">Araçları ekleyin, düzenleyin veya silin</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Araç Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Araçları ekleyin, düzenleyin veya silin</p>
                             </div>
                         </div>
                         <button
@@ -160,40 +167,66 @@ export default function AdminManageVehicles() {
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                {loading ? (
-                    <div className="text-center py-12">
-                        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 flex-1 min-h-[520px]">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Araç Listesi</h2>
+                            <p className="text-sm text-gray-500 mt-1">Kayıtlar yukarıdan aşağıya sıralanır</p>
+                        </div>
+                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{sortedVehicles.length} kayıt</span>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {vehicles.map((vehicle) => (
-                            <div key={vehicle.id} className="bg-white rounded-lg shadow-md p-6">
-                                <div className="mb-4">
-                                    <h3 className="text-xl font-bold text-gray-900">{vehicle.plate}</h3>
-                                    <p className="text-gray-600">{vehicle.brand}</p>
-                                </div>
 
-                                <div className="flex gap-2">
-                                    <ActionButton
-                                        onClick={() => handleEdit(vehicle)}
-                                        variant="primary"
-                                        className="flex-1"
-                                    >
-                                        Düzenle
-                                    </ActionButton>
-                                    <ActionButton
-                                        onClick={() => handleDelete(vehicle.id)}
-                                        variant="danger"
-                                        className="flex-1"
-                                    >
-                                        Sil
-                                    </ActionButton>
+                    {loading ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                        </div>
+                    ) : sortedVehicles.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p className="text-gray-500">Kayıtlı araç bulunamadı</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3 overflow-auto pr-1">
+                            {sortedVehicles.map((vehicle) => (
+                                <div key={vehicle.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 shadow-sm hover:shadow transition-shadow">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="h-11 w-11 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17h6m-3-7v7m8-4V5a2 2 0 00-2-2H6a2 2 0 00-2 2v8m16 0l-2-2H6l-2 2m16 0v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6" />
+                                                </svg>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h3 className="text-lg font-bold text-gray-900 break-words">{vehicle.plate}</h3>
+                                                <p className="text-sm text-gray-600 break-words">{vehicle.brand}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-row items-center gap-2 shrink-0">
+                                        <ActionButton
+                                            onClick={() => handleEdit(vehicle)}
+                                            variant="primary"
+                                            className="shrink-0"
+                                        >
+                                            Düzenle
+                                        </ActionButton>
+                                        <ActionButton
+                                            onClick={() => handleDelete(vehicle.id)}
+                                            variant="danger"
+                                            className="shrink-0"
+                                        >
+                                            Sil
+                                        </ActionButton>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </main>
 
             {/* Modal */}

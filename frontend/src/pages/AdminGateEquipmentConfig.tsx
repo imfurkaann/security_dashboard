@@ -41,6 +41,9 @@ export default function AdminGateEquipmentConfig() {
     const [equipmentToAdd, setEquipmentToAdd] = useState('');
 
     const activeGateCount = useMemo(() => gates.length, [gates]);
+    const sortedGates = useMemo(() => {
+        return [...gates].sort((a, b) => a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }));
+    }, [gates]);
     const selectedGate = useMemo(
         () => gates.find((gate) => gate.id === selectedGateId) || null,
         [gates, selectedGateId]
@@ -263,34 +266,50 @@ export default function AdminGateEquipmentConfig() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-                <div className="text-gray-700">Yükleniyor...</div>
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-600">Yükleniyor...</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <header className="bg-white border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Kapı ve Ekipman Yönetimi</h1>
-                        <p className="text-gray-600 mt-1">
-                            Toplam kapı sayısı: <span className="font-semibold text-gray-900">{activeGateCount}</span>
-                        </p>
-                    </div>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button
+                                type="button"
+                                onClick={() => window.history.back()}
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
+                            <div className="min-w-0">
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Kapı ve Ekipman Yönetimi</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">
+                                    Toplam kapı sayısı: <span className="font-semibold text-white">{activeGateCount}</span>
+                                </p>
+                            </div>
+                        </div>
 
-                    <button
-                        type="button"
-                        onClick={openCreateModal}
-                        className="px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800"
-                    >
-                        Yeni Kapı Ekle
-                    </button>
+                        <button
+                            type="button"
+                            onClick={openCreateModal}
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Yeni Kapı Ekle
+                        </button>
+                    </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
                 {error && (
                     <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">
                         {error}
@@ -304,15 +323,18 @@ export default function AdminGateEquipmentConfig() {
                 )}
 
                 {gates.length === 0 ? (
-                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600">
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-600 shadow-sm">
                         Henüz kapı tanımlanmadı. "Yeni Kapı Ekle" ile başlayabilirsiniz.
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-4 items-start">
                         <section className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm lg:sticky lg:top-6">
-                            <h2 className="text-sm font-semibold text-gray-900 mb-3">Kapılar</h2>
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-sm font-semibold text-gray-900">Kapılar</h2>
+                                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{sortedGates.length}</span>
+                            </div>
                             <div className="space-y-2">
-                                {gates.map((gate) => {
+                                {sortedGates.map((gate) => {
                                     const isSelected = gate.id === selectedGateId;
                                     return (
                                         <button
@@ -324,7 +346,10 @@ export default function AdminGateEquipmentConfig() {
                                                 : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                                                 }`}
                                         >
-                                            <span className="font-medium text-gray-900">{gate.name}</span>
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="font-medium text-gray-900 break-words">{gate.name}</span>
+                                                <span className="text-xs text-gray-500 shrink-0">{gate.equipments.length}</span>
+                                            </div>
                                         </button>
                                     );
                                 })}
@@ -336,7 +361,7 @@ export default function AdminGateEquipmentConfig() {
                                 <div className="text-gray-600">Kapı seçiniz.</div>
                             ) : (
                                 <>
-                                    <div className="flex items-center justify-between border-b border-gray-200 pb-4 mb-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-200 pb-4 mb-4">
                                         <div>
                                             <h3 className="text-lg font-semibold text-gray-900">{selectedGate.name}</h3>
                                             <p className="text-sm text-gray-500">Kapı ve ekipman düzenleme</p>
@@ -348,7 +373,7 @@ export default function AdminGateEquipmentConfig() {
                                             type="text"
                                             value={selectedGate.name}
                                             onChange={(e) => updateSelectedGateState({ name: e.target.value })}
-                                            className="px-3 py-2 border border-gray-300 rounded-md"
+                                            className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             placeholder="Kapı adı"
                                         />
                                     </div>
@@ -413,13 +438,13 @@ export default function AdminGateEquipmentConfig() {
                                                     value={equipmentToAdd}
                                                     onChange={(e) => setEquipmentToAdd(e.target.value)}
                                                     placeholder="Yeni ekipman adı"
-                                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={addEquipmentToSelectedGate}
                                                     disabled={saving}
-                                                    className="px-3 py-2 bg-green-700 text-white rounded-md hover:bg-green-800 disabled:opacity-60"
+                                                    className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-60"
                                                 >
                                                     Ekipman Ekle
                                                 </button>
@@ -435,8 +460,8 @@ export default function AdminGateEquipmentConfig() {
 
             {showCreateModal && (
                 <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg w-full max-w-xl border border-gray-200 shadow-xl">
-                        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div className="bg-white rounded-lg w-full max-w-xl max-h-[90vh] overflow-y-auto border border-gray-200 shadow-xl">
+                        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
                             <h2 className="text-lg font-semibold text-gray-900">Yeni Kapı Ekle</h2>
                             <button
                                 type="button"
@@ -454,7 +479,7 @@ export default function AdminGateEquipmentConfig() {
                                     type="text"
                                     value={newGateName}
                                     onChange={(e) => setNewGateName(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     placeholder="Örn: Depo Kapısı"
                                 />
                             </div>
@@ -466,7 +491,7 @@ export default function AdminGateEquipmentConfig() {
                                         type="text"
                                         value={newEquipmentName}
                                         onChange={(e) => setNewEquipmentName(e.target.value)}
-                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         placeholder="Ekipman adı"
                                     />
                                     <button

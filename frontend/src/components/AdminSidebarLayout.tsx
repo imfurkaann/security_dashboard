@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import axios from 'axios';
@@ -16,17 +16,16 @@ function LogoutOverlay() {
 }
 
 const menuItems = [
-    { title: 'Dashboard', path: '/admin/dashboard' },
-    { title: 'Araç Kayıtları', path: '/admin/vehicle-records' },
-    { title: 'Ziyaretçi Yönetimi', path: '/admin/visitor-records' },
-    { title: 'Müdür Kayıtları', path: '/admin/manager-records' },
-    { title: 'Olay Yönetimi', path: '/admin/incident-records' },
-    { title: 'Yangın Yönetimi', path: '/admin/fire-alarm-records' },
+    { title: 'Araç Kayıtları Yönetimi', path: '/admin/vehicle-records' },
+    { title: 'Ziyaretçi Kayıtları Yönetimi', path: '/admin/visitor-records' },
+    { title: 'Müdür Kayıtları Yönetimi', path: '/admin/manager-records' },
+    { title: 'Yangın Kayıtları Yönetimi', path: '/admin/fire-alarm-records' },
+    { title: 'Vardiya Raporları Yönetimi', path: '/admin/incident-records' },
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
     { title: 'Kapı ve Ekipman Yönetimi', path: '/admin/gate-equipment-config' },
-    { title: 'Veri Dışa Aktarma', path: '/admin/export-data' },
+    { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' },
     { title: 'İstatistikler', path: '/admin/statistics' },
-    { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' }
+    { title: 'Veri Dışa Aktarma', path: '/admin/export-data' }
 ];
 
 export default function AdminSidebarLayout() {
@@ -36,6 +35,15 @@ export default function AdminSidebarLayout() {
     const rawAdmin = localStorage.getItem('adminUser');
     const parsedAdmin = rawAdmin ? JSON.parse(rawAdmin) : null;
     const adminName = parsedAdmin?.fullName || parsedAdmin?.username || 'Yonetici';
+
+    const sidebarWidth = useMemo(() => {
+        const longestLabel = Math.max(
+            'Yönetim Paneli'.length,
+            ...menuItems.map((item) => item.title.length)
+        );
+        const widthInCh = Math.min(30, Math.max(20, longestLabel + 7));
+        return `${widthInCh}ch`;
+    }, []);
 
     const handleLogout = async () => {
         setLogoutLoading(true);
@@ -65,13 +73,13 @@ export default function AdminSidebarLayout() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900">
+        <div className="min-h-screen bg-gray-900" style={{ ['--sidebar-width' as string]: sidebarWidth }}>
             {logoutLoading && <LogoutOverlay />}
 
             <button
                 type="button"
                 onClick={() => setIsSidebarOpen((prev) => !prev)}
-                className="fixed top-4 left-4 z-40 inline-flex lg:hidden items-center justify-center rounded-md bg-gray-800 p-2 text-gray-100 border border-gray-700 hover:bg-gray-700 transition"
+                className="fixed top-4 left-4 z-40 inline-flex lg:hidden items-center justify-center rounded-md bg-slate-900 p-2 text-gray-100 border border-slate-700 hover:bg-slate-800 transition"
                 aria-label={isSidebarOpen ? 'Menüyü kapat' : 'Menüyü aç'}
             >
                 {isSidebarOpen ? <X size={18} /> : <Menu size={18} />}
@@ -85,9 +93,9 @@ export default function AdminSidebarLayout() {
                 />
             )}
 
-            <aside className={`fixed left-0 top-0 h-screen w-64 bg-gray-800 border-r border-gray-700 p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            <aside className={`fixed left-0 top-0 h-screen w-[var(--sidebar-width)] bg-slate-900 border-r border-slate-700 shadow-md p-4 z-30 flex flex-col transform transition-transform duration-200 ease-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                 }`}>
-                <div className="mb-4 pb-3 border-b border-gray-700">
+                <div className="mb-4 pb-3 border-b border-slate-700">
                     <h1 className="text-white text-sm font-semibold uppercase tracking-wide">Yönetim Paneli</h1>
                 </div>
 
@@ -98,9 +106,9 @@ export default function AdminSidebarLayout() {
                             to={item.path}
                             onClick={() => setIsSidebarOpen(false)}
                             className={({ isActive }) =>
-                                `block rounded-md px-3 py-2 text-sm transition ${isActive
+                                `block rounded-md px-3 py-2 text-sm transition whitespace-nowrap ${isActive
                                     ? 'bg-blue-600 text-white'
-                                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                                    : 'text-gray-300 hover:bg-slate-700 hover:text-white'
                                 }`
                             }
                         >
@@ -109,10 +117,10 @@ export default function AdminSidebarLayout() {
                     ))}
                 </nav>
 
-                <div className="mt-4 pt-3 border-t border-gray-700">
+                <div className="mt-4 pt-3 border-t border-slate-700">
                     <p className="text-xs text-gray-400">Giris Yapan</p>
                     <p className="text-sm text-white font-semibold mt-1 truncate">{adminName}</p>
-                    <p className="text-[11px] text-red-400 mt-1 uppercase">yonetici</p>
+                    <p className="text-[11px] text-gray-400 mt-1 uppercase">yonetici</p>
                 </div>
 
                 <button
@@ -123,7 +131,7 @@ export default function AdminSidebarLayout() {
                 </button>
             </aside>
 
-            <main className="min-h-screen pt-14 lg:pt-0 lg:ml-64">
+            <main className="min-h-screen pt-14 lg:pt-0 lg:ml-[var(--sidebar-width)]">
                 <Outlet />
             </main>
         </div>

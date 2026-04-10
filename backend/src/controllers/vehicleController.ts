@@ -7,6 +7,16 @@ import { getClientIp } from '../middleware/rateLimiter';
 import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
 import { getGateFromRequest } from '../utils/gate';
 
+const formatDriveDuration = (totalMinutes: number): string => {
+    const normalized = Number.isFinite(totalMinutes) ? Math.max(0, Math.floor(totalMinutes)) : 0;
+    const hours = Math.floor(normalized / 60);
+    const minutes = normalized % 60;
+
+    if (hours > 0 && minutes > 0) return `${hours} Saat ${minutes} Dakika`;
+    if (hours > 0) return `${hours} Saat`;
+    return `${minutes} Dakika`;
+};
+
 /**
  * Get all vehicles
  * GET /api/vehicles
@@ -475,22 +485,22 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             });
             return;
         }
-    
-    // DATA INTEGRITY: If return_date exists in database, return_time is required
-    if (!return_time) {
-        // Check if record already has return_date set
-        const existingRecord = await pool.query(
-            'SELECT return_date FROM vehicle_records WHERE id = $1',
-            [id]
-        );
-        if (existingRecord.rows[0]?.return_date && recordStatus !== 'returned') {
-            res.status(400).json({
-                success: false,
-                message: 'Teslim alınma saati zorunludur (araç iade tarihi belirtilmiş)'
-            });
-            return;
+
+        // DATA INTEGRITY: If return_date exists in database, return_time is required
+        if (!return_time) {
+            // Check if record already has return_date set
+            const existingRecord = await pool.query(
+                'SELECT return_date FROM vehicle_records WHERE id = $1',
+                [id]
+            );
+            if (existingRecord.rows[0]?.return_date && recordStatus !== 'returned') {
+                res.status(400).json({
+                    success: false,
+                    message: 'Teslim alınma saati zorunludur (araç iade tarihi belirtilmiş)'
+                });
+                return;
+            }
         }
-    }
 
         // If vehicle_id is provided, check if new vehicle exists and is available (only if record is still in_use)
         if (vehicle_id && vehicle_id !== oldVehicleId) {
@@ -722,7 +732,17 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
         try {
             // Araç ve müdür bilgilerini al
             const recordInfo = await pool.query(
-                `SELECT vr.manager_name, vr.return_time, v.plate
+                `SELECT
+                    vr.manager_name,
+                    vr.destination,
+                    vr.return_time,
+                    v.plate,
+                    GREATEST(
+                        FLOOR(
+                            EXTRACT(EPOCH FROM ((vr.return_date + vr.return_time) - (vr.given_date + vr.given_time))) / 60
+                        )::int,
+                        0
+                    ) AS drive_minutes
                  FROM vehicle_records vr
                  INNER JOIN vehicles v ON vr.vehicle_id = v.id
                  WHERE vr.id = $1`,
@@ -732,13 +752,17 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
             if (recordInfo.rows.length > 0) {
                 const vehiclePlate = recordInfo.rows[0].plate || 'Bilinmeyen';
                 const managerName = recordInfo.rows[0].manager_name || 'Bilinmeyen';
+                const destination = recordInfo.rows[0].destination || undefined;
                 const timeString = recordInfo.rows[0].return_time || new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
                 const returnTime = timeString.substring(0, 5);
+                const driveDuration = formatDriveDuration(Number(recordInfo.rows[0].drive_minutes || 0));
 
                 whatsappMessage = createVehicleReturnMessage({
                     vehiclePlate,
                     managerName,
-                    returnTime
+                    returnTime,
+                    destination,
+                    driveDuration
                 });
             }
         } catch (error) {
