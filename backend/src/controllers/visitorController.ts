@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
+import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getGateFromRequest } from '../utils/gate';
 
 const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
@@ -575,5 +576,35 @@ export const restoreVisitorRecord = async (req: Request, res: Response): Promise
     } catch (error) {
         console.error('Restore visitor record error:', error);
         res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });
+    }
+};
+
+/**
+ * POST /api/visitors/send-whatsapp-message
+ */
+export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { message } = req.body;
+
+        if (!message || typeof message !== 'string' || !message.trim()) {
+            res.status(400).json({
+                success: false,
+                message: 'Mesaj içeriği gereklidir.',
+            });
+            return;
+        }
+
+        const result = await sendWhatsAppTextMessage(message.trim());
+        res.status(200).json({
+            success: result.success,
+            messageId: result.messageId,
+            reason: result.reason,
+        });
+    } catch (error) {
+        console.error('Send visitor WhatsApp message error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'WhatsApp mesajı gönderilirken hata oluştu.',
+        });
     }
 };

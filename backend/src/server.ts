@@ -19,6 +19,8 @@ import statisticsRoutes from './routes/statistics';
 import guestRegistryRoutes from './routes/guestRegistry';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
+import { setWhatsAppTargetJid, warmupWhatsAppConnection } from './services/whatsappBaileys';
+import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
 
 dotenv.config();
 
@@ -26,6 +28,7 @@ dotenv.config();
 process.env.TZ = 'Europe/Istanbul';
 
 const app: Application = express();
+
 const PRIMARY_PORT = Number(process.env.PORT || 5000);
 const FALLBACK_PORT = Number(process.env.PORT_FALLBACK || PRIMARY_PORT + 1);
 const PORT_ATTEMPT_COUNT = Number(process.env.PORT_ATTEMPT_COUNT || 10);
@@ -238,6 +241,16 @@ const startServer = async () => {
     try {
         // Migration'ları çalıştır
         await runMigrations();
+
+        // Persist edilen WhatsApp hedef grubunu yükle (Docker restart/update sonrası kalıcılık)
+        const persistedTargetJid = await loadPersistedWhatsAppTargetJid();
+        if (persistedTargetJid) {
+            setWhatsAppTargetJid(persistedTargetJid);
+            console.log('✅ WhatsApp hedef grubu DBden yüklendi.');
+        }
+
+        // WhatsApp warmup migration ve ayar yükleme sonrası başlatılır
+        warmupWhatsAppConnection();
 
         // Test ortamında sunucuyu başlatma (Jest supertest kendi yönetiyor)
         if (process.env.NODE_ENV === 'test') {

@@ -8,6 +8,7 @@ import {
     updateVehicleRecord,
     deleteVehicleRecord,
     restoreVehicleRecord,
+    sendVehicleWhatsAppMessage,
     createVehicle,
     updateVehicle,
     deleteVehicle
@@ -51,5 +52,8 @@ router.delete('/records/:id', deleteVehicleRecord);
 
 // Restore soft deleted vehicle record
 router.post('/records/:id/restore', restoreVehicleRecord);
+
+// Send WhatsApp message from modal (automatic send)
+router.post('/send-whatsapp-message', sendVehicleWhatsAppMessage);
 
 export default router;

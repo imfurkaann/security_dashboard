@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { getFireAlarms, createFireAlarm, updateFireAlarm, resolveFireAlarm, deleteFireAlarm, restoreFireAlarm } from '../controllers/fireAlarmController';
+import {
+    getFireAlarms,
+    createFireAlarm,
+    updateFireAlarm,
+    resolveFireAlarm,
+    deleteFireAlarm,
+    restoreFireAlarm,
+    sendFireAlarmWhatsAppMessage,
+} from '../controllers/fireAlarmController';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
@@ -24,5 +32,8 @@ router.delete('/records/:id', deleteFireAlarm);
 
 // Yangın alarm kaydını geri al
 router.post('/records/:id/restore', restoreFireAlarm);
+
+// WhatsApp mesajını otomatik gönder
+router.post('/send-whatsapp-message', sendFireAlarmWhatsAppMessage);
 
 export default router;
