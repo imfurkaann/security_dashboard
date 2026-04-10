@@ -265,78 +265,74 @@ export default function Vehicles() {
             </header>
 
             <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
-                <div className="max-w-7xl mx-auto w-full">
+                <div className="max-w-5xl mx-auto w-full">
                     {/* Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-                        {/* p-3 yerine py-2 px-3 kullanarak dikey boşluğu azalttık */}
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg py-2 px-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-blue-600 text-xs font-medium uppercase tracking-wider">Toplam Araç</p>
-                                    {/* text-2xl yerine text-xl yaparak yüksekliği düşürdük */}
-                                    <p className="text-xl font-bold text-blue-900 leading-none mt-0.5">{vehicles.length}</p>
-                                </div>
-                                {/* İkon kutusunu p-2'den p-1.5'e düşürdük */}
-                                <div className="p-1.5 bg-blue-100 rounded-md">
-                                    {/* w-6 h-6 yerine w-5 h-5 yaptık */}
+                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700">
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className="p-2 bg-blue-400/30 rounded-lg border border-blue-300/60 shrink-0 text-white">
                                     <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                                     </svg>
                                 </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Toplam Araç</p>
+                                    <p className="text-xl font-bold text-white leading-none mt-1">{vehicles.length}</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-orange-50 border border-orange-200 rounded-lg py-2 px-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-orange-600 text-xs font-medium uppercase tracking-wider">Kullanımda</p>
-                                    <p className="text-xl font-bold text-orange-900 leading-none mt-0.5">{inUseCount}</p>
-                                </div>
-                                <div className="p-1.5 bg-orange-100 rounded-md">
-                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-700">
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className="p-2 bg-emerald-400/30 rounded-lg border border-emerald-300/60 shrink-0 text-white">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Kullanımda</p>
+                                    <p className="text-xl font-bold text-white leading-none mt-1">{inUseCount}</p>
+                                </div>
                             </div>
                         </div>
 
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg py-2 px-3">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-purple-600 text-xs font-medium uppercase tracking-wider">Teslim Alınan</p>
-                                    <p className="text-xl font-bold text-purple-900 leading-none mt-0.5">
-                                        {usages.filter(u => isToday(u.given_date)).length}
-                                    </p>
-                                </div>
-                                <div className="p-1.5 bg-purple-100 rounded-md">
-                                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-indigo-500 bg-gradient-to-br from-indigo-500 to-indigo-700">
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className="p-2 bg-indigo-400/30 rounded-lg border border-indigo-300/60 shrink-0 text-white">
+                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
+                                </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Teslim Alınan</p>
+                                    <p className="text-xl font-bold text-white leading-none mt-1">
+                                        {usages.filter(u => isToday(u.given_date)).length}
+                                    </p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Filters */}
-                    <div className="bg-white rounded-lg shadow p-4 mb-6">
-                        <div className="flex flex-wrap gap-2">
+                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-4 max-w-fit mx-auto">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 onClick={() => setFilter('all')}
-                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Bugünün Kayıtları ({todayUsages.length})
                             </button>
                             <button
                                 onClick={() => setFilter('in_use')}
-                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Kullanımda Olan Araçlar ({inUseCount})
                             </button>
                             <button
                                 onClick={() => setFilter('returned')}
-                                className={`px-3 sm:px-4 py-2 rounded-lg transition text-sm ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Bugün İade Edilen Araçlar ({usages.filter(u => u.status === 'returned' && isToday(u.return_date)).length})
@@ -398,12 +394,7 @@ export default function Vehicles() {
                                                 </td>
                                                 <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="flex items-center">
-                                                        <div className="p-2 bg-blue-100 rounded">
-                                                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                                            </svg>
-                                                        </div>
-                                                        <div className="ml-3">
+                                                        <div className="ml-0">
                                                             <div className="text-sm font-bold text-gray-900 break-words">{usage.vehicle_plate}</div>
                                                             <div className="text-xs text-gray-500 break-words">{usage.vehicle_brand}</div>
                                                         </div>
