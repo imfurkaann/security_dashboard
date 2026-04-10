@@ -22,6 +22,7 @@ const menuItems = [
     { title: 'Yangın Kayıtları Yönetimi', path: '/admin/fire-alarm-records' },
     { title: 'Vardiya Raporları Yönetimi', path: '/admin/incident-records' },
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
+    { title: 'WhatsApp Bağlantı Yönetimi', path: '/admin/whatsapp-settings' },
     { title: 'Kapı ve Ekipman Yönetimi', path: '/admin/gate-equipment-config' },
     { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' },
     { title: 'İstatistikler', path: '/admin/statistics' },

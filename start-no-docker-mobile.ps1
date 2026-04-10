@@ -119,6 +119,33 @@ function Ensure-FirewallRule {
     New-NetFirewallRule -DisplayName $Name -Direction Inbound -Protocol TCP -LocalPort $Port -Action Allow -Profile Any | Out-Null
 }
 
+function Stop-ProjectNodeProcesses {
+    param([string]$ProjectRoot)
+
+    $escapedRoot = [Regex]::Escape($ProjectRoot)
+    $nodeProcs = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -eq 'node.exe' -and
+            $_.CommandLine -match $escapedRoot -and
+            $_.CommandLine -match 'backend|frontend|nodemon|vite|ts-node'
+        }
+
+    foreach ($proc in $nodeProcs) {
+        try {
+            Stop-Process -Id $proc.ProcessId -Force -ErrorAction Stop
+        }
+        catch {
+            # Süreç kapanmış olabilir, devam et.
+        }
+    }
+
+    if ($nodeProcs.Count -gt 0) {
+        Write-Host "[OK] Eski surecler kapatildi: $($nodeProcs.Count)" -ForegroundColor Green
+    }
+}
+
+Stop-ProjectNodeProcesses -ProjectRoot $PSScriptRoot
+
 $hostIp = Get-HostIPv4
 $backendPort = Get-FreePort -Preferred 5001 -RangeStart 5001 -RangeEnd 5099
 $frontendPort = Get-FreePort -Preferred 5173 -RangeStart 5174 -RangeEnd 5199

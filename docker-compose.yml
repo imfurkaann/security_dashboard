@@ -44,9 +44,14 @@ services:
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       TZ: Europe/Istanbul
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_SESSION_PATH: ${WHATSAPP_SESSION_PATH:-.baileys_auth}
+      WHATSAPP_CONNECT_TIMEOUT_MS: ${WHATSAPP_CONNECT_TIMEOUT_MS:-30000}
+      WHATSAPP_LOG_LEVEL: ${WHATSAPP_LOG_LEVEL:-silent}
     volumes:
       - ./backend/reports:/app/reports # Raporların silinmemesi için local klasöre bağladık
       - ./backend/sgk_kayitlari:/app/sgk_kayitlari # SGK dosyalarının silinmemesi için local klasöre bağladık
+      - whatsapp_auth:/app/.baileys_auth # WhatsApp oturum dosyalarının update/restart sonrası korunması
       # Migration dosyaları - backend başlarken otomatik çalıştırılır
       - ./database/migrations:/app/migrations:ro
       # Çıkış yaparken günlük export klasörü - Masaüstüne kayıt
@@ -97,6 +102,12 @@ volumes:
       - "com.security.backup=required"
       - "com.security.critical=true"
       - "com.security.description=Güvenlik sistemi ana veritabanı - SİLMEYİN!"
+  whatsapp_auth:
+    driver: local
+    name: security_whatsapp_auth
+    labels:
+      - "com.security.backup=recommended"
+      - "com.security.description=Baileys WhatsApp auth session - SİLMEYİN!"
 
 networks:
   security_network:

@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
+import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getGateFromRequest } from '../utils/gate';
 
 // Tüm yangın alarm kayıtlarını getir
@@ -363,5 +364,33 @@ export const restoreFireAlarm = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Restore fire alarm error:', error);
         return res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });
+    }
+};
+
+// WhatsApp mesajını otomatik gönder (modal tetiklemeli)
+export const sendFireAlarmWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { message } = req.body;
+
+        if (!message || typeof message !== 'string' || !message.trim()) {
+            res.status(400).json({
+                success: false,
+                message: 'Mesaj içeriği gereklidir.',
+            });
+            return;
+        }
+
+        const result = await sendWhatsAppTextMessage(message.trim());
+        res.status(200).json({
+            success: result.success,
+            messageId: result.messageId,
+            reason: result.reason,
+        });
+    } catch (error) {
+        console.error('Send fire alarm WhatsApp message error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'WhatsApp mesajı gönderilirken hata oluştu.',
+        });
     }
 };

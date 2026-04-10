@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import pool from '../config/database';
 import { getGateFromRequest } from '../utils/gate';
+import { getWhatsAppConnectionStatus, listWhatsAppGroups, sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 
 interface EquipmentStatusItem {
     name: string;
@@ -736,6 +737,78 @@ export const getEquipmentCheckStatus = async (req: Request, res: Response): Prom
         res.status(500).json({
             success: false,
             message: 'Durum kontrolü yapılırken hata oluştu',
+        });
+    }
+};
+
+/**
+ * GET /api/equipment-check/whatsapp-status
+ * Return current Baileys connection state for test operations
+ */
+export const getEquipmentWhatsAppStatus = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const status = getWhatsAppConnectionStatus();
+        res.status(200).json({
+            success: true,
+            data: status,
+        });
+    } catch (error) {
+        console.error('Get equipment WhatsApp status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'WhatsApp bağlantı durumu alınırken hata oluştu',
+        });
+    }
+};
+
+/**
+ * GET /api/equipment-check/whatsapp-groups
+ * List joined WhatsApp groups to select target JID
+ */
+export const getEquipmentWhatsAppGroups = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const groups = await listWhatsAppGroups();
+        res.status(200).json({
+            success: true,
+            data: groups,
+        });
+    } catch (error) {
+        console.error('Get equipment WhatsApp groups error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'WhatsApp grup listesi alınırken hata oluştu',
+        });
+    }
+};
+
+/**
+ * POST /api/equipment-check/send-whatsapp-message
+ * Send a WhatsApp message manually (triggered from frontend)
+ */
+export const sendWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { message } = req.body;
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+            res.status(400).json({
+                success: false,
+                message: 'Mesaj içeriği gereklidir.',
+            });
+            return;
+        }
+
+        const result = await sendWhatsAppTextMessage(message.trim());
+
+        res.status(200).json({
+            success: result.success,
+            messageId: result.messageId,
+            reason: result.reason,
+        });
+    } catch (error) {
+        console.error('Send WhatsApp message error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'WhatsApp mesajı gönderilirken hata oluştu.',
         });
     }
 };

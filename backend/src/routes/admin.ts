@@ -14,6 +14,14 @@ import {
     updateGateEquipment,
     deleteGateEquipment,
 } from '../controllers/equipmentController';
+import {
+    getAdminWhatsAppGroups,
+    getAdminWhatsAppQr,
+    getAdminWhatsAppStatus,
+    reconnectAdminWhatsApp,
+    resetAdminWhatsAppSession,
+    updateAdminWhatsAppTargetGroup,
+} from '../controllers/adminWhatsAppController';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
 
 const router = Router();
@@ -87,5 +95,47 @@ router.put('/equipment-config/equipments/:equipmentId', adminAuthMiddleware, upd
  * @access  Private (Admin only)
  */
 router.delete('/equipment-config/equipments/:equipmentId', adminAuthMiddleware, deleteGateEquipment);
+
+/**
+ * @route   GET /api/admin/whatsapp/status
+ * @desc    Get WhatsApp connection and config status
+ * @access  Private (Admin only)
+ */
+router.get('/whatsapp/status', adminAuthMiddleware, getAdminWhatsAppStatus);
+
+/**
+ * @route   GET /api/admin/whatsapp/groups
+ * @desc    List joined WhatsApp groups
+ * @access  Private (Admin only)
+ */
+router.get('/whatsapp/groups', adminAuthMiddleware, getAdminWhatsAppGroups);
+
+/**
+ * @route   GET /api/admin/whatsapp/qr
+ * @desc    Get current WhatsApp QR payload for admin panel display
+ * @access  Private (Admin only)
+ */
+router.get('/whatsapp/qr', adminAuthMiddleware, getAdminWhatsAppQr);
+
+/**
+ * @route   POST /api/admin/whatsapp/target-group
+ * @desc    Save WhatsApp target group JID
+ * @access  Private (Admin only)
+ */
+router.post('/whatsapp/target-group', adminAuthMiddleware, updateAdminWhatsAppTargetGroup);
+
+/**
+ * @route   POST /api/admin/whatsapp/reconnect
+ * @desc    Restart WhatsApp connection and regenerate QR if needed
+ * @access  Private (Admin only)
+ */
+router.post('/whatsapp/reconnect', adminAuthMiddleware, reconnectAdminWhatsApp);
+
+/**
+ * @route   POST /api/admin/whatsapp/reset-session
+ * @desc    Clear Baileys auth state and force new QR login
+ * @access  Private (Admin only)
+ */
+router.post('/whatsapp/reset-session', adminAuthMiddleware, resetAdminWhatsAppSession);
 
 export default router;

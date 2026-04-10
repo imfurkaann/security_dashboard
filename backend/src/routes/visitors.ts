@@ -5,7 +5,8 @@ import {
     updateVisitorRecord,
     exitVisitor,
     deleteVisitorRecord,
-    restoreVisitorRecord
+    restoreVisitorRecord,
+    sendVisitorWhatsAppMessage
 } from '../controllers/visitorController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -31,5 +32,8 @@ router.delete('/records/:id', deleteVisitorRecord);
 
 // Restore visitor record
 router.post('/records/:id/restore', restoreVisitorRecord);
+
+// Send WhatsApp message from modal (automatic send)
+router.post('/send-whatsapp-message', sendVisitorWhatsAppMessage);
 
 export default router;

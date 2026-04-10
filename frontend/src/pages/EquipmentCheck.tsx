@@ -35,7 +35,9 @@ export default function EquipmentCheck() {
     const [error, setError] = useState('');
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [stage, setStage] = useState<'gate-selection' | 'equipment-check'>('gate-selection');
+    const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const navigate = useNavigate();
 
     const userStr = localStorage.getItem(STORAGE_KEYS.USER);
@@ -142,6 +144,7 @@ export default function EquipmentCheck() {
 
                 if (response.data?.data?.whatsappMessage) {
                     setWhatsappMessage(response.data.data.whatsappMessage);
+                    setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
                 } else {
                     navigate('/dashboard');
@@ -157,8 +160,41 @@ export default function EquipmentCheck() {
 
     const handleWhatsAppClose = useCallback(() => {
         setShowWhatsAppModal(false);
+        setAutoSendFailed(false);
         navigate('/dashboard');
     }, [navigate]);
+
+    const handleSendWhatsAppAutomatic = useCallback(async () => {
+        setSendingWhatsApp(true);
+        try {
+            const response = await api.post('/equipment-check/send-whatsapp-message', {
+                message: whatsappMessage,
+            });
+
+            if (response.data?.success) {
+                // Mesaj başarıyla gönderildi, modalı kapat
+                setShowWhatsAppModal(false);
+                setAutoSendFailed(false);
+                navigate('/dashboard');
+            } else {
+                setAutoSendFailed(true);
+                alert(`Mesaj gönderilemedi: ${response.data?.reason || 'Bilinmeyen hata'}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            }
+        } catch (err: any) {
+            setAutoSendFailed(true);
+            alert(`WhatsApp mesajı gönderilemedi: ${err.response?.data?.message || err.message}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+        } finally {
+            setSendingWhatsApp(false);
+        }
+    }, [whatsappMessage, navigate]);
+
+    const handleSendWhatsAppManual = useCallback(() => {
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
+        window.open(whatsappUrl, '_blank');
+        // Modal'ı hemen kapat
+        setAutoSendFailed(false);
+        handleWhatsAppClose();
+    }, [whatsappMessage, handleWhatsAppClose]);
 
     return (
         <div className="min-h-screen bg-white flex flex-col overflow-hidden">
@@ -315,31 +351,50 @@ export default function EquipmentCheck() {
                     <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-6 animate-fadeIn">
                         <h3 className="text-xl font-bold text-gray-900 mb-3">Kaydedildi</h3>
                         <p className="text-gray-600 mb-4">
-                            Ekipman teslim alma kaydınız başarıyla oluşturuldu. WhatsApp'tan paylaşmak ister misiniz?
+                            Ekipman teslim alma kaydınız başarıyla oluşturuldu. Mesajı WhatsApp'tan göndermeye karar veriniz.
                         </p>
 
                         <div className="bg-gray-50 rounded-lg p-4 mb-4 max-h-64 overflow-y-auto border border-gray-200">
                             <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
                         </div>
 
-                        <div className="flex gap-3">
-                            <a
-                                href={`https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition text-center"
-                                onClick={handleWhatsAppClose}
+                        <div className="flex flex-col gap-2">
+                            {!autoSendFailed && (
+                                <button
+                                    type="button"
+                                    onClick={handleSendWhatsAppAutomatic}
+                                    disabled={sendingWhatsApp}
+                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition text-center flex items-center justify-center gap-2"
+                                >
+                                    {sendingWhatsApp && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
+                                    {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
+                                </button>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={handleSendWhatsAppManual}
+                                disabled={sendingWhatsApp}
+                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
                             >
-                                WhatsApp'ta Paylaş
-                            </a>
+                                Manuel Mesaj Gönder
+                            </button>
+
                             <button
                                 type="button"
                                 onClick={handleWhatsAppClose}
-                                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                disabled={sendingWhatsApp}
+                                className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"
                             >
                                 Kapat
                             </button>
                         </div>
+
+                        {autoSendFailed && (
+                            <p className="text-sm text-red-600 mt-3">
+                                Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
+                            </p>
+                        )}
                     </div>
                 </div>
             )}
