@@ -217,14 +217,14 @@ export default function AdminVehicleRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
+                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -464,19 +464,19 @@ export default function AdminVehicleRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1520px] table-auto divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1560px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
+                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
+                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
+                                                <th className="w-[95px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
+                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
+                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
+                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
@@ -494,7 +494,7 @@ export default function AdminVehicleRecords() {
                                                         <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
@@ -527,7 +527,7 @@ export default function AdminVehicleRecords() {
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-4 py-3 pr-6">
                                                         {renderPreviewText(record.notes, 'Açıklama')}
                                                     </td>
                                                 </tr>

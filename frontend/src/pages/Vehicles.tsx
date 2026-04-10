@@ -389,8 +389,8 @@ export default function Vehicles() {
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="px-3 lg:px-4 py-4 align-top">
-                                                    <div className="text-sm text-gray-900 break-words">{usage.gate || '-'}</div>
+                                                <td className="px-3 lg:px-4 py-4 align-top whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900 whitespace-nowrap">{usage.gate || '-'}</div>
                                                 </td>
                                                 <td className="px-3 lg:px-4 py-4 align-top">
                                                     <div className="flex items-center">
