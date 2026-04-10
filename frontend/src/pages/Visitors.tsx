@@ -261,9 +261,11 @@ export default function Visitors() {
 
     useEffect(() => {
         const updateScrollbarWidth = () => {
-            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
-            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
-            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
+            const barClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            const normalizedWidth = Math.max(tableScrollWidth - tableClientWidth + barClientWidth, barClientWidth + 1);
+            setScrollbarSpacerWidth(normalizedWidth);
         };
 
         updateScrollbarWidth();
