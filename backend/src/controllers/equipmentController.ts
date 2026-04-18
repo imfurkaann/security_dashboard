@@ -608,14 +608,14 @@ export const submitEquipmentCheck = async (req: Request, res: Response): Promise
         const approvedItems = equipmentStatuses.filter(item => item.status).map(item => item.name);
         const rejectedItems = equipmentStatuses.filter(item => !item.status);
 
-        let whatsappMessage = `*Vardiya Başlangıç Bildirimi*\n\n`;
-        whatsappMessage += `*Personel:* ${fullName}\n`;
-        whatsappMessage += `*Tarih:* ${new Date().toLocaleDateString('tr-TR')}\n`;
-        whatsappMessage += `*Saat:* ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
-        whatsappMessage += `*Kapı:* ${selectedGate}\n\n`;
+        let whatsappMessage = `🕒 VARDİYA BAŞLANGIÇ BİLDİRİMİ 🕒\n\n`;
+        whatsappMessage += `Personel: ${fullName}\n`;
+        whatsappMessage += `Tarih: ${new Date().toLocaleDateString('tr-TR')}\n`;
+        whatsappMessage += `Saat: ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}\n`;
+        whatsappMessage += `Kapı: ${selectedGate}\n\n`;
 
         if (approvedItems.length > 0) {
-            whatsappMessage += `*Sağlam Teslim Alınan Ekipmanlar:*\n`;
+            whatsappMessage += `Sağlam Teslim Alınan Ekipmanlar:\n`;
             approvedItems.forEach(item => {
                 whatsappMessage += `  • ${item}\n`;
             });
@@ -623,7 +623,7 @@ export const submitEquipmentCheck = async (req: Request, res: Response): Promise
         }
 
         if (rejectedItems.length > 0) {
-            whatsappMessage += `*Sorunlu Ekipmanlar:*\n`;
+            whatsappMessage += `Sorunlu Ekipmanlar:\n`;
             rejectedItems.forEach(item => {
                 whatsappMessage += `  • ${item.name}\n`;
                 if (item.reason) {

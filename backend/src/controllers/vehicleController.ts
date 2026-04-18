@@ -342,7 +342,8 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
                 managerName: resolvedManagerName,
                 givenDate,
                 givenTime,
-                destination
+                destination,
+                notes: notes || undefined
             });
         } catch (error) {
             console.error('WhatsApp mesaj oluşturma hatası:', error);

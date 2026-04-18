@@ -314,22 +314,11 @@ export default function Visitors() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-        if (!tableNode || !barNode) return;
-        if (barNode.scrollLeft !== tableNode.scrollLeft) {
-            barNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
-
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
         if (!tableNode || !barNode) return;
-        if (tableNode.scrollLeft !== barNode.scrollLeft) {
-            tableNode.scrollLeft = barNode.scrollLeft;
-        }
+        tableNode.scrollLeft = barNode.scrollLeft;
     };
 
     const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
@@ -505,7 +494,7 @@ export default function Visitors() {
                             <p className="text-gray-500">Kayıt bulunmuyor</p>
                         </div>
                     ) : (
-                        <div ref={tableScrollRef} onScroll={syncTableScroll} className="overflow-x-auto pb-2">
+                        <div ref={tableScrollRef} className="overflow-x-hidden overflow-y-auto pb-2">
                             <div>
                                 <table className="w-full min-w-[1800px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">

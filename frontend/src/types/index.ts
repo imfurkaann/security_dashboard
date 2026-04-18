@@ -53,6 +53,29 @@ export interface VehicleUsage {
     created_at: string;
 }
 
+// Guest Registry Types
+export type GuestRegistryColumnType = 'text' | 'date' | 'time' | 'number';
+
+export interface GuestRegistryColumn {
+    key: string;
+    label: string;
+    type: GuestRegistryColumnType;
+    index: number;
+}
+
+export interface GuestRegistrySchema {
+    columns: GuestRegistryColumn[];
+}
+
+export interface GuestRegistryRecord {
+    id: string;
+    excel_file_name: string;
+    sheet_name: string;
+    row_number: number;
+    row_data: Record<string, unknown>;
+    created_at: string;
+}
+
 // Visitor Types
 export interface VisitorRecord {
     id: string;
@@ -76,32 +99,6 @@ export interface VisitorRecord {
     exit_by: string | null;  // Çıkışı kaydeden personel
     deleted_at?: string | null;
     created_at: string | null;
-}
-
-export interface GuestRegistryRecord {
-    id: string;
-    excel_file_name: string;
-    sheet_name: string;
-    row_number: number;
-    row_data: Record<string, unknown>;
-    voucher: string | null;
-    acenta: string | null;
-    hitap: string | null;
-    adi: string | null;
-    soyadi: string | null;
-    oda: string | null;
-    yetiskin: string | null;
-    cocuk: string | null;
-    free: string | null;
-    konaklama: string | null;
-    giris_tarihi: string | null;
-    geceleme: string | null;
-    cikis_tarihi: string | null;
-    giris_saati: string | null;
-    istenen: string | null;
-    verilen: string | null;
-    ulke: string | null;
-    created_at: string;
 }
 
 // Manager Types
@@ -214,6 +211,19 @@ export interface VisitorFormData {
 export interface ApiResponse<T> {
     success: boolean;
     data: T;
+    message?: string;
+}
+
+export interface GuestRegistryResponse {
+    success: boolean;
+    data: GuestRegistryRecord[];
+    schema?: GuestRegistrySchema;
+    pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
     message?: string;
 }
 

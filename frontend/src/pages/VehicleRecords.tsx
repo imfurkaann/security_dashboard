@@ -225,8 +225,13 @@ export default function VehicleRecords() {
     useEffect(() => {
         const measureScrollbarWidth = () => {
             const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
             const bottomClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
-            setScrollbarSpacerWidth(Math.max(tableScrollWidth, bottomClientWidth + 1));
+            const normalizedWidth = Math.max(
+                tableScrollWidth - tableClientWidth + bottomClientWidth,
+                bottomClientWidth + 1
+            );
+            setScrollbarSpacerWidth(normalizedWidth);
         };
 
         measureScrollbarWidth();
@@ -251,26 +256,12 @@ export default function VehicleRecords() {
         };
     }, [filteredRecords.length, groupedByDay.length, loading]);
 
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const bottomNode = bottomScrollRef.current;
-
-        if (!tableNode || !bottomNode) return;
-
-        if (bottomNode.scrollLeft !== tableNode.scrollLeft) {
-            bottomNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
-
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const bottomNode = bottomScrollRef.current;
 
         if (!tableNode || !bottomNode) return;
-
-        if (tableNode.scrollLeft !== bottomNode.scrollLeft) {
-            tableNode.scrollLeft = bottomNode.scrollLeft;
-        }
+        tableNode.scrollLeft = bottomNode.scrollLeft;
     };
 
     return (
@@ -489,8 +480,7 @@ export default function VehicleRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            onScroll={syncTableScroll}
-                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
