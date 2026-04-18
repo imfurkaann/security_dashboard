@@ -236,9 +236,14 @@ export default function VisitorRecords() {
 
     useEffect(() => {
         const updateScrollbarWidth = () => {
-            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
-            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
-            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
+            const barClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            const normalizedWidth = Math.max(
+                tableScrollWidth - tableClientWidth + barClientWidth,
+                barClientWidth + 1
+            );
+            setScrollbarSpacerWidth(normalizedWidth);
         };
 
         updateScrollbarWidth();
@@ -254,24 +259,12 @@ export default function VisitorRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-
-        if (!tableNode || !barNode) return;
-        if (barNode.scrollLeft !== tableNode.scrollLeft) {
-            barNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
-
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
 
         if (!tableNode || !barNode) return;
-        if (tableNode.scrollLeft !== barNode.scrollLeft) {
-            tableNode.scrollLeft = barNode.scrollLeft;
-        }
+        tableNode.scrollLeft = barNode.scrollLeft;
     };
 
     return (
@@ -534,8 +527,7 @@ export default function VisitorRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            onScroll={syncTableScroll}
-                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
@@ -543,23 +535,23 @@ export default function VisitorRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
+                                    <table className="w-full min-w-[2360px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
+                                                <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
+                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
+                                                <th className="w-[105px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
                                                 <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                <th className="w-[205px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">

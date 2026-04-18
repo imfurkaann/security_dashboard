@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ActionButton from '../components/ActionButton';
 import api from '../utils/api';
-import type { GuestRegistryRecord } from '../types';
+import type { GuestRegistryColumn, GuestRegistryRecord, GuestRegistrySchema } from '../types';
 
 interface ImportSummary {
     totalRows: number;
@@ -11,42 +10,39 @@ interface ImportSummary {
     failedRows: number;
 }
 
-const INITIAL_FILTERS = {
-    adi: '',
-    soyadi: '',
-    acenta: '',
-    giris_tarihi: '',
-    giris_saati: ''
-};
+const EMPTY_SCHEMA: GuestRegistrySchema = { columns: [] };
 
 export default function GuestRegistry() {
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+    const hasMountedRef = useRef(false);
 
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const [records, setRecords] = useState<GuestRegistryRecord[]>([]);
-    const [filters, setFilters] = useState(INITIAL_FILTERS);
-    const [dateInputValue, setDateInputValue] = useState('');
-    const [timeInputValue, setTimeInputValue] = useState('');
+    const [schema, setSchema] = useState<GuestRegistrySchema>(EMPTY_SCHEMA);
+    const [searchText, setSearchText] = useState('');
     const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
-    const [hasSearched, setHasSearched] = useState(false);
-    const [debouncedFilters, setDebouncedFilters] = useState(INITIAL_FILTERS);
+    const [debouncedSearchText, setDebouncedSearchText] = useState('');
 
-    const fetchRecords = async (activeFilters = INITIAL_FILTERS) => {
+    const columns = schema.columns;
+
+    const fetchRecords = useCallback(async (searchValue = '') => {
         setLoading(true);
         try {
-            const response = await api.get('/guest-registry/records', {
-                params: {
-                    ...activeFilters,
-                    page: 1,
-                    limit: 300
-                }
-            });
+            const params: Record<string, string | number> = { page: 1, limit: 500 };
 
+            if (searchValue.trim()) {
+                params.search = searchValue.trim();
+            }
+
+            const response = await api.get('/guest-registry/records', { params });
+            const nextSchema: GuestRegistrySchema = response.data?.schema || EMPTY_SCHEMA;
+
+            setSchema(nextSchema);
             setRecords(response.data?.data || []);
         } catch (error) {
             console.error('Misafir kayitlari yuklenemedi:', error);
@@ -54,27 +50,33 @@ export default function GuestRegistry() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        void fetchRecords();
+    }, [fetchRecords]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
-            setDebouncedFilters(filters);
-        }, 300);
+            setDebouncedSearchText(searchText);
+        }, 250);
 
         return () => clearTimeout(timer);
-    }, [filters]);
+    }, [searchText]);
 
     useEffect(() => {
-        const hasActive = Object.values(debouncedFilters).some((value) => value.trim() !== '');
-        setHasSearched(hasActive);
-        fetchRecords(debouncedFilters);
-    }, [debouncedFilters]);
+        if (!hasMountedRef.current) {
+            hasMountedRef.current = true;
+            return;
+        }
+
+        void fetchRecords(debouncedSearchText);
+    }, [debouncedSearchText, fetchRecords]);
 
     const onReset = async () => {
-        setHasSearched(false);
-        setFilters(INITIAL_FILTERS);
-        setDateInputValue('');
-        setTimeInputValue('');
+        setSearchText('');
+        setDebouncedSearchText('');
+        await fetchRecords('');
     };
 
     const onUploadClick = () => {
@@ -109,7 +111,9 @@ export default function GuestRegistry() {
             }
 
             alert('Excel yukleme tamamlandi');
-            await fetchRecords(filters);
+            setSearchText('');
+            setDebouncedSearchText('');
+            await fetchRecords('');
         } catch (error: any) {
             console.error('Excel yuklenemedi:', error);
             const apiMessage = error?.response?.data?.message;
@@ -121,65 +125,56 @@ export default function GuestRegistry() {
     };
 
     const hasActiveFilters = useMemo(() => {
-        return Object.values(filters).some((value) => value.trim() !== '');
-    }, [filters]);
+        return searchText.trim() !== '';
+    }, [searchText]);
 
     const existenceMessage = useMemo(() => {
-        if (!hasSearched) return null;
+        if (!hasActiveFilters) return null;
         if (records.length > 0) {
-            return `${records.length} kayit bulundu`;
+            return `${records.length} kayıt bulundu`;
         }
-        return 'Aranan kriterlere gore kayit bulunamadi';
-    }, [hasSearched, records.length]);
+        return 'Aranan kriterlere göre kayıt bulunamadı';
+    }, [hasActiveFilters, records.length]);
 
-    const formatDisplayDate = (value: string | null | undefined): string => {
-        if (!value) return '-';
+    const formatCellValue = (value: unknown, columnType: GuestRegistryColumn['type']): string => {
+        if (value === null || value === undefined) return '-';
 
         const text = String(value).trim();
-        const parsedDate = new Date(text);
-        if (!Number.isNaN(parsedDate.getTime())) {
-            const day = String(parsedDate.getDate()).padStart(2, '0');
-            const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
-            const year = parsedDate.getFullYear();
-            return `${day}.${month}.${year}`;
+        if (!text) return '-';
+
+        if (columnType === 'date') {
+            const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (isoDateMatch) {
+                const [, year, month, day] = isoDateMatch;
+                return `${day}.${month}.${year}`;
+            }
+
+            const dmyMatch = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+            if (dmyMatch) {
+                const day = dmyMatch[1].padStart(2, '0');
+                const month = dmyMatch[2].padStart(2, '0');
+                const year = dmyMatch[3].length === 2 ? `20${dmyMatch[3]}` : dmyMatch[3];
+                return `${day}.${month}.${year}`;
+            }
         }
 
-        const isoDateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (isoDateMatch) {
-            const [, year, month, day] = isoDateMatch;
-            return `${day}.${month}.${year}`;
-        }
+        if (columnType === 'time') {
+            const hhmmssMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+            if (hhmmssMatch) {
+                return `${hhmmssMatch[1].padStart(2, '0')}:${hhmmssMatch[2]}`;
+            }
 
-        const dmyMatch = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-        if (dmyMatch) {
-            const day = dmyMatch[1].padStart(2, '0');
-            const month = dmyMatch[2].padStart(2, '0');
-            const year = dmyMatch[3].length === 2 ? `20${dmyMatch[3]}` : dmyMatch[3];
-            return `${day}.${month}.${year}`;
+            const dotTimeMatch = text.match(/^(\d{1,2})\.(\d{2})(?:\.\d{2})?$/);
+            if (dotTimeMatch) {
+                return `${dotTimeMatch[1].padStart(2, '0')}:${dotTimeMatch[2]}`;
+            }
         }
 
         return text;
     };
 
-    const formatDisplayTime = (value: string | null | undefined): string => {
-        if (!value) return '-';
-
-        const text = String(value).trim();
-        const hhmmssMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-        if (hhmmssMatch) {
-            const hour = hhmmssMatch[1].padStart(2, '0');
-            const minute = hhmmssMatch[2];
-            return `${hour}:${minute}`;
-        }
-
-        const dotTimeMatch = text.match(/^(\d{1,2})\.(\d{2})(?:\.\d{2})?$/);
-        if (dotTimeMatch) {
-            const hour = dotTimeMatch[1].padStart(2, '0');
-            const minute = dotTimeMatch[2];
-            return `${hour}:${minute}`;
-        }
-
-        return text;
+    const getRowCellValue = (record: GuestRegistryRecord, columnKey: string): unknown => {
+        return record.row_data?.[columnKey];
     };
 
     useEffect(() => {
@@ -200,26 +195,14 @@ export default function GuestRegistry() {
             window.removeEventListener('resize', updateScrollbarWidth);
             resizeObserver.disconnect();
         };
-    }, [records.length, loading]);
-
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-
-        if (!tableNode || !barNode) return;
-        if (barNode.scrollLeft !== tableNode.scrollLeft) {
-            barNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
+    }, [records.length, columns.length, loading]);
 
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
 
         if (!tableNode || !barNode) return;
-        if (tableNode.scrollLeft !== barNode.scrollLeft) {
-            tableNode.scrollLeft = barNode.scrollLeft;
-        }
+        tableNode.scrollLeft = barNode.scrollLeft;
     };
 
     return (
@@ -264,18 +247,18 @@ export default function GuestRegistry() {
 
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 <div className="text-sm text-gray-600">
-                    Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayit
+                    Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayıt
                 </div>
 
                 {lastSummary && (
                     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                        Toplam satir: {lastSummary.totalRows} | Eklenen: {lastSummary.insertedRows} | Atlanan: {lastSummary.skippedRows} | Hatali: {lastSummary.failedRows}
+                        Toplam satır: {lastSummary.totalRows} | Eklenen: {lastSummary.insertedRows} | Atlanan: {lastSummary.skippedRows} | Hatalı: {lastSummary.failedRows}
                     </div>
                 )}
 
                 <div className="w-full bg-white rounded-lg shadow-md p-4 sm:p-5 mb-2">
                     <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
+                        <h2 className="text-base font-bold text-gray-900">Arama</h2>
                         <button
                             onClick={onReset}
                             disabled={loading || uploading || !hasActiveFilters}
@@ -285,62 +268,19 @@ export default function GuestRegistry() {
                         </button>
                     </div>
 
-                    <div className="flex flex-nowrap items-end gap-3 overflow-x-auto">
-                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Isim</label>
+                    <div className="grid grid-cols-1 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Exceldeki tüm kolonlarda ara</label>
                             <input
                                 type="text"
-                                value={filters.adi}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, adi: e.target.value }))}
-                                placeholder="Ara..."
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={searchText}
+                                onChange={(e) => setSearchText(e.target.value)}
+                                placeholder="Örn: Mustafa, Nektar, 201, FB..."
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
-                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Soyisim</label>
-                            <input
-                                type="text"
-                                value={filters.soyadi}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, soyadi: e.target.value }))}
-                                placeholder="Ara..."
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                        </div>
-                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Acenta</label>
-                            <input
-                                type="text"
-                                value={filters.acenta}
-                                onChange={(e) => setFilters((prev) => ({ ...prev, acenta: e.target.value }))}
-                                placeholder="Ara..."
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                        </div>
-                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Giris Tarihi</label>
-                            <input
-                                type="date"
-                                value={dateInputValue}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    setDateInputValue(value);
-                                    setFilters((prev) => ({ ...prev, giris_tarihi: value }));
-                                }}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                        </div>
-                        <div className="min-w-[170px] sm:min-w-[180px] flex-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Giris Saati</label>
-                            <input
-                                type="time"
-                                value={timeInputValue}
-                                onChange={(e) => {
-                                    const value = e.target.value;
-                                    setTimeInputValue(value);
-                                    setFilters((prev) => ({ ...prev, giris_saati: value }));
-                                }}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
+                        <div className="text-xs text-gray-500">
+                            Arama; Excel satırındaki tüm kolon değerleri içinde çalışır.
                         </div>
                     </div>
                 </div>
@@ -357,56 +297,43 @@ export default function GuestRegistry() {
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
                         </div>
                     ) : records.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">Kayit bulunamadi</div>
+                        <div className="text-center py-12 text-gray-500">Kayıt bulunamadı</div>
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            onScroll={syncTableScroll}
-                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            tabIndex={0}
+                            role="region"
+                            aria-label="Misafir kayit tablosu"
                         >
-                            <div className="min-h-full">
-                                <table className="w-full min-w-[1900px] table-auto divide-y divide-gray-200">
+                            <div className="min-h-full w-max min-w-full">
+                                <table className="table-auto divide-y divide-gray-200" style={{ width: 'max-content', minWidth: '100%' }}>
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hitap</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adi</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Soyadi</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giris Tarihi</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giris Saati</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cikis Tarihi</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Yetiskin</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cocuk</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Free</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konaklama</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oda</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Geceleme</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Istenen</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Verilen</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voucher</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acenta</th>
-                                            <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ulke</th>
+                                            {columns.map((column) => (
+                                                <th
+                                                    key={column.key}
+                                                    className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                                >
+                                                    {column.label}
+                                                </th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {records.map((record) => (
                                             <tr key={record.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.hitap || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.adi || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.soyadi || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayDate(record.giris_tarihi)}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayTime(record.giris_saati)}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDisplayDate(record.cikis_tarihi)}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.yetiskin || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.cocuk || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.free || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.konaklama || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.oda || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.geceleme || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.istenen || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.verilen || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{record.voucher || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.acenta || '-'}</td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{record.ulke || '-'}</td>
+                                                {columns.map((column) => {
+                                                    const value = getRowCellValue(record, column.key);
+                                                    return (
+                                                        <td
+                                                            key={column.key}
+                                                            className="px-4 py-3 whitespace-nowrap text-sm text-gray-700"
+                                                        >
+                                                            {formatCellValue(value, column.type)}
+                                                        </td>
+                                                    );
+                                                })}
                                             </tr>
                                         ))}
                                     </tbody>

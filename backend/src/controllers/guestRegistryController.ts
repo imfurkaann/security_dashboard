@@ -12,46 +12,16 @@ interface ParsedRow {
     rowData: Record<string, unknown>;
 }
 
-const EXPECTED_HEADERS = new Set([
-    'voucher',
-    'acenta',
-    'hitap',
-    'adi',
-    'soyadi',
-    'oda',
-    'yetiskin',
-    'cocuk',
-    'free',
-    'konaklama',
-    'giristarihi',
-    'geceleme',
-    'gecelme',
-    'cikistarihi',
-    'girissaati',
-    'istenen',
-    'verilen',
-    'ulke'
-]);
+type GuestColumnType = 'text' | 'date' | 'time' | 'number';
 
-interface GuestExcelColumns {
-    voucher: string | null;
-    acenta: string | null;
-    hitap: string | null;
-    adi: string | null;
-    soyadi: string | null;
-    oda: string | null;
-    yetiskin: string | null;
-    cocuk: string | null;
-    free: string | null;
-    konaklama: string | null;
-    giris_tarihi: string | null;
-    geceleme: string | null;
-    cikis_tarihi: string | null;
-    giris_saati: string | null;
-    istenen: string | null;
-    verilen: string | null;
-    ulke: string | null;
+interface GuestRegistryColumn {
+    key: string;
+    label: string;
+    type: GuestColumnType;
+    index: number;
 }
+
+const isHiddenGeneratedColumn = (key: string): boolean => /^COL_\d+(?:_\d+)?$/i.test(key.trim());
 
 const normalizeSearchText = (value: string): string => {
     return value
@@ -95,6 +65,52 @@ const sanitizeCell = (value: unknown, maxLength: number): string | null => {
     const text = String(value).trim();
     if (!text) return null;
     return sanitizePlainText(text, maxLength);
+};
+
+const makeUniqueHeaderKey = (baseKey: string, usedKeys: Set<string>, fallbackIndex: number): string => {
+    const normalizedBase = baseKey || `COL_${fallbackIndex + 1}`;
+    if (!usedKeys.has(normalizedBase)) {
+        usedKeys.add(normalizedBase);
+        return normalizedBase;
+    }
+
+    let suffix = 2;
+    let candidate = `${normalizedBase}_${suffix}`;
+    while (usedKeys.has(candidate)) {
+        suffix += 1;
+        candidate = `${normalizedBase}_${suffix}`;
+    }
+
+    usedKeys.add(candidate);
+    return candidate;
+};
+
+const inferColumnType = (values: unknown[]): GuestColumnType => {
+    const nonEmptyValues = values
+        .map((value) => (value === null || value === undefined ? '' : String(value).trim()))
+        .filter((value) => value.length > 0);
+
+    if (nonEmptyValues.length === 0) {
+        return 'text';
+    }
+
+    const dateHits = nonEmptyValues.filter((value) => parseDateValue(value) !== null).length;
+    const timeHits = nonEmptyValues.filter((value) => parseTimeValue(value) !== null).length;
+    const numericHits = nonEmptyValues.filter((value) => !Number.isNaN(Number(value))).length;
+
+    if (dateHits / nonEmptyValues.length >= 0.6) {
+        return 'date';
+    }
+
+    if (timeHits / nonEmptyValues.length >= 0.6) {
+        return 'time';
+    }
+
+    if (numericHits / nonEmptyValues.length >= 0.8) {
+        return 'number';
+    }
+
+    return 'text';
 };
 
 const formatTwoDigits = (value: number): string => String(value).padStart(2, '0');
@@ -222,63 +238,40 @@ const isEmptyRow = (rowData: Record<string, unknown>): boolean => {
     });
 };
 
-const getCellByAliases = (lookup: Map<string, unknown>, aliases: string[]): unknown => {
-    for (const alias of aliases) {
-        const value = lookup.get(alias);
-        if (value !== undefined) {
-            return value;
-        }
-    }
-
-    return null;
-};
-
-const mapExcelColumns = (rowData: Record<string, unknown>): GuestExcelColumns => {
-    const lookup = new Map<string, unknown>();
-
-    Object.entries(rowData).forEach(([key, value]) => {
-        lookup.set(normalizeHeader(key), value);
-    });
-
-    return {
-        voucher: sanitizeCell(getCellByAliases(lookup, ['voucher']), 100),
-        acenta: sanitizeCell(getCellByAliases(lookup, ['acenta', 'acente']), 150),
-        hitap: sanitizeCell(getCellByAliases(lookup, ['hitap']), 50),
-        adi: sanitizeCell(getCellByAliases(lookup, ['adi', 'ad']), 120),
-        soyadi: sanitizeCell(getCellByAliases(lookup, ['soyadi', 'soyad']), 120),
-        oda: sanitizeCell(getCellByAliases(lookup, ['oda']), 50),
-        yetiskin: sanitizeCell(getCellByAliases(lookup, ['yetiskin']), 20),
-        cocuk: sanitizeCell(getCellByAliases(lookup, ['cocuk']), 20),
-        free: sanitizeCell(getCellByAliases(lookup, ['free']), 20),
-        konaklama: sanitizeCell(getCellByAliases(lookup, ['konaklama']), 50),
-        giris_tarihi: parseDateValue(getCellByAliases(lookup, ['giristarihi'])),
-        geceleme: sanitizeCell(getCellByAliases(lookup, ['geceleme', 'gecelme']), 50),
-        cikis_tarihi: parseDateValue(getCellByAliases(lookup, ['cikistarihi'])),
-        giris_saati: parseTimeValue(getCellByAliases(lookup, ['girissaati'])),
-        istenen: sanitizeCell(getCellByAliases(lookup, ['istenen']), 200),
-        verilen: sanitizeCell(getCellByAliases(lookup, ['verilen']), 200),
-        ulke: sanitizeCell(getCellByAliases(lookup, ['ulke']), 100)
-    };
+const isNumericLike = (value: string): boolean => {
+    const normalized = value.trim().replace(',', '.');
+    return normalized.length > 0 && !Number.isNaN(Number(normalized));
 };
 
 const detectHeaderRowIndex = (rows: unknown[][]): number => {
+    const scanLimit = Math.min(rows.length, 20);
     let bestIndex = 0;
-    let bestScore = -1;
+    let bestScore = -Infinity;
 
-    rows.forEach((row, rowIndex) => {
-        const score = row.reduce<number>((acc: number, cell: unknown) => {
-            if (cell === null || cell === undefined) return acc;
-            const normalized = normalizeHeader(String(cell));
-            return EXPECTED_HEADERS.has(normalized) ? acc + 1 : acc;
-        }, 0);
+    for (let rowIndex = 0; rowIndex < scanLimit; rowIndex++) {
+        const row = rows[rowIndex] || [];
+        const cleaned = row
+            .map((cell) => (cell === null || cell === undefined ? '' : String(cell).trim()))
+            .filter((cell) => cell.length > 0);
+
+        if (cleaned.length === 0) {
+            continue;
+        }
+
+        const textCount = cleaned.filter((cell) => /[A-Za-zÇĞİÖŞÜçğıöşü]/.test(cell)).length;
+        const numericCount = cleaned.filter((cell) => isNumericLike(cell)).length;
+        const uniqueCount = new Set(cleaned.map((cell) => normalizeHeader(cell))).size;
+
+        // Prefer rows that look like headers: many non-empty/textual and mostly unique cells.
+        const score = cleaned.length * 3 + textCount * 4 + uniqueCount * 2 - numericCount * 2;
 
         if (score > bestScore) {
             bestScore = score;
             bestIndex = rowIndex;
         }
-    });
+    }
 
-    return bestScore > 0 ? bestIndex : 0;
+    return bestIndex;
 };
 
 const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
@@ -305,14 +298,20 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
 
         const headerRowIndex = detectHeaderRowIndex(rawRows);
         const headerRow = rawRows[headerRowIndex] || [];
+        const usedRowKeys = new Set<string>();
+        const headerKeys = headerRow.map((rawHeader, colIndex) => {
+            const key = rawHeader ? String(rawHeader).trim() : '';
+            return makeUniqueHeaderKey(key || `COL_${colIndex + 1}`, usedRowKeys, colIndex);
+        });
 
         for (let rowIndex = headerRowIndex + 1; rowIndex < rawRows.length; rowIndex++) {
             const dataRow = rawRows[rowIndex] || [];
             const rowData: Record<string, unknown> = {};
+            const rowUsedKeys = new Set<string>();
 
-            for (let colIndex = 0; colIndex < Math.max(headerRow.length, dataRow.length); colIndex++) {
-                const rawHeader = headerRow[colIndex];
-                const key = rawHeader ? String(rawHeader).trim() : `COL_${colIndex + 1}`;
+            for (let colIndex = 0; colIndex < Math.max(headerKeys.length, dataRow.length); colIndex++) {
+                const rawHeader = headerKeys[colIndex] || `COL_${colIndex + 1}`;
+                const key = makeUniqueHeaderKey(rawHeader, rowUsedKeys, colIndex);
                 rowData[key] = dataRow[colIndex] ?? null;
             }
 
@@ -363,8 +362,6 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                     continue;
                 }
 
-                const mapped = mapExcelColumns(row.rowData);
-
                 await client.query(
                     `INSERT INTO misafir_kayitlari (
                         id,
@@ -372,27 +369,9 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                         sheet_name,
                         row_number,
                         row_data,
-                        voucher,
-                        acenta,
-                        hitap,
-                        adi,
-                        soyadi,
-                        oda,
-                        yetiskin,
-                        cocuk,
-                        free,
-                        konaklama,
-                        giris_tarihi,
-                        geceleme,
-                        cikis_tarihi,
-                        giris_saati,
-                        istenen,
-                        verilen,
-                        ulke,
                         created_by
                     ) VALUES (
-                        $1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11,
-                        $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+                        $1, $2, $3, $4, $5::jsonb, $6
                     )`,
                     [
                         uuidv4(),
@@ -400,23 +379,6 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                         row.sheetName,
                         row.rowNumber,
                         JSON.stringify(row.rowData),
-                        mapped.voucher,
-                        mapped.acenta,
-                        mapped.hitap,
-                        mapped.adi,
-                        mapped.soyadi,
-                        mapped.oda,
-                        mapped.yetiskin,
-                        mapped.cocuk,
-                        mapped.free,
-                        mapped.konaklama,
-                        mapped.giris_tarihi,
-                        mapped.geceleme,
-                        mapped.cikis_tarihi,
-                        mapped.giris_saati,
-                        mapped.istenen,
-                        mapped.verilen,
-                        mapped.ulke,
                         createdBy
                     ]
                 );
@@ -486,112 +448,9 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
     try {
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
-        const offset = (page - 1) * limit;
 
-        const voucherQuery = typeof req.query.voucher === 'string' ? req.query.voucher.trim() : '';
-        const acentaQuery = typeof req.query.acenta === 'string' ? req.query.acenta.trim() : '';
-        const adiQuery = typeof req.query.adi === 'string' ? req.query.adi.trim() : '';
-        const soyadiQuery = typeof req.query.soyadi === 'string' ? req.query.soyadi.trim() : '';
-        const girisTarihiQuery = typeof req.query.giris_tarihi === 'string' ? req.query.giris_tarihi.trim() : '';
-        const girisSaatiQuery = typeof req.query.giris_saati === 'string' ? req.query.giris_saati.trim() : '';
-        const odaQuery = typeof req.query.oda === 'string' ? req.query.oda.trim() : '';
-        const ulkeQuery = typeof req.query.ulke === 'string' ? req.query.ulke.trim() : '';
         const searchQuery = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-        const conditions: string[] = ['deleted_at IS NULL'];
-        const params: Array<string | number> = [];
-
-        const addParam = (value: string | number): string => {
-            params.push(value);
-            return `$${params.length}`;
-        };
-
-        const normalizedFieldExpr = (fieldName: string): string =>
-            `translate(lower(coalesce(${fieldName}::text, '')), 'cgioisuçğıöşü', 'cgioisucgiosu')`;
-
-        if (voucherQuery) {
-            const param = addParam(`%${voucherQuery}%`);
-            conditions.push(`coalesce(voucher, '') ILIKE ${param}`);
-        }
-
-        if (acentaQuery) {
-            const param = addParam(`%${normalizeSearchText(acentaQuery)}%`);
-            conditions.push(`${normalizedFieldExpr('acenta')} LIKE ${param}`);
-        }
-
-        if (adiQuery) {
-            const param = addParam(`%${normalizeSearchText(adiQuery)}%`);
-            conditions.push(`${normalizedFieldExpr('adi')} LIKE ${param}`);
-        }
-
-        if (soyadiQuery) {
-            const param = addParam(`%${normalizeSearchText(soyadiQuery)}%`);
-            conditions.push(`${normalizedFieldExpr('soyadi')} LIKE ${param}`);
-        }
-
-        if (girisTarihiQuery) {
-            const normalizedDate = parseDateValue(girisTarihiQuery);
-            if (normalizedDate) {
-                const param = addParam(normalizedDate);
-                conditions.push(`giris_tarihi = ${param}::date`);
-            }
-        }
-
-        if (girisSaatiQuery) {
-            const normalizedTime = parseTimeValue(girisSaatiQuery);
-            if (normalizedTime) {
-                const param = addParam(normalizedTime);
-                conditions.push(`giris_saati = ${param}::time`);
-            }
-        }
-
-        if (odaQuery) {
-            const param = addParam(`%${odaQuery}%`);
-            conditions.push(`coalesce(oda, '') ILIKE ${param}`);
-        }
-
-        if (ulkeQuery) {
-            const param = addParam(`%${normalizeSearchText(ulkeQuery)}%`);
-            conditions.push(`${normalizedFieldExpr('ulke')} LIKE ${param}`);
-        }
-
-        if (searchQuery) {
-            const normalizedSearch = `%${normalizeSearchText(searchQuery)}%`;
-            const searchParam = addParam(normalizedSearch);
-            const rawSearchParam = addParam(`%${searchQuery}%`);
-
-            conditions.push(`(
-                ${normalizedFieldExpr('voucher')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('acenta')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('hitap')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('adi')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('soyadi')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('oda')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('yetiskin')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('cocuk')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('free')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('konaklama')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('giris_tarihi')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('geceleme')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('cikis_tarihi')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('giris_saati')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('istenen')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('verilen')} LIKE ${searchParam}
-                OR ${normalizedFieldExpr('ulke')} LIKE ${searchParam}
-                OR row_data::text ILIKE ${rawSearchParam}
-            )`);
-        }
-
-        const whereClause = `WHERE ${conditions.join(' AND ')}`;
-
-        const countResult = await pool.query(
-            `SELECT COUNT(*)::int as total FROM misafir_kayitlari ${whereClause}`,
-            params
-        );
-
-        const total = countResult.rows[0]?.total || 0;
-
-        const selectParams = [...params, limit, offset];
         const dataResult = await pool.query(
             `SELECT
                 id,
@@ -599,35 +458,81 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
                 sheet_name,
                 row_number,
                 row_data,
-                voucher,
-                acenta,
-                hitap,
-                adi,
-                soyadi,
-                oda,
-                yetiskin,
-                cocuk,
-                free,
-                konaklama,
-                to_char(giris_tarihi, 'YYYY-MM-DD') as giris_tarihi,
-                geceleme,
-                to_char(cikis_tarihi, 'YYYY-MM-DD') as cikis_tarihi,
-                to_char(giris_saati, 'HH24:MI:SS') as giris_saati,
-                istenen,
-                verilen,
-                ulke,
                 created_at
              FROM misafir_kayitlari
-             ${whereClause}
-                 ORDER BY created_at ASC, sheet_name ASC, row_number ASC
-             LIMIT $${params.length + 1}
-             OFFSET $${params.length + 2}`,
-            selectParams
+             WHERE deleted_at IS NULL
+             ORDER BY created_at ASC, sheet_name ASC, row_number ASC`
         );
+
+        const records = dataResult.rows.map((row: any) => ({
+            id: row.id,
+            excel_file_name: row.excel_file_name,
+            sheet_name: row.sheet_name,
+            row_number: row.row_number,
+            row_data: row.row_data || {},
+            created_at: row.created_at
+        }));
+
+        const orderedColumnKeys: string[] = [];
+        const columnValueMap = new Map<string, unknown[]>();
+
+        records.forEach((record) => {
+            Object.entries(record.row_data as Record<string, unknown>).forEach(([key, value]) => {
+                if (isHiddenGeneratedColumn(key)) {
+                    return;
+                }
+
+                if (!columnValueMap.has(key)) {
+                    columnValueMap.set(key, []);
+                    orderedColumnKeys.push(key);
+                }
+
+                columnValueMap.get(key)?.push(value);
+            });
+        });
+
+        const columns: GuestRegistryColumn[] = orderedColumnKeys.map((key, index) => ({
+            key,
+            label: key,
+            type: inferColumnType(columnValueMap.get(key) || []),
+            index
+        }));
+
+        const visibleRecords = records.map((record) => {
+            const visibleRowData = Object.fromEntries(
+                Object.entries(record.row_data as Record<string, unknown>).filter(([key]) => !isHiddenGeneratedColumn(key))
+            );
+
+            return {
+                ...record,
+                row_data: visibleRowData
+            };
+        });
+
+        let filteredRecords = visibleRecords.filter((record) => {
+            if (!searchQuery) {
+                return true;
+            }
+
+            const normalizedSearch = normalizeSearchText(searchQuery);
+            const rowData = record.row_data as Record<string, unknown>;
+            const searchableText = Object.values(rowData)
+                .map((value) => (value === null || value === undefined ? '' : normalizeSearchText(String(value))))
+                .join(' ');
+
+            return searchableText.includes(normalizedSearch);
+        });
+
+        const total = filteredRecords.length;
+        const offset = (page - 1) * limit;
+        filteredRecords = filteredRecords.slice(offset, offset + limit);
 
         res.status(200).json({
             success: true,
-            data: dataResult.rows,
+            data: filteredRecords,
+            schema: {
+                columns
+            },
             pagination: {
                 page,
                 limit,

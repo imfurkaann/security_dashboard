@@ -249,6 +249,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                     gate: gate || undefined,
                     vehiclePlate: normalizedPlate || undefined,
                     personCount: personCountToInsert,
+                    childrenCount: childrenCountValue,
                     phone: normalizedPhone || undefined,
                     subcontractorWorker: Boolean(subcontractor_worker),
                     forElectricStation: Boolean(for_electric_station),
@@ -442,7 +443,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         try {
             const visitorInfo = await pool.query(
                 `SELECT full_name, company_name, visiting_person, vehicle_plate, 
-                        person_count, phone, subcontractor_worker, for_electric_station, 
+                        person_count, children_count, gate, phone, subcontractor_worker, for_electric_station, 
                         notes, exit_time, send_whatsapp 
                  FROM visitor_records WHERE id = $1`,
                 [id]
@@ -457,8 +458,10 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                     fullName: record.full_name || undefined,
                     companyName: record.company_name || undefined,
                     visitingPerson: record.visiting_person || undefined,
+                    gate: record.gate || undefined,
                     vehiclePlate: record.vehicle_plate || undefined,
                     personCount: record.person_count || undefined,
+                    childrenCount: record.children_count || undefined,
                     phone: record.phone || undefined,
                     subcontractorWorker: Boolean(record.subcontractor_worker),
                     forElectricStation: Boolean(record.for_electric_station),

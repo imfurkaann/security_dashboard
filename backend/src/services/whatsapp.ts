@@ -23,13 +23,15 @@ export const createVehicleRecordMessage = (data: {
     givenDate: string;
     givenTime: string;
     destination?: string;
+    notes?: string;
 }): string => {
     const konumSatir = data.destination ? `Konum: ${data.destination}\n` : '';
+    const aciklamaSatir = data.notes ? `Açıklama: ${data.notes}\n` : '';
 
-    return `ARAÇ TESLİM BİLDİRİMİ
+    return `🔑 ARAÇ TESLİM BİLDİRİMİ 🔑
 Araç: ${data.vehiclePlate}
 Kişi: ${data.managerName}
-${konumSatir}Saat: ${data.givenTime}
+${konumSatir}${aciklamaSatir}Saat: ${data.givenTime}
 
 Teslim edilmiştir.`;
 };
@@ -47,7 +49,7 @@ export const createVehicleReturnMessage = (data: {
     const locationLine = data.destination ? `Konum: ${data.destination}\n` : '';
     const durationLine = data.driveDuration ? `Sürüş Süresi: ${data.driveDuration}\n` : '';
 
-    return `ARAÇ TESLİM ALMA BİLDİRİMİ
+    return `🚗 ARAÇ TESLİM ALMA BİLDİRİMİ 🚗
 Araç: ${data.vehiclePlate}
 Kişi: ${data.managerName}
 ${locationLine}${durationLine}Saat: ${data.returnTime}
@@ -67,13 +69,14 @@ export const createVisitorRecordMessage = (data: {
     gate?: string;
     vehiclePlate?: string;
     personCount?: number;
+    childrenCount?: number;
     phone?: string;
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
     notes?: string;
 }): string => {
     // Mesaj satırlarını dinamik olarak oluştur
-    const lines: string[] = ['ZİYARETÇİ GİRİŞ BİLDİRİMİ', ''];
+    const lines: string[] = ['🟢 ZİYARETÇİ GİRİŞ BİLDİRİMİ 🟢', ''];
 
     // Ad Soyad (zorunlu)
     if (data.fullName) {
@@ -103,6 +106,11 @@ export const createVisitorRecordMessage = (data: {
     // Kişi Sayısı
     if (data.personCount && data.personCount > 1) {
         lines.push(`Kişi Sayısı: ${data.personCount}`);
+    }
+
+    // Çocuk Sayısı
+    if (data.childrenCount && data.childrenCount > 0) {
+        lines.push(`Çocuk Sayısı: ${data.childrenCount}`);
     }
 
     // Telefon
@@ -140,15 +148,17 @@ export const createVisitorExitMessage = (data: {
     fullName?: string;
     companyName?: string;
     visitingPerson?: string;
+    gate?: string;
     vehiclePlate?: string;
     personCount?: number;
+    childrenCount?: number;
     phone?: string;
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
     notes?: string;
     exitTime: string;
 }): string => {
-    const lines: string[] = ['ZİYARETÇİ ÇIKIŞ BİLDİRİMİ', ''];
+    const lines: string[] = ['🔴 ZİYARETÇİ ÇIKIŞ BİLDİRİMİ 🔴', ''];
 
     // Ad Soyad
     if (data.fullName) {
@@ -170,9 +180,19 @@ export const createVisitorExitMessage = (data: {
         lines.push(`Araç Plakası: ${data.vehiclePlate}`);
     }
 
+    // Kapı
+    if (data.gate) {
+        lines.push(`Kapı: ${data.gate}`);
+    }
+
     // Kişi Sayısı
     if (data.personCount && data.personCount > 1) {
         lines.push(`Kişi Sayısı: ${data.personCount}`);
+    }
+
+    // Çocuk Sayısı
+    if (data.childrenCount && data.childrenCount > 0) {
+        lines.push(`Çocuk Sayısı: ${data.childrenCount}`);
     }
 
     // Telefon
@@ -214,7 +234,7 @@ export const createFireAlarmMessage = (data: {
 }): string => {
     const notesInfo = data.notes ? `\nNot: ${data.notes}` : "";
 
-    return `YANGIN ALARMI BİLDİRİMİ
+    return `🔥 YANGIN ALARMI BİLDİRİMİ 🔥
 
 Alarm Numarası: ${data.alarmNumber}
 Konum: ${data.location}
@@ -231,7 +251,9 @@ export const createFireAlarmResolveMessage = (data: {
     resolutionNotes?: string;
     falseAlarm: boolean;
 }): string => {
-    const alarmType = data.falseAlarm ? 'YANLIŞ ALARM' : 'ALARM KONTROL EDİLDİ';
+    const alarmType = data.falseAlarm
+        ? '⚠️ YANLIŞ ALARM ⚠️'
+        : '🆗 ALARM KONTROL EDİLDİ 🆗';
     const notesInfo = data.resolutionNotes ? `\nÇözüm Açıklaması: ${data.resolutionNotes}` : "";
 
     return `${alarmType}

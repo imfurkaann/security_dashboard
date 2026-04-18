@@ -337,22 +337,11 @@ export default function FireAlarms() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-        if (!tableNode || !barNode) return;
-        if (barNode.scrollLeft !== tableNode.scrollLeft) {
-            barNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
-
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
         if (!tableNode || !barNode) return;
-        if (tableNode.scrollLeft !== barNode.scrollLeft) {
-            tableNode.scrollLeft = barNode.scrollLeft;
-        }
+        tableNode.scrollLeft = barNode.scrollLeft;
     };
 
     const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
@@ -438,9 +427,9 @@ export default function FireAlarms() {
                                 <p className="text-gray-500">Kayıt bulunmuyor</p>
                             </div>
                         ) : (
-                            <div ref={tableScrollRef} onScroll={syncTableScroll} className="h-full min-h-0 overflow-x-auto overflow-y-auto pb-2">
+                            <div ref={tableScrollRef} className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2">
                                 <div className="min-h-full">
-                                    <table className="w-full table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1320px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>

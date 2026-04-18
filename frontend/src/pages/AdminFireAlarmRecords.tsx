@@ -210,9 +210,14 @@ export default function AdminFireAlarmRecords() {
 
     useEffect(() => {
         const updateScrollbarWidth = () => {
-            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
-            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
-            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
+            const barClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            const normalizedWidth = Math.max(
+                tableScrollWidth - tableClientWidth + barClientWidth,
+                barClientWidth + 1
+            );
+            setScrollbarSpacerWidth(normalizedWidth);
         };
 
         updateScrollbarWidth();
@@ -228,24 +233,12 @@ export default function AdminFireAlarmRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncTableScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-
-        if (!tableNode || !barNode) return;
-        if (barNode.scrollLeft !== tableNode.scrollLeft) {
-            barNode.scrollLeft = tableNode.scrollLeft;
-        }
-    };
-
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
 
         if (!tableNode || !barNode) return;
-        if (tableNode.scrollLeft !== barNode.scrollLeft) {
-            tableNode.scrollLeft = barNode.scrollLeft;
-        }
+        tableNode.scrollLeft = barNode.scrollLeft;
     };
 
     return (
@@ -443,8 +436,7 @@ export default function AdminFireAlarmRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            onScroll={syncTableScroll}
-                            className="h-full min-h-0 overflow-x-scroll overflow-y-auto pb-2"
+                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
