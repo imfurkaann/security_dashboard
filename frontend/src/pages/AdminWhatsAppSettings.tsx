@@ -49,6 +49,7 @@ export default function AdminWhatsAppSettings() {
         [status?.lastQrAt, status?.targetJid]
     );
     const canShowAdvancedActions = Boolean(status?.connected || connectionStarted || hasHistoricalConnection || qrPayload);
+    const isIntegrationEnabled = Boolean(status?.enabled);
 
     const fetchStatus = useCallback(async () => {
         setLoadingStatus(true);
@@ -242,6 +243,16 @@ export default function AdminWhatsAppSettings() {
                     </ol>
                 </div>
 
+                {!loadingStatus && status && !isIntegrationEnabled && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-4 text-sm">
+                        <p className="font-semibold mb-1">WhatsApp entegrasyonu kapalı</p>
+                        <p>
+                            Docker icin backend ortam degiskenini <strong>WHATSAPP_ENABLED=true</strong> yapin ve backend
+                            containerini yeniden baslatin. Bu ayar kapaliyken QR kod olusturulmaz.
+                        </p>
+                    </div>
+                )}
+
                 {!canShowAdvancedActions && (
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-3">1) İlk Kurulum</h2>
@@ -251,7 +262,7 @@ export default function AdminWhatsAppSettings() {
                         <button
                             type="button"
                             onClick={startInitialConnection}
-                            disabled={saving || loadingStatus}
+                            disabled={saving || loadingStatus || !isIntegrationEnabled}
                             className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-400"
                         >
                             Yeni Bağlantı Oluştur
@@ -402,7 +413,7 @@ export default function AdminWhatsAppSettings() {
                             <button
                                 type="button"
                                 onClick={reconnect}
-                                disabled={saving || loadingStatus}
+                                disabled={saving || loadingStatus || !isIntegrationEnabled}
                                 className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-400"
                             >
                                 Yeniden Bağlan
@@ -410,7 +421,7 @@ export default function AdminWhatsAppSettings() {
                             <button
                                 type="button"
                                 onClick={resetSession}
-                                disabled={saving || loadingStatus}
+                                disabled={saving || loadingStatus || !isIntegrationEnabled}
                                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-400"
                             >
                                 Oturumu Sıfırla (Auth Dosyalarını Temizle)
