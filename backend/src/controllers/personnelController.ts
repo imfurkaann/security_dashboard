@@ -61,7 +61,7 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // Check if username already exists
+        // Check if username already exists among active records
         const checkQuery = 'SELECT id FROM personnel WHERE username = $1 AND deleted_at IS NULL';
         const checkResult = await client.query(checkQuery, [sanitizedUsername]);
 
@@ -117,9 +117,21 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
             message: 'Personel başarıyla eklendi',
             data: newPersonnel
         });
-    } catch (error) {
+    } catch (error: any) {
         await client.query('ROLLBACK');
         console.error('Error creating personnel:', error);
+
+        if (
+            error?.code === '23505' &&
+            (error?.constraint === 'personnel_username_key' || error?.constraint === 'idx_personnel_username_active_unique')
+        ) {
+            res.status(409).json({
+                success: false,
+                message: 'Bu kullanıcı adı zaten kullanımda. Lütfen farklı bir kullanıcı adı girin.'
+            });
+            return;
+        }
+
         res.status(500).json({
             success: false,
             message: 'Personel eklenirken bir hata oluştu'
@@ -163,7 +175,7 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // Check if username is taken by another user
+        // Check if username is taken by another active user
         const checkQuery = 'SELECT id FROM personnel WHERE username = $1 AND id != $2 AND deleted_at IS NULL';
         const checkResult = await client.query(checkQuery, [sanitizedUsername, id]);
 
@@ -265,9 +277,21 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
             message: 'Personel başarıyla güncellendi',
             data: updatedPersonnel
         });
-    } catch (error) {
+    } catch (error: any) {
         await client.query('ROLLBACK');
         console.error('Error updating personnel:', error);
+
+        if (
+            error?.code === '23505' &&
+            (error?.constraint === 'personnel_username_key' || error?.constraint === 'idx_personnel_username_active_unique')
+        ) {
+            res.status(409).json({
+                success: false,
+                message: 'Bu kullanıcı adı başka bir kullanıcı tarafından kullanılıyor.'
+            });
+            return;
+        }
+
         res.status(500).json({
             success: false,
             message: 'Personel güncellenirken bir hata oluştu'
@@ -304,7 +328,9 @@ export const deletePersonnel = async (req: Request, res: Response): Promise<void
         // Soft delete
         const deleteQuery = `
             UPDATE personnel
-            SET deleted_at = CURRENT_TIMESTAMP, is_active = false, updated_at = CURRENT_TIMESTAMP
+            SET deleted_at = CURRENT_TIMESTAMP,
+                is_active = false,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = $1
         `;
         await client.query(deleteQuery, [id]);

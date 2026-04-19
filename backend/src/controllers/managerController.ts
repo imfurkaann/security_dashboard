@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
-import { isValidUUID, sanitizeInput } from '../utils/validation';
+import { isValidUUID, sanitizeInput, isValidDate } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { getGateFromRequest } from '../utils/gate';
 
@@ -597,8 +597,22 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
 export const updateManagerRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { notes, entry_time, exit_time } = req.body;
+        const { notes, entry_date, entry_time, exit_date, exit_time } = req.body;
         const clientIp = getClientIp(req);
+
+        // Date validation (optional, YYYY-MM-DD format)
+        if (entry_date !== undefined && entry_date !== null) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(entry_date) || !isValidDate(entry_date)) {
+                res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
+                return;
+            }
+        }
+        if (exit_date !== undefined && exit_date !== null) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(exit_date) || !isValidDate(exit_date)) {
+                res.status(400).json({ success: false, message: 'Çıkış tarihi YYYY-MM-DD formatında olmalıdır' });
+                return;
+            }
+        }
 
         // Time validation
         if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
@@ -616,19 +630,39 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        const recordCheck = await pool.query('SELECT id FROM managers_records WHERE id = $1 AND deleted_at IS NULL', [id]);
+        const recordCheck = await pool.query(
+            'SELECT id, entry_date, exit_date, exit_time, status FROM managers_records WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
         if (recordCheck.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
             return;
         }
+
+        const existing = recordCheck.rows[0];
 
         const updates: string[] = [];
         const params: any[] = [];
         let idx = 1;
 
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
+        if (entry_date !== undefined) { updates.push(`entry_date = $${idx++}`); params.push(entry_date || null); }
+        if (exit_date !== undefined) { updates.push(`exit_date = $${idx++}`); params.push(exit_date || null); }
         if (entry_time !== undefined) { updates.push(`entry_time = $${idx++}`); params.push(entry_time || null); }
         if (exit_time !== undefined) { updates.push(`exit_time = $${idx++}`); params.push(exit_time || null); }
+
+        const nextEntryDate = entry_date !== undefined ? (entry_date || null) : existing.entry_date;
+        const nextExitDate = exit_date !== undefined ? (exit_date || null) : existing.exit_date;
+        const nextExitTime = exit_time !== undefined ? (exit_time || null) : existing.exit_time;
+
+        if (nextEntryDate && nextExitDate && String(nextExitDate) < String(nextEntryDate)) {
+            res.status(400).json({ success: false, message: 'Çıkış tarihi giriş tarihinden önce olamaz' });
+            return;
+        }
+
+        const nextStatus = (nextExitDate || nextExitTime) ? 'exited' : 'inside';
+        updates.push(`status = $${idx++}`);
+        params.push(nextStatus);
 
         if (updates.length === 0) {
             res.status(400).json({ success: false, message: 'Güncellenecek alan bulunamadı' });

@@ -25,6 +25,8 @@ export default function AdminManagerRecords() {
     const [creatingRecord, setCreatingRecord] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingRecord, setEditingRecord] = useState<ManagerRecord | null>(null);
+    const [editEntryDate, setEditEntryDate] = useState('');
+    const [editExitDate, setEditExitDate] = useState('');
     const [editEntryTime, setEditEntryTime] = useState('');
     const [editExitTime, setEditExitTime] = useState('');
     const [editNotes, setEditNotes] = useState('');
@@ -277,6 +279,8 @@ export default function AdminManagerRecords() {
 
     const openEditModal = (record: ManagerRecord) => {
         setEditingRecord(record);
+        setEditEntryDate(record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '');
+        setEditExitDate(record.exit_date ? dayjs(record.exit_date).format('YYYY-MM-DD') : '');
         setEditEntryTime(record.entry_time ? formatTime(record.entry_time) : '');
         setEditExitTime(record.exit_time ? formatTime(record.exit_time) : '');
         setEditNotes(record.notes || '');
@@ -286,6 +290,8 @@ export default function AdminManagerRecords() {
     const closeEditModal = () => {
         setShowEditModal(false);
         setEditingRecord(null);
+        setEditEntryDate('');
+        setEditExitDate('');
         setEditEntryTime('');
         setEditExitTime('');
         setEditNotes('');
@@ -306,6 +312,8 @@ export default function AdminManagerRecords() {
             setSavingEdit(true);
             const adminToken = localStorage.getItem('adminToken');
             const payload = {
+                entry_date: editEntryDate || null,
+                exit_date: editExitDate || null,
                 entry_time: editEntryTime || null,
                 exit_time: editExitTime || null,
                 notes: editNotes.trim() || null
@@ -315,15 +323,11 @@ export default function AdminManagerRecords() {
                 headers: { Authorization: `Bearer ${adminToken}` }
             });
 
-            setRecords(prev => prev.map(record => {
-                if (record.id !== editingRecord.id) return record;
-                return {
-                    ...record,
-                    entry_time: payload.entry_time,
-                    exit_time: payload.exit_time,
-                    notes: payload.notes
-                };
-            }));
+            const refreshConfig = {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            };
+            const refreshed = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, refreshConfig);
+            setRecords(refreshed.data || []);
 
             closeEditModal();
         } catch (error: any) {
@@ -638,9 +642,9 @@ export default function AdminManagerRecords() {
                                                         <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
-                                                        {record.exit_date ? (
+                                                        {(record.exit_date || record.exit_time) ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
+                                                                <div className="text-sm text-gray-900">{record.exit_date ? formatDate(record.exit_date) : '-'}</div>
                                                                 <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
                                                             </>
                                                         ) : (
@@ -696,6 +700,28 @@ export default function AdminManagerRecords() {
                             </div>
 
                             <form onSubmit={handleSaveEdit} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Tarihi</label>
+                                        <input
+                                            type="date"
+                                            value={editEntryDate}
+                                            onChange={(e) => setEditEntryDate(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Tarihi</label>
+                                        <input
+                                            type="date"
+                                            value={editExitDate}
+                                            onChange={(e) => setEditExitDate(e.target.value)}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
                                     <input
