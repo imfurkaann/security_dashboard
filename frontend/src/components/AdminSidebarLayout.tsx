@@ -24,6 +24,7 @@ const menuItems = [
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
     { title: 'WhatsApp Bağlantı Yönetimi', path: '/admin/whatsapp-settings' },
     { title: 'Kapı ve Ekipman Yönetimi', path: '/admin/gate-equipment-config' },
+    { title: 'Otopark Yönetimi', path: '/admin/parking-management' },
     { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' },
     { title: 'İstatistikler', path: '/admin/statistics' },
     { title: 'Veri Dışa Aktarma', path: '/admin/export-data' }

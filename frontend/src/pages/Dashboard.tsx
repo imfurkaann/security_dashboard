@@ -1,14 +1,17 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
-import type { VehicleUsage, VisitorRecord } from '../types';
+import type { Vehicle, VehicleUsage, VisitorRecord } from '../types';
 import { STORAGE_KEYS } from '../constants';
 import { AlertCircle, Car, Users, UserCheck, Flame } from 'lucide-react';
+
+const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
+const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
 
 // Stat Card Component
 interface StatCardProps {
     title: string;
-    value: number;
+    value: string | number;
     cardClass: string;
     iconWrapClass: string;
     icon: React.ReactNode;
@@ -32,6 +35,7 @@ function StatCard({ title, value, cardClass, iconWrapClass, icon }: StatCardProp
 
 export default function Dashboard() {
     const [loading, setLoading] = useState(true);
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
     const [visitorRecords, setVisitorRecords] = useState<VisitorRecord[]>([]);
     const [todayAlarms, setTodayAlarms] = useState(0);
@@ -48,15 +52,17 @@ export default function Dashboard() {
         }
 
         try {
-            const [vehiclesRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
+            const [vehiclesRes, vehicleRecordsRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
+                api.get('/vehicles'),
                 api.get('/vehicles/records'),
                 api.get('/visitors/records'),
                 api.get('/managers/records'),
                 api.get('/fire-alarms/records'),
             ]);
 
-            // Vehicles
-            setUsages(vehiclesRes.data || []);
+            // Vehicles and usage records
+            setVehicles(vehiclesRes.data || []);
+            setUsages(vehicleRecordsRes.data || []);
 
             // Visitors inside
             const visitors = visitorsRes.data || [];
@@ -91,7 +97,62 @@ export default function Dashboard() {
     }, [fetchAllData]);
 
     // Calculate stats
-    const vehiclesInUse = usages.filter(u => u.status === 'in_use').length;
+    const vehiclesInUse = vehicles.filter((vehicle) => vehicle.status === 'in_use').length;
+    const parkedCompanyVehicles = vehicles.filter((vehicle) => vehicle.status !== 'in_use').length;
+
+    const isCountableVehiclePlate = (plateValue: string | null | undefined) => {
+        if (!plateValue) return false;
+
+        const normalized = plateValue.trim().toLocaleUpperCase('tr-TR');
+        const compact = normalized.replace(/\s+/g, '');
+
+        if (!compact || compact === 'YAYA') return false;
+        if (compact.length < 4 || compact.length > 12) return false;
+
+        const hasLetter = /[A-ZÇĞİÖŞÜ]/.test(normalized);
+        const hasDigit = /\d/.test(normalized);
+        return hasLetter && hasDigit;
+    };
+
+    const visitorVehicleCount = useMemo(() => {
+        const activeVehiclePlates = new Set<string>();
+
+        visitorRecords.forEach((record) => {
+            if (record.status !== 'inside') return;
+            if (!isCountableVehiclePlate(record.vehicle_plate)) return;
+            activeVehiclePlates.add(record.vehicle_plate!.trim().toLocaleUpperCase('tr-TR').replace(/\s+/g, ''));
+        });
+
+        return activeVehiclePlates.size;
+    }, [visitorRecords]);
+
+    const totalInsideVehicleCount = visitorVehicleCount;
+
+    const parkingCapacity = useMemo(() => {
+        const rawValue = localStorage.getItem(PARKING_CAPACITY_STORAGE_KEY);
+        const numericValue = Number(rawValue);
+        if (!Number.isFinite(numericValue) || numericValue < 0) {
+            return null;
+        }
+        return Math.floor(numericValue);
+    }, []);
+
+    const parkingReserved = useMemo(() => {
+        const rawValue = localStorage.getItem(PARKING_RESERVED_STORAGE_KEY);
+        const numericValue = Number(rawValue);
+        if (!Number.isFinite(numericValue) || numericValue < 0) {
+            return 0;
+        }
+        return Math.floor(numericValue);
+    }, []);
+
+    const parkingOccupancyValue = useMemo(() => {
+        const totalOccupied = totalInsideVehicleCount + parkingReserved;
+        if (parkingCapacity === null) {
+            return `${totalOccupied}/-`;
+        }
+        return `${totalOccupied}/${parkingCapacity}`;
+    }, [totalInsideVehicleCount, parkingReserved, parkingCapacity]);
 
     const getVisitorTotalCount = (personCount: number | null | undefined) => {
         if (typeof personCount === 'number' && personCount > 0) {
@@ -204,18 +265,17 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="bg-slate-900 text-white py-8 px-4 shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto">
-                    <h1 className="text-3xl font-bold mb-1">Dosinia Luxury Resort Hotel</h1>
-                    <p className="text-slate-200">GÜVENLİK VERİ KAYIT VE YÖNETİM SİSTEMİ</p>
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
+                <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 leading-tight">Dosinia Luxury Resort Hotel</h1>
+                    <p className="text-sm sm:text-base text-slate-200">GUVENLIK VERI KAYIT VE YONETIM SISTEMI</p>
                 </div>
-            </div>
+            </header>
 
-            <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8">
-
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-20 flex flex-col gap-4">
                 {/* Stats Cards - Araç ve Ziyaretçi Bilgileri */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5 sm:mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3 mb-5 sm:mb-6 w-full">
                     <StatCard
                         title="Kullanımdaki Araçlar"
                         value={vehiclesInUse}
@@ -243,6 +303,13 @@ export default function Dashboard() {
                         cardClass="border-rose-500 bg-gradient-to-br from-rose-500 to-red-700"
                         iconWrapClass="border-rose-300/60 bg-rose-400/30 text-white"
                         icon={<Flame size={20} />}
+                    />
+                    <StatCard
+                        title="Otopark Doluluk"
+                        value={parkingOccupancyValue}
+                        cardClass="border-amber-500 bg-gradient-to-br from-amber-500 to-orange-700"
+                        iconWrapClass="border-amber-300/60 bg-amber-400/30 text-white"
+                        icon={<Car size={20} />}
                     />
                 </div>
 
@@ -297,7 +364,7 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
