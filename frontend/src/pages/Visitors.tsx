@@ -6,6 +6,9 @@ import { validateVisitorForm, normalizePlate, normalizePhone } from '../utils/va
 import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 
+const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
+const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
+
 // Initial form state
 const INITIAL_FORM_DATA: VisitorFormData = {
     vehicle_plate: '',
@@ -230,6 +233,51 @@ export default function Visitors() {
         electricStationCount: records.filter(r => r.status === 'inside' && r.for_electric_station).length,
     }), [records]);
 
+    const visitorVehicleCount = useMemo(() => {
+        const uniquePlates = new Set<string>();
+
+        records.forEach((record) => {
+            if (record.status !== 'inside') return;
+
+            const normalizedPlate = normalizePlate(record.vehicle_plate || '');
+            const compactPlate = (normalizedPlate || '').replace(/\s+/g, '').toLocaleUpperCase('tr-TR');
+
+            if (!compactPlate || compactPlate === 'YAYA') return;
+            if (compactPlate.length < 4 || compactPlate.length > 12) return;
+            if (!/[A-ZÇĞİÖŞÜ]/.test(compactPlate) || !/\d/.test(compactPlate)) return;
+
+            uniquePlates.add(compactPlate);
+        });
+
+        return uniquePlates.size;
+    }, [records]);
+
+    const parkingCapacity = useMemo(() => {
+        const rawValue = localStorage.getItem(PARKING_CAPACITY_STORAGE_KEY);
+        const numericValue = Number(rawValue);
+        if (!Number.isFinite(numericValue) || numericValue < 0) {
+            return null;
+        }
+        return Math.floor(numericValue);
+    }, []);
+
+    const parkingReserved = useMemo(() => {
+        const rawValue = localStorage.getItem(PARKING_RESERVED_STORAGE_KEY);
+        const numericValue = Number(rawValue);
+        if (!Number.isFinite(numericValue) || numericValue < 0) {
+            return 0;
+        }
+        return Math.floor(numericValue);
+    }, []);
+
+    const parkingOccupancyValue = useMemo(() => {
+        const totalOccupied = visitorVehicleCount + parkingReserved;
+        if (parkingCapacity === null) {
+            return `${totalOccupied}/-`;
+        }
+        return `${totalOccupied}/${parkingCapacity}`;
+    }, [visitorVehicleCount, parkingReserved, parkingCapacity]);
+
     // Memoized filtered records
     const filteredRecords = useMemo(() => {
         const normalizedFullName = columnFilters.fullName.trim().toLocaleLowerCase('tr-TR');
@@ -368,7 +416,7 @@ export default function Visitors() {
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-20 flex flex-col gap-4">
                 <div className="w-full">
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2.5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 mb-2.5">
                         <div className={`${dashboardCardBase} border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700`}>
                             <div className="flex items-center gap-3 min-h-[48px]">
                                 <div className={`${dashboardIconBase} border-blue-300/60`}>
@@ -407,6 +455,20 @@ export default function Visitors() {
                                 <div className="min-w-0 flex-1 text-center">
                                     <p className={dashboardLabelBase}>Bugün Çıkış Yapan</p>
                                     <p className={dashboardValueBase}>{stats.todayExits}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className={`${dashboardCardBase} border-amber-500 bg-gradient-to-br from-amber-500 to-orange-700`}>
+                            <div className="flex items-center gap-3 min-h-[48px]">
+                                <div className={`${dashboardIconBase} border-amber-300/60`}>
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13l1-3a2 2 0 011.9-1.37h12.2A2 2 0 0120 10l1 3M5 13h14M6 16a1 1 0 100 2 1 1 0 000-2zm12 0a1 1 0 100 2 1 1 0 000-2zM5 13v5m14-5v5" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0 flex-1 text-center">
+                                    <p className={dashboardLabelBase}>Otopark Doluluk</p>
+                                    <p className={dashboardValueBase}>{parkingOccupancyValue}</p>
                                 </div>
                             </div>
                         </div>
