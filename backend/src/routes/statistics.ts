@@ -6,7 +6,8 @@ import {
     getManagerStats,
     getFireAlarmStats,
     getIncidentStats,
-    getComparativeAnalysis
+    getComparativeAnalysis,
+    getPersonnelPerformanceStats
 } from '../controllers/statisticsController';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
 
@@ -35,5 +36,8 @@ router.get('/incidents', getIncidentStats);
 
 // Karşılaştırmalı analiz
 router.get('/comparison', getComparativeAnalysis);
+
+// Personel kayıt performansı
+router.get('/personnel-performance', getPersonnelPerformanceStats);
 
 export default router;

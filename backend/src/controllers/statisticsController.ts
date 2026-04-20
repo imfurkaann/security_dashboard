@@ -784,3 +784,148 @@ export const getComparativeAnalysis = async (req: Request, res: Response) => {
         res.status(500).json({ success: false, message: 'Karşılaştırma verileri alınamadı' });
     }
 };
+
+// Personel bazlı kayıt performansı (haftalık/aylık/yıllık)
+export const getPersonnelPerformanceStats = async (req: Request, res: Response) => {
+    try {
+        const periodRaw = typeof req.query.period === 'string' ? req.query.period : 'weekly';
+        const period = periodRaw.toLowerCase();
+
+        if (!['weekly', 'monthly', 'yearly'].includes(period)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz dönem parametresi. weekly, monthly veya yearly olmalıdır'
+            });
+            return;
+        }
+
+        const client = await pool.connect();
+
+        try {
+            const result = await client.query(
+                `WITH period_window AS (
+                    SELECT
+                        CASE
+                            WHEN $1 = 'weekly' THEN date_trunc('week', CURRENT_DATE)::date
+                            WHEN $1 = 'monthly' THEN date_trunc('month', CURRENT_DATE)::date
+                            ELSE date_trunc('year', CURRENT_DATE)::date
+                        END AS start_date,
+                        (CURRENT_DATE + INTERVAL '1 day')::date AS end_date
+                ),
+                personnel_base AS (
+                    SELECT p.id, p.first_name, p.last_name, p.username
+                    FROM personnel p
+                    WHERE p.deleted_at IS NULL
+                      AND p.is_active = TRUE
+                      AND p.role = 'personnel'
+                ),
+                vehicle_counts AS (
+                    SELECT vr.given_by AS personnel_id, COUNT(*)::int AS vehicle_count
+                    FROM vehicle_records vr
+                    CROSS JOIN period_window pw
+                    WHERE vr.deleted_at IS NULL
+                      AND vr.given_by IS NOT NULL
+                      AND vr.given_date >= pw.start_date
+                      AND vr.given_date < pw.end_date
+                    GROUP BY vr.given_by
+                ),
+                visitor_counts AS (
+                    SELECT vr.entry_by AS personnel_id, COUNT(*)::int AS visitor_count
+                    FROM visitor_records vr
+                    CROSS JOIN period_window pw
+                    WHERE vr.deleted_at IS NULL
+                      AND vr.entry_by IS NOT NULL
+                      AND vr.entry_date >= pw.start_date
+                      AND vr.entry_date < pw.end_date
+                    GROUP BY vr.entry_by
+                ),
+                manager_counts AS (
+                    SELECT mr.entry_by AS personnel_id, COUNT(*)::int AS manager_count
+                    FROM managers_records mr
+                    CROSS JOIN period_window pw
+                    WHERE mr.deleted_at IS NULL
+                      AND mr.entry_by IS NOT NULL
+                      AND mr.entry_date >= pw.start_date
+                      AND mr.entry_date < pw.end_date
+                    GROUP BY mr.entry_by
+                ),
+                fire_alarm_counts AS (
+                    SELECT fa.recorded_by AS personnel_id, COUNT(*)::int AS fire_alarm_count
+                    FROM fire_alarms fa
+                    CROSS JOIN period_window pw
+                    WHERE fa.deleted_at IS NULL
+                      AND fa.recorded_by IS NOT NULL
+                      AND fa.alarm_time::date >= pw.start_date
+                      AND fa.alarm_time::date < pw.end_date
+                    GROUP BY fa.recorded_by
+                ),
+                sgk_counts AS (
+                    SELECT sr.personnel_id AS personnel_id, COUNT(*)::int AS sgk_count
+                    FROM sgk_records sr
+                    CROSS JOIN period_window pw
+                    WHERE sr.deleted_at IS NULL
+                      AND sr.personnel_id IS NOT NULL
+                      AND sr.upload_date::date >= pw.start_date
+                      AND sr.upload_date::date < pw.end_date
+                    GROUP BY sr.personnel_id
+                )
+                SELECT
+                    pb.id,
+                    pb.first_name,
+                    pb.last_name,
+                    pb.username,
+                    COALESCE(vc.vehicle_count, 0)::int AS vehicle_count,
+                    COALESCE(vic.visitor_count, 0)::int AS visitor_count,
+                    COALESCE(mc.manager_count, 0)::int AS manager_count,
+                    COALESCE(fac.fire_alarm_count, 0)::int AS fire_alarm_count,
+                    COALESCE(sc.sgk_count, 0)::int AS sgk_count,
+                    (
+                        COALESCE(vc.vehicle_count, 0)
+                        + COALESCE(vic.visitor_count, 0)
+                        + COALESCE(mc.manager_count, 0)
+                        + COALESCE(fac.fire_alarm_count, 0)
+                        + COALESCE(sc.sgk_count, 0)
+                    )::int AS total_count,
+                    (SELECT start_date FROM period_window) AS start_date,
+                    ((SELECT end_date FROM period_window) - INTERVAL '1 day')::date AS end_date
+                FROM personnel_base pb
+                LEFT JOIN vehicle_counts vc ON vc.personnel_id = pb.id
+                LEFT JOIN visitor_counts vic ON vic.personnel_id = pb.id
+                LEFT JOIN manager_counts mc ON mc.personnel_id = pb.id
+                LEFT JOIN fire_alarm_counts fac ON fac.personnel_id = pb.id
+                LEFT JOIN sgk_counts sc ON sc.personnel_id = pb.id
+                ORDER BY total_count DESC, pb.first_name ASC, pb.last_name ASC`,
+                [period]
+            );
+
+            const rangeStart = result.rows[0]?.start_date || null;
+            const rangeEnd = result.rows[0]?.end_date || null;
+
+            res.json({
+                success: true,
+                data: {
+                    period,
+                    startDate: rangeStart,
+                    endDate: rangeEnd,
+                    rows: result.rows.map((row) => ({
+                        id: row.id,
+                        firstName: row.first_name,
+                        lastName: row.last_name,
+                        username: row.username,
+                        vehicleCount: row.vehicle_count,
+                        visitorCount: row.visitor_count,
+                        managerCount: row.manager_count,
+                        fireAlarmCount: row.fire_alarm_count,
+                        sgkCount: row.sgk_count,
+                        totalCount: row.total_count,
+                    })),
+                },
+            });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Personel performans istatistik hatası:', error);
+        res.status(500).json({ success: false, message: 'Personel istatistikleri alınamadı' });
+    }
+};

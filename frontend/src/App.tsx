@@ -17,6 +17,7 @@ import AdminManagerRecords from './pages/AdminManagerRecords';
 import AdminIncidentRecords from './pages/AdminIncidentRecords';
 import AdminFireAlarmRecords from './pages/AdminFireAlarmRecords';
 import AdminManagePersonnel from './pages/AdminManagePersonnel';
+import AdminPersonnelStatistics from './pages/AdminPersonnelStatistics';
 import AdminWhatsAppSettings from './pages/AdminWhatsAppSettings';
 import AdminManageManagers from './pages/AdminManageManagers';
 import AdminExportData from './pages/AdminExportData';
@@ -67,6 +68,7 @@ function App() {
               <Route path="incident-records" element={<AdminIncidentRecords />} />
               <Route path="fire-alarm-records" element={<AdminFireAlarmRecords />} />
               <Route path="manage-personnel" element={<AdminManagePersonnel />} />
+              <Route path="personnel-statistics" element={<AdminPersonnelStatistics />} />
               <Route path="whatsapp-settings" element={<AdminWhatsAppSettings />} />
               <Route path="manage-managers" element={<AdminManageManagers />} />
               <Route path="export-data" element={<AdminExportData />} />
