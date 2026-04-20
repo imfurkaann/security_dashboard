@@ -11,6 +11,61 @@ const ERROR_MESSAGES = {
     RATE_LIMIT: 'Çok fazla deneme yaptınız. Lütfen bekleyin.',
 } as const;
 
+interface WeeklyRankingCelebration {
+    rank: number;
+    totalCount: number;
+    weekStart: string;
+    weekEnd: string;
+    message: string;
+}
+
+interface LoginResponseData {
+    token: string;
+    user: {
+        id: string;
+        username: string;
+        fullName: string;
+        first_name: string;
+        last_name: string;
+        role: string;
+        is_active: boolean;
+    };
+    weeklyRankingCelebration?: WeeklyRankingCelebration | null;
+}
+
+interface LoginResponse {
+    success: boolean;
+    message: string;
+    data: LoginResponseData;
+}
+
+interface AdminTopPerformer {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    totalCount: number;
+    rank: number;
+}
+
+interface AdminLoginResponse {
+    success: boolean;
+    message: string;
+    data: {
+        token: string;
+        admin: {
+            id: string;
+            username: string;
+            fullName: string;
+            firstName: string;
+            lastName: string;
+            role: string;
+            isAdmin: boolean;
+        };
+        topPerformers?: AdminTopPerformer[];
+    };
+}
+
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -39,26 +94,32 @@ export default function Login() {
 
         try {
             // First, try regular login to check user role
-            const checkResponse = await api.post('/auth/login', {
+            const checkResponse = await api.post<LoginResponse>('/auth/login', {
                 username: username.trim(),
                 password
             });
 
-            const { user } = checkResponse.data.data;
+            const { user, weeklyRankingCelebration } = checkResponse.data.data;
 
             // Check user role and use appropriate login endpoint
             if (user.role === 'admin') {
                 // Admin users: Use admin login endpoint to get proper admin token
-                const adminResponse = await api.post('/admin/login', {
+                const adminResponse = await api.post<AdminLoginResponse>('/admin/login', {
                     username: username.trim(),
                     password
                 });
 
-                const { token: adminToken } = adminResponse.data.data;
+                const { token: adminToken, topPerformers = [] } = adminResponse.data.data;
 
                 // Save admin token ONLY to admin-specific keys (not to shared token key)
                 localStorage.setItem('adminToken', adminToken);
                 localStorage.setItem('adminUser', JSON.stringify({ ...user, isAdmin: true }));
+                localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+                if (topPerformers.length > 0) {
+                    localStorage.setItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP, JSON.stringify(topPerformers));
+                } else {
+                    localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+                }
 
                 // Small delay to ensure localStorage is saved before navigation
                 setTimeout(() => {
@@ -70,6 +131,18 @@ export default function Login() {
                 localStorage.setItem(STORAGE_KEYS.TOKEN, token);
                 localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
                 localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
+
+                if (weeklyRankingCelebration) {
+                    localStorage.setItem(
+                        STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION,
+                        JSON.stringify(weeklyRankingCelebration)
+                    );
+                } else {
+                    localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+                }
+
+                localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+
                 navigate('/equipment-check', { replace: true });
             }
         } catch (err) {

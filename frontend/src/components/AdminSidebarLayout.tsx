@@ -1,8 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import axios from 'axios';
-import { API_URL } from '../constants';
+import { API_URL, STORAGE_KEYS } from '../constants';
+
+interface AdminTopPerformer {
+    id: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    totalCount: number;
+    rank: number;
+}
 
 function LogoutOverlay() {
     return (
@@ -34,6 +43,8 @@ const menuItems = [
 export default function AdminSidebarLayout() {
     const [logoutLoading, setLogoutLoading] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [topPerformers, setTopPerformers] = useState<AdminTopPerformer[]>([]);
+    const [showTopPerformersModal, setShowTopPerformersModal] = useState(false);
     const navigate = useNavigate();
     const rawAdmin = localStorage.getItem('adminUser');
     const parsedAdmin = rawAdmin ? JSON.parse(rawAdmin) : null;
@@ -47,6 +58,30 @@ export default function AdminSidebarLayout() {
         const widthInCh = Math.min(30, Math.max(20, longestLabel + 7));
         return `${widthInCh}ch`;
     }, []);
+
+    useEffect(() => {
+        const raw = localStorage.getItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+        if (!raw) return;
+
+        try {
+            const parsed = JSON.parse(raw) as AdminTopPerformer[];
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                setTopPerformers(parsed);
+                setShowTopPerformersModal(true);
+                return;
+            }
+        } catch (error) {
+            console.error('Admin top performers verisi okunamadı:', error);
+        }
+
+        localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+    }, []);
+
+    const closeTopPerformersModal = () => {
+        setShowTopPerformersModal(false);
+        setTopPerformers([]);
+        localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+    };
 
     const handleLogout = async () => {
         setLogoutLoading(true);
@@ -71,6 +106,7 @@ export default function AdminSidebarLayout() {
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
             localStorage.removeItem('selectedGate');
+            localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
             navigate('/login');
         }
     };
@@ -78,6 +114,40 @@ export default function AdminSidebarLayout() {
     return (
         <div className="min-h-screen bg-gray-900" style={{ ['--sidebar-width' as string]: sidebarWidth }}>
             {logoutLoading && <LogoutOverlay />}
+
+            {showTopPerformersModal && (
+                <div className="fixed inset-0 z-[70] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-2xl text-slate-900 animate-fadeIn">
+                        <div className="text-center mb-5">
+                            <div className="text-4xl mb-2">🏅</div>
+                            <h2 className="text-xl sm:text-2xl font-extrabold">Geçen Haftanın En Çok Kayıt Yapan İlk 3 Personeli</h2>
+                            <p className="text-sm sm:text-base text-slate-600 mt-1">Yönetici giriş özeti</p>
+                        </div>
+
+                        <div className="space-y-3">
+                            {topPerformers.map((person) => (
+                                <div key={person.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <div>
+                                        <p className="font-bold text-amber-600">{person.rank}. {person.firstName} {person.lastName}</p>
+                                        <p className="text-sm text-slate-500">@{person.username}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs text-slate-500">Toplam Kayıt</p>
+                                        <p className="text-lg font-extrabold text-blue-700">{person.totalCount}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={closeTopPerformersModal}
+                            className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 transition"
+                        >
+                            Kapat
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <button
                 type="button"
