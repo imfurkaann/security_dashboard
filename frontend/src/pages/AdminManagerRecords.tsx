@@ -93,7 +93,13 @@ export default function AdminManagerRecords() {
             }
 
             // Status filter
-            if (filters.status !== 'all' && record.status !== filters.status) {
+            if (filters.status === 'deleted' && !record.deleted_at) {
+                return false;
+            }
+            if (filters.status === 'inside' && (record.deleted_at || record.status !== 'inside')) {
+                return false;
+            }
+            if (filters.status === 'exited' && (record.deleted_at || record.status !== 'exited')) {
                 return false;
             }
 
@@ -477,6 +483,7 @@ export default function AdminManagerRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="inside">İçeride</option>
                                 <option value="exited">Çıkış Yapıldı</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
                             </select>
                         </div>
 

@@ -34,7 +34,6 @@ export default function Managers() {
     const [exitTime, setExitTime] = useState('');
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [filterMode, setFilterMode] = useState<ManagerFilterType>('all');
-    const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
     const location = useLocation();
@@ -187,34 +186,40 @@ export default function Managers() {
         }
     }, [fetchData]);
 
+    const nonDeletedRecords = useMemo(() => records.filter(r => !r.deleted_at), [records]);
+
     // Memoized statistics
     const stats = useMemo(() => {
         const today = dayjs().format('YYYY-MM-DD');
-        const todayRecords = records.filter(r => {
+        const todayRecords = nonDeletedRecords.filter(r => {
             const entryDate = r.entry_date ? dayjs(r.entry_date).format('YYYY-MM-DD') : null;
             const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
             return entryDate === today || exitDate === today;
         });
-        const todayExits = records.filter(r => {
-            const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
-            return exitDate === today;
-        });
         return {
             totalManagers: managersList.length,
-            insideCount: records.filter(r => r.status === 'inside').length,
-            todayExitCount: todayExits.length,
+            insideCount: nonDeletedRecords.filter(r => r.status === 'inside').length,
             todayCount: todayRecords.length,
         };
-    }, [records, managersList]);
+    }, [nonDeletedRecords, managersList]);
 
     // Memoized filtered records
-    const filteredRecords = useMemo(() => {
+    const todayDeletedRecords = useMemo(() => {
         const today = dayjs().format('YYYY-MM-DD');
         return records.filter(r => {
-            const isDeleted = Boolean(r.deleted_at);
-            if (recordVisibility === 'active' && isDeleted) return false;
-            if (recordVisibility === 'deleted' && !isDeleted) return false;
+            if (!r.deleted_at) return false;
+            const deletedDate = dayjs(r.deleted_at).format('YYYY-MM-DD');
+            return deletedDate === today;
+        });
+    }, [records]);
 
+    const filteredRecords = useMemo(() => {
+        const today = dayjs().format('YYYY-MM-DD');
+        if (filterMode === 'deleted') {
+            return todayDeletedRecords;
+        }
+
+        return nonDeletedRecords.filter(r => {
             if (filterMode === 'all') {
                 // Bugünün kayıtları: bugün giriş yapan veya bugün çıkış yapan
                 const entryDate = r.entry_date ? dayjs(r.entry_date).format('YYYY-MM-DD') : null;
@@ -222,19 +227,22 @@ export default function Managers() {
                 return entryDate === today || exitDate === today;
             }
             if (filterMode === 'inside') return r.status === 'inside'; // Aktif içeridekiler
-            if (filterMode === 'exited') {
-                // Bugün çıkış yapanlar
-                const exitDate = r.exit_date ? dayjs(r.exit_date).format('YYYY-MM-DD') : null;
-                return exitDate === today;
-            }
             return true;
         });
-    }, [records, filterMode, recordVisibility]);
+    }, [nonDeletedRecords, filterMode, todayDeletedRecords]);
 
     // Memoized available managers for select
     const selectManagers = useMemo(() => {
         const insideManagerIds = new Set(
-            records.filter(r => r.status === 'inside' && r.manager_id).map(r => r.manager_id)
+            records
+                .filter(r => {
+                    if (!r.manager_id) return false;
+                    if (r.deleted_at) return false;
+                    if (r.status !== 'inside') return false;
+                    if (r.exit_date) return false;
+                    return true;
+                })
+                .map(r => r.manager_id)
         );
         let available = managersList.filter(m => !insideManagerIds.has(m.id));
 
@@ -397,10 +405,10 @@ export default function Managers() {
                             </button>
 
                             <button
-                                onClick={() => setFilterMode('exited')}
-                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filterMode === 'exited' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                onClick={() => setFilterMode('deleted')}
+                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filterMode === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                             >
-                                Bugün Çıkış Yapanlar ({stats.todayExitCount})
+                                Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
                         </div>
                     </div>

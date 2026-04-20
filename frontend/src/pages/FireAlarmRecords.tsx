@@ -96,8 +96,9 @@ export default function FireAlarmRecords() {
             if (location && !record.location.toLowerCase().includes(location.toLowerCase())) return false;
             if (recordedBy && !record.recorded_by_name?.toLowerCase().includes(recordedBy.toLowerCase())) return false;
             if (resolvedBy && !record.resolved_by_name?.toLowerCase().includes(resolvedBy.toLowerCase())) return false;
-            if (status === 'active' && record.resolved) return false;
-            if (status === 'resolved' && !record.resolved) return false;
+            if (status === 'deleted' && !record.deleted_at) return false;
+            if (status === 'active' && (record.resolved || Boolean(record.deleted_at))) return false;
+            if (status === 'resolved' && (!record.resolved || Boolean(record.deleted_at))) return false;
             if (gateFilter !== 'all' && (record.gate || '') !== gateFilter) return false;
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
@@ -323,6 +324,7 @@ export default function FireAlarmRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="active">Aktif</option>
                                 <option value="resolved">Çözüldü</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
                             </select>
                         </div>
 

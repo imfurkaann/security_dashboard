@@ -130,11 +130,6 @@ export default function AdminGateEquipmentConfig() {
             return;
         }
 
-        if (newGateEquipments.length === 0) {
-            setError('En az bir ekipman eklemelisiniz');
-            return;
-        }
-
         setSaving(true);
         try {
             await axios.post(

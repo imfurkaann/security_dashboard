@@ -89,8 +89,18 @@ export default function AdminVehicleRecords() {
             }
 
             // Status filter
-            if (filters.status !== 'all' && record.status !== filters.status) {
-                return false;
+            if (filters.status === 'deleted') {
+                if (!record.deleted_at) {
+                    return false;
+                }
+            } else if (filters.status === 'in_use') {
+                if (record.status !== 'in_use' || Boolean(record.deleted_at)) {
+                    return false;
+                }
+            } else if (filters.status === 'returned') {
+                if (record.status !== 'returned' || Boolean(record.deleted_at)) {
+                    return false;
+                }
             }
 
             // Gate filter
@@ -363,6 +373,7 @@ export default function AdminVehicleRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="in_use">Kullanımda</option>
                                 <option value="returned">Teslim Alındı</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
                             </select>
                         </div>
 
@@ -556,7 +567,11 @@ export default function AdminVehicleRecords() {
                                                         <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
-                                                        {record.status === 'in_use' ? (
+                                                        {record.deleted_at ? (
+                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                                                Silindi
+                                                            </span>
+                                                        ) : record.status === 'in_use' ? (
                                                             <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                                                                 Kullanımda
                                                             </span>

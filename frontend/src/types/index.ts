@@ -236,7 +236,7 @@ export interface PaginatedResponse<T> {
 }
 
 // Filter Types
-export type VehicleFilterType = 'all' | 'in_use' | 'returned';
-export type VisitorFilterType = 'today' | 'inside' | 'exits' | 'all' | 'subcontractor' | 'electric';
-export type ManagerFilterType = 'all' | 'inside' | 'exited';
+export type VehicleFilterType = 'all' | 'in_use' | 'deleted';
+export type VisitorFilterType = 'today' | 'inside' | 'all' | 'subcontractor' | 'electric' | 'deleted';
+export type ManagerFilterType = 'all' | 'inside' | 'deleted';
 export type IncidentFilterType = 'all' | 'open' | 'closed';

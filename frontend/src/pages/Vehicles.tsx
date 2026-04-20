@@ -221,19 +221,52 @@ export default function Vehicles() {
 
     // Memoized calculations for performance
     const todayUsages = useMemo(() =>
-        usages.filter(u => isToday(u.given_date) || (u.return_date && isToday(u.return_date))),
+        usages.filter(u => !u.deleted_at && (isToday(u.given_date) || (u.return_date && isToday(u.return_date)))),
+        [usages]
+    );
+
+    const todayDeletedUsages = useMemo(
+        () => usages.filter(u => Boolean(u.deleted_at) && isToday(u.deleted_at)),
         [usages]
     );
 
     const filteredUsages = useMemo(() => {
         if (filter === 'all') return todayUsages; // Bugünün kayıtları
-        if (filter === 'in_use') return usages.filter(u => u.status === 'in_use'); // Kullanımda olan araçlar
-        if (filter === 'returned') return usages.filter(u => u.status === 'returned' && isToday(u.return_date)); // Bugün iade edilenler
+        if (filter === 'in_use') return usages.filter(u => u.status === 'in_use' && !u.deleted_at); // Kullanımda olan araçlar
+        if (filter === 'deleted') return todayDeletedUsages; // Bugün soft silinen kayıtlar
         return usages;
-    }, [usages, filter, todayUsages]);
+    }, [usages, filter, todayUsages, todayDeletedUsages]);
 
-    const inUseCount = useMemo(() => usages.filter(u => u.status === 'in_use').length, [usages]);
-    const availableVehicles = useMemo(() => vehicles.filter(v => v.status === 'available'), [vehicles]);
+    const normalizeVehiclePlate = useCallback(
+        (plate: string | null | undefined) => (plate || '').trim().toLocaleUpperCase('tr-TR').replace(/\s+/g, ''),
+        []
+    );
+
+    const activeInUseVehicleIds = useMemo(() => (
+        new Set(
+            usages
+                .filter(u => u.status === 'in_use' && !u.deleted_at && u.vehicle_id)
+                .map(u => u.vehicle_id as string)
+        )
+    ), [usages]);
+
+    const activeInUseVehiclePlates = useMemo(() => (
+        new Set(
+            usages
+                .filter(u => u.status === 'in_use' && !u.deleted_at)
+                .map(u => normalizeVehiclePlate(u.vehicle_plate))
+                .filter(Boolean)
+        )
+    ), [usages, normalizeVehiclePlate]);
+
+    const inUseCount = useMemo(() => usages.filter(u => u.status === 'in_use' && !u.deleted_at).length, [usages]);
+    const availableVehicles = useMemo(
+        () => vehicles.filter(v => {
+            if (activeInUseVehicleIds.has(v.id)) return false;
+            return !activeInUseVehiclePlates.has(normalizeVehiclePlate(v.plate));
+        }),
+        [vehicles, activeInUseVehicleIds, activeInUseVehiclePlates, normalizeVehiclePlate]
+    );
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
         const text = (value || '-').toString();
@@ -332,7 +365,7 @@ export default function Vehicles() {
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
                 <div className="w-full">
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                         <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700">
                             <div className="flex items-center gap-3 min-h-[48px]">
                                 <div className="p-2 bg-blue-400/30 rounded-lg border border-blue-300/60 shrink-0 text-white">
@@ -361,21 +394,6 @@ export default function Vehicles() {
                             </div>
                         </div>
 
-                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-indigo-500 bg-gradient-to-br from-indigo-500 to-indigo-700">
-                            <div className="flex items-center gap-3 min-h-[48px]">
-                                <div className="p-2 bg-indigo-400/30 rounded-lg border border-indigo-300/60 shrink-0 text-white">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                                <div className="min-w-0 flex-1 text-center">
-                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Teslim Alınan</p>
-                                    <p className="text-xl font-bold text-white leading-none mt-1">
-                                        {usages.filter(u => isToday(u.given_date)).length}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     {/* Filters */}
@@ -396,11 +414,11 @@ export default function Vehicles() {
                                 Kullanımda Olan Araçlar ({inUseCount})
                             </button>
                             <button
-                                onClick={() => setFilter('returned')}
-                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'returned' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                onClick={() => setFilter('deleted')}
+                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
-                                Bugün İade Edilen Araçlar ({usages.filter(u => u.status === 'returned' && isToday(u.return_date)).length})
+                                Silinen Kayıtlar ({todayDeletedUsages.length})
                             </button>
                         </div>
                     </div>

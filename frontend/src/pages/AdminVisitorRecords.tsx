@@ -98,8 +98,18 @@ export default function AdminVisitorRecords() {
             }
 
             // Status filter
-            if (filters.status !== 'all' && record.status !== filters.status) {
-                return false;
+            if (filters.status === 'deleted') {
+                if (!record.deleted_at) {
+                    return false;
+                }
+            } else if (filters.status === 'inside') {
+                if (record.status !== 'inside' || Boolean(record.deleted_at)) {
+                    return false;
+                }
+            } else if (filters.status === 'exited') {
+                if (record.status !== 'exited' || Boolean(record.deleted_at)) {
+                    return false;
+                }
             }
 
             // Gate filter
@@ -372,6 +382,7 @@ export default function AdminVisitorRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="inside">İçeride</option>
                                 <option value="exited">Çıkış Yaptı</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
                             </select>
                         </div>
 
