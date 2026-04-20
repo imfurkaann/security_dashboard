@@ -8,6 +8,147 @@ import { sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { generateLogoutExport } from '../services/exportService';
 
+interface WeeklyRankingCelebration {
+    rank: number;
+    totalCount: number;
+    weekStart: string;
+    weekEnd: string;
+    message: string;
+}
+
+const getWeeklyRankingCelebration = async (
+    userId: string,
+    firstName: string,
+    lastName: string,
+    role: string,
+    weeklyLoginCount: number
+): Promise<WeeklyRankingCelebration | null> => {
+    if (role !== 'personnel') {
+        return null;
+    }
+
+    if (weeklyLoginCount !== 1) {
+        return null;
+    }
+
+    const rankingResult = await pool.query(
+        `WITH period_window AS (
+            SELECT
+                (date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 day')::date AS start_date,
+                date_trunc('week', CURRENT_DATE)::date AS end_date
+        ),
+        personnel_base AS (
+            SELECT p.id, p.first_name, p.last_name
+            FROM personnel p
+            WHERE p.deleted_at IS NULL
+              AND p.is_active = TRUE
+              AND p.role = 'personnel'
+        ),
+        vehicle_counts AS (
+            SELECT vr.given_by AS personnel_id, COUNT(*)::int AS vehicle_count
+            FROM vehicle_records vr
+            CROSS JOIN period_window pw
+            WHERE vr.deleted_at IS NULL
+              AND vr.given_by IS NOT NULL
+              AND vr.given_date >= pw.start_date
+              AND vr.given_date < pw.end_date
+            GROUP BY vr.given_by
+        ),
+        visitor_counts AS (
+            SELECT vr.entry_by AS personnel_id, COUNT(*)::int AS visitor_count
+            FROM visitor_records vr
+            CROSS JOIN period_window pw
+            WHERE vr.deleted_at IS NULL
+              AND vr.entry_by IS NOT NULL
+              AND vr.entry_date >= pw.start_date
+              AND vr.entry_date < pw.end_date
+            GROUP BY vr.entry_by
+        ),
+        manager_counts AS (
+            SELECT mr.entry_by AS personnel_id, COUNT(*)::int AS manager_count
+            FROM managers_records mr
+            CROSS JOIN period_window pw
+            WHERE mr.deleted_at IS NULL
+              AND mr.entry_by IS NOT NULL
+              AND mr.entry_date >= pw.start_date
+              AND mr.entry_date < pw.end_date
+            GROUP BY mr.entry_by
+        ),
+        fire_alarm_counts AS (
+            SELECT fa.recorded_by AS personnel_id, COUNT(*)::int AS fire_alarm_count
+            FROM fire_alarms fa
+            CROSS JOIN period_window pw
+            WHERE fa.deleted_at IS NULL
+              AND fa.recorded_by IS NOT NULL
+              AND fa.alarm_time::date >= pw.start_date
+              AND fa.alarm_time::date < pw.end_date
+            GROUP BY fa.recorded_by
+        ),
+        sgk_counts AS (
+            SELECT sr.personnel_id AS personnel_id, COUNT(*)::int AS sgk_count
+            FROM sgk_records sr
+            CROSS JOIN period_window pw
+            WHERE sr.deleted_at IS NULL
+              AND sr.personnel_id IS NOT NULL
+              AND sr.upload_date::date >= pw.start_date
+              AND sr.upload_date::date < pw.end_date
+            GROUP BY sr.personnel_id
+        ),
+        ranked AS (
+            SELECT
+                pb.id,
+                (
+                    COALESCE(vc.vehicle_count, 0)
+                    + COALESCE(vic.visitor_count, 0)
+                    + COALESCE(mc.manager_count, 0)
+                    + COALESCE(fac.fire_alarm_count, 0)
+                    + COALESCE(sc.sgk_count, 0)
+                )::int AS total_count,
+                DENSE_RANK() OVER (
+                    ORDER BY
+                        (
+                            COALESCE(vc.vehicle_count, 0)
+                            + COALESCE(vic.visitor_count, 0)
+                            + COALESCE(mc.manager_count, 0)
+                            + COALESCE(fac.fire_alarm_count, 0)
+                            + COALESCE(sc.sgk_count, 0)
+                        ) DESC,
+                        pb.first_name ASC,
+                        pb.last_name ASC
+                )::int AS ranking,
+                (SELECT start_date FROM period_window)::date AS start_date,
+                ((SELECT end_date FROM period_window) - INTERVAL '1 day')::date AS end_date
+            FROM personnel_base pb
+            LEFT JOIN vehicle_counts vc ON vc.personnel_id = pb.id
+            LEFT JOIN visitor_counts vic ON vic.personnel_id = pb.id
+            LEFT JOIN manager_counts mc ON mc.personnel_id = pb.id
+            LEFT JOIN fire_alarm_counts fac ON fac.personnel_id = pb.id
+            LEFT JOIN sgk_counts sc ON sc.personnel_id = pb.id
+        )
+        SELECT id, ranking, total_count, start_date, end_date
+                FROM ranked
+                WHERE id = $1
+                    AND ranking <= 3
+                    AND total_count > 0`,
+                [userId]
+    );
+
+    if (rankingResult.rows.length === 0) {
+        return null;
+    }
+
+    const rankRow = rankingResult.rows[0];
+    const fullName = `${firstName} ${lastName}`.trim();
+
+    return {
+        rank: Number(rankRow.ranking),
+        totalCount: Number(rankRow.total_count),
+        weekStart: rankRow.start_date,
+        weekEnd: rankRow.end_date,
+        message: `Tebrikler ${fullName}! Geçen haftanın en çok kayıt yapanlar listemizde ${rankRow.ranking}. oldun. Başarılarının devamını dileriz! 👏`,
+    };
+};
+
 /**
  * Login validation rules
  */
@@ -125,6 +266,28 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const personnelRecordResult = await pool.query(personnelRecordQuery, [user.id, clientIp]);
         const personnelRecordId = personnelRecordResult.rows[0].id;
 
+        const weeklyCounterResult = await pool.query(
+            `UPDATE personnel
+             SET weekly_login_count = CASE
+                     WHEN weekly_login_week_start IS DISTINCT FROM date_trunc('week', CURRENT_DATE)::date THEN 1
+                     ELSE weekly_login_count + 1
+                 END,
+                 weekly_login_week_start = date_trunc('week', CURRENT_DATE)::date,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1
+             RETURNING weekly_login_count`,
+            [user.id]
+        );
+        const weeklyLoginCount = Number(weeklyCounterResult.rows[0]?.weekly_login_count || 0);
+
+        const weeklyRankingCelebration = await getWeeklyRankingCelebration(
+            user.id,
+            user.first_name,
+            user.last_name,
+            user.role,
+            weeklyLoginCount
+        );
+
         // Generate JWT token
         const token = generateToken({
             userId: user.id,
@@ -148,6 +311,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                     role: user.role,
                     is_active: user.is_active,
                 },
+                weeklyRankingCelebration,
             },
         });
     } catch (error) {

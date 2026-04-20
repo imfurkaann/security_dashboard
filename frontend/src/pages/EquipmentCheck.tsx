@@ -26,6 +26,14 @@ interface GateInfo {
     equipments: GateEquipmentConfig[];
 }
 
+interface WeeklyRankingCelebration {
+    rank: number;
+    totalCount: number;
+    weekStart: string;
+    weekEnd: string;
+    message: string;
+}
+
 export default function EquipmentCheck() {
     const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
     const [gates, setGates] = useState<GateInfo[]>([]);
@@ -36,6 +44,8 @@ export default function EquipmentCheck() {
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
     const [autoSendFailed, setAutoSendFailed] = useState(false);
+    const [weeklyCelebration, setWeeklyCelebration] = useState<WeeklyRankingCelebration | null>(null);
+    const [showCelebrationModal, setShowCelebrationModal] = useState(false);
     const [stage, setStage] = useState<'gate-selection' | 'equipment-check'>('gate-selection');
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const navigate = useNavigate();
@@ -54,6 +64,21 @@ export default function EquipmentCheck() {
             reason: '',
         }));
     }, [gates]);
+
+    useEffect(() => {
+        const rawCelebration = localStorage.getItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+        if (!rawCelebration) return;
+
+        try {
+            const parsed = JSON.parse(rawCelebration) as WeeklyRankingCelebration;
+            if (parsed?.rank && parsed?.message) {
+                setWeeklyCelebration(parsed);
+            }
+        } catch (error) {
+            console.error('Kutlama verisi okunamadı:', error);
+            localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+        }
+    }, []);
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -75,6 +100,15 @@ export default function EquipmentCheck() {
 
         fetchConfig();
     }, []);
+
+    const completeFlowWithCelebrationCheck = useCallback(() => {
+        if (weeklyCelebration) {
+            setShowCelebrationModal(true);
+            return;
+        }
+
+        navigate('/dashboard');
+    }, [navigate, weeklyCelebration]);
 
     const handleStatusChange = useCallback((id: string, status: boolean) => {
         setEquipment(prev =>
@@ -136,7 +170,7 @@ export default function EquipmentCheck() {
                     setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
                 } else {
-                    navigate('/dashboard');
+                    completeFlowWithCelebrationCheck();
                 }
             } catch (err: any) {
                 setError(err.response?.data?.message || 'İşlem başarısız');
@@ -144,7 +178,7 @@ export default function EquipmentCheck() {
                 setLoading(false);
             }
         },
-        [navigate]
+        [completeFlowWithCelebrationCheck]
     );
 
     const handleSubmit = useCallback(
@@ -162,8 +196,8 @@ export default function EquipmentCheck() {
     const handleWhatsAppClose = useCallback(() => {
         setShowWhatsAppModal(false);
         setAutoSendFailed(false);
-        navigate('/dashboard');
-    }, [navigate]);
+        completeFlowWithCelebrationCheck();
+    }, [completeFlowWithCelebrationCheck]);
 
     const handleSendWhatsAppAutomatic = useCallback(async () => {
         setSendingWhatsApp(true);
@@ -176,7 +210,7 @@ export default function EquipmentCheck() {
                 // Mesaj başarıyla gönderildi, modalı kapat
                 setShowWhatsAppModal(false);
                 setAutoSendFailed(false);
-                navigate('/dashboard');
+                completeFlowWithCelebrationCheck();
             } else {
                 setAutoSendFailed(true);
                 alert(`Mesaj gönderilemedi: ${response.data?.reason || 'Bilinmeyen hata'}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
@@ -187,7 +221,7 @@ export default function EquipmentCheck() {
         } finally {
             setSendingWhatsApp(false);
         }
-    }, [whatsappMessage, navigate]);
+    }, [whatsappMessage, completeFlowWithCelebrationCheck]);
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
@@ -196,6 +230,13 @@ export default function EquipmentCheck() {
         setAutoSendFailed(false);
         handleWhatsAppClose();
     }, [whatsappMessage, handleWhatsAppClose]);
+
+    const handleCelebrationClose = useCallback(() => {
+        setShowCelebrationModal(false);
+        setWeeklyCelebration(null);
+        localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+        navigate('/dashboard');
+    }, [navigate]);
 
     return (
         <div className="min-h-screen bg-white flex flex-col overflow-hidden">
@@ -404,6 +445,41 @@ export default function EquipmentCheck() {
                                 Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
                             </p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {showCelebrationModal && weeklyCelebration && (
+                <div className="fixed inset-0 z-[70] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-2xl text-slate-900 animate-fadeIn">
+                        <div className="text-center mb-5">
+                            <div className="text-4xl mb-2">🏅</div>
+                            <h2 className="text-xl sm:text-2xl font-extrabold">Haftalık Başarı Kutlaması</h2>
+                            <p className="text-sm sm:text-base text-slate-600 mt-1">Giriş sonrası başarı bildirimi</p>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <p className="text-sm sm:text-base text-slate-700 leading-relaxed">{weeklyCelebration.message}</p>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                                <p className="text-xs text-slate-500">Sıralama</p>
+                                <p className="text-lg font-extrabold text-amber-600">{weeklyCelebration.rank}.</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                                <p className="text-xs text-slate-500">Toplam Kayıt</p>
+                                <p className="text-lg font-extrabold text-blue-700">{weeklyCelebration.totalCount}</p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleCelebrationClose}
+                            className="mt-6 w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 transition"
+                        >
+                            Kapat
+                        </button>
                     </div>
                 </div>
             )}

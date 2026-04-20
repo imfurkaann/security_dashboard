@@ -87,4 +87,6 @@ export const STORAGE_KEYS = {
     ADMIN_TOKEN: 'adminToken',
     ADMIN_USER: 'adminUser',
     SELECTED_GATE: 'selectedGate',
+    WEEKLY_RANKING_CELEBRATION: 'weeklyRankingCelebration',
+    ADMIN_TOP_PERFORMERS_POPUP: 'adminTopPerformersPopup',
 } as const;
