@@ -252,7 +252,10 @@ export default function AdminPersonnelStatistics() {
                                             border: '1px solid #e2e8f0',
                                             boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
                                         }}
-                                        formatter={(value: number, name: string) => [value.toLocaleString('tr-TR'), name === 'totalCount' ? 'Toplam Kayıt' : name]}
+                                        formatter={(value: number | undefined, name: string | undefined) => [
+                                            Number(value ?? 0).toLocaleString('tr-TR'),
+                                            name === 'totalCount' ? 'Toplam Kayıt' : String(name ?? ''),
+                                        ]}
                                         labelFormatter={(label) => `Personel: ${label}`}
                                     />
                                     <Bar dataKey="totalCount" radius={[0, 10, 10, 0]} barSize={chartConfig.barSize}>
