@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, isValidDate } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
-import { getGateFromRequest } from '../utils/gate';
+import { getResolvedGateFromRequest } from '../utils/gate';
 
 /**
  * Get all manager records with joins
@@ -386,7 +386,7 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         const entry_by = req.user?.userId || null;
         const isAdminUser = req.user?.role === 'admin';
         const clientIp = getClientIp(req);
-        const gate = getGateFromRequest(req);
+        const gate = await getResolvedGateFromRequest(req);
 
         // GÜVENLİK: Input sanitization
         const sanitizedNotes = sanitizeInput(notes, 1000);

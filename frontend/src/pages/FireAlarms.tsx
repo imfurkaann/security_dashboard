@@ -20,7 +20,7 @@ interface FireAlarm {
     created_at: string;
 }
 
-type FilterType = 'today' | 'active' | 'resolved';
+type FilterType = 'today' | 'active' | 'resolved' | 'deleted';
 
 export default function FireAlarms() {
     const [records, setRecords] = useState<FireAlarm[]>([]);
@@ -35,7 +35,6 @@ export default function FireAlarms() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [resolvingId, setResolvingId] = useState<string | null>(null);
     const [filter, setFilter] = useState<FilterType>('today');
-    const [recordVisibility, setRecordVisibility] = useState<'all' | 'active' | 'deleted'>('all');
     const [alarmNumber, setAlarmNumber] = useState('');
     const [location, setLocation] = useState('');
     const [alarmTime, setAlarmTime] = useState('');
@@ -267,33 +266,42 @@ export default function FireAlarms() {
         setShowWhatsAppModal(false);
     }, [whatsappMessage]);
 
+    const nonDeletedRecords = useMemo(() => records.filter(r => !r.deleted_at), [records]);
+
+    const todayDeletedRecords = useMemo(() => {
+        return records.filter(r => {
+            if (!r.deleted_at) return false;
+            return isToday(r.deleted_at);
+        });
+    }, [records]);
+
     // Statistics
     const stats = useMemo(() => {
-        const today = records.filter(r => isToday(r.alarm_time));
-        const active = records.filter(r => !r.resolved);
-        const falseAlarms = records.filter(r => r.false_alarm);
+        const today = nonDeletedRecords.filter(r => isToday(r.alarm_time));
+        const active = nonDeletedRecords.filter(r => !r.resolved);
+        const falseAlarms = nonDeletedRecords.filter(r => r.false_alarm);
 
         return {
-            totalAlarms: records.length,
+            totalAlarms: nonDeletedRecords.length,
             todayAlarms: today.length,
             activeAlarms: active.length,
             falseAlarms: falseAlarms.length,
         };
-    }, [records]);
+    }, [nonDeletedRecords]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
-        return records.filter(r => {
-            const isDeleted = Boolean(r.deleted_at);
-            if (recordVisibility === 'active' && isDeleted) return false;
-            if (recordVisibility === 'deleted' && !isDeleted) return false;
+        if (filter === 'deleted') {
+            return todayDeletedRecords;
+        }
 
+        return nonDeletedRecords.filter(r => {
             if (filter === 'today') return isToday(r.alarm_time);
             if (filter === 'active') return !r.resolved;
             if (filter === 'resolved') return r.resolved;
             return true;
         });
-    }, [records, filter, recordVisibility]);
+    }, [nonDeletedRecords, todayDeletedRecords, filter]);
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
         const text = (value || '-').toString();
@@ -410,7 +418,10 @@ export default function FireAlarms() {
                                 Aktif Alarmlar ({stats.activeAlarms})
                             </button>
                             <button onClick={() => setFilter('resolved')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                                Çözülen Alarmlar ({records.filter(r => r.resolved).length})
+                                Çözülen Alarmlar ({nonDeletedRecords.filter(r => r.resolved).length})
+                            </button>
+                            <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
 
                         </div>

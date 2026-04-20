@@ -6,7 +6,7 @@ import { isValidUUID, sanitizeInput, isValidLength, normalizePlate } from '../ut
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
-import { getGateFromRequest } from '../utils/gate';
+import { getResolvedGateFromRequest } from '../utils/gate';
 
 const formatDriveDuration = (totalMinutes: number): string => {
     const normalized = Number.isFinite(totalMinutes) ? Math.max(0, Math.floor(totalMinutes)) : 0;
@@ -148,7 +148,7 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
     try {
         const { vehicle_id, manager_id, manager_name, destination, notes, given_time } = req.body;
         const personnel_id = req.user?.userId;
-        const gate = getGateFromRequest(req);
+        const gate = await getResolvedGateFromRequest(req);
 
         // Validate required fields
         if (!vehicle_id) {
@@ -243,7 +243,30 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        if (vehicleCheck.rows[0].status !== 'available') {
+        let vehicleStatus = vehicleCheck.rows[0].status;
+
+        // Stale durumlari otomatik duzelt: aktif in_use kaydi yoksa araci available yap.
+        if (vehicleStatus !== 'available') {
+            const activeInUseRecord = await pool.query(
+                `SELECT 1
+                 FROM vehicle_records
+                 WHERE vehicle_id = $1
+                   AND deleted_at IS NULL
+                   AND status = 'in_use'
+                 LIMIT 1`,
+                [vehicle_id]
+            );
+
+            if (activeInUseRecord.rows.length === 0) {
+                await pool.query(
+                    'UPDATE vehicles SET status = $1 WHERE id = $2',
+                    ['available', vehicle_id]
+                );
+                vehicleStatus = 'available';
+            }
+        }
+
+        if (vehicleStatus !== 'available') {
             res.status(400).json({
                 success: false,
                 message: 'Araç kullanımda, müsait değil'
@@ -805,7 +828,7 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
         }
 
         const existing = await pool.query(
-            'SELECT id, deleted_at FROM vehicle_records WHERE id = $1',
+            'SELECT id, deleted_at, vehicle_id FROM vehicle_records WHERE id = $1',
             [id]
         );
 
@@ -825,6 +848,8 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
+        await pool.query('BEGIN');
+
         await pool.query(
             `UPDATE vehicle_records
              SET deleted_at = CURRENT_TIMESTAMP,
@@ -832,6 +857,27 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
              WHERE id = $1`,
             [id]
         );
+
+        const vehicleId = existing.rows[0].vehicle_id;
+        if (vehicleId) {
+            const activeInUseRecord = await pool.query(
+                `SELECT 1
+                 FROM vehicle_records
+                 WHERE vehicle_id = $1
+                   AND deleted_at IS NULL
+                   AND status = 'in_use'
+                 LIMIT 1`,
+                [vehicleId]
+            );
+
+            const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
+            await pool.query(
+                'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [nextVehicleStatus, vehicleId]
+            );
+        }
+
+        await pool.query('COMMIT');
 
         await logDataChange(
             'vehicle_records',
@@ -848,6 +894,7 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
             message: 'Kayıt silindi'
         });
     } catch (error) {
+        await pool.query('ROLLBACK');
         console.error('Delete vehicle record error:', error);
         res.status(500).json({
             success: false,
@@ -875,7 +922,7 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
         }
 
         const existing = await pool.query(
-            'SELECT id, deleted_at FROM vehicle_records WHERE id = $1',
+            'SELECT id, deleted_at, vehicle_id, status FROM vehicle_records WHERE id = $1',
             [id]
         );
 
@@ -895,6 +942,32 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
             return;
         }
 
+        const vehicleId = existing.rows[0].vehicle_id;
+        const recordStatus = existing.rows[0].status;
+
+        if (vehicleId && recordStatus === 'in_use') {
+            const conflictingInUseRecord = await pool.query(
+                `SELECT id
+                 FROM vehicle_records
+                 WHERE vehicle_id = $1
+                   AND id <> $2
+                   AND deleted_at IS NULL
+                   AND status = 'in_use'
+                 LIMIT 1`,
+                [vehicleId, id]
+            );
+
+            if (conflictingInUseRecord.rows.length > 0) {
+                res.status(400).json({
+                    success: false,
+                    message: 'Bu araç için aktif bir kullanım kaydı bulunduğu için kayıt geri alınamaz'
+                });
+                return;
+            }
+        }
+
+        await pool.query('BEGIN');
+
         await pool.query(
             `UPDATE vehicle_records
              SET deleted_at = NULL,
@@ -902,6 +975,26 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
              WHERE id = $1`,
             [id]
         );
+
+        if (vehicleId) {
+            const activeInUseRecord = await pool.query(
+                `SELECT 1
+                 FROM vehicle_records
+                 WHERE vehicle_id = $1
+                   AND deleted_at IS NULL
+                   AND status = 'in_use'
+                 LIMIT 1`,
+                [vehicleId]
+            );
+
+            const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
+            await pool.query(
+                'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [nextVehicleStatus, vehicleId]
+            );
+        }
+
+        await pool.query('COMMIT');
 
         await logDataChange(
             'vehicle_records',
@@ -918,6 +1011,7 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
             message: 'Kayıt geri alındı'
         });
     } catch (error) {
+        await pool.query('ROLLBACK');
         console.error('Restore vehicle record error:', error);
         res.status(500).json({
             success: false,

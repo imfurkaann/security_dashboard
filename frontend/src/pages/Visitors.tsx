@@ -224,19 +224,24 @@ export default function Visitors() {
         setShowWhatsAppModal(false);
     }, [whatsappMessage]);
 
+    const nonDeletedRecords = useMemo(() => records.filter(record => !record.deleted_at), [records]);
+    const todayDeletedRecords = useMemo(
+        () => records.filter(record => Boolean(record.deleted_at) && isToday(record.deleted_at)),
+        [records]
+    );
+
     // Memoized statistics
     const stats = useMemo(() => ({
-        insideCount: records.filter(r => r.status === 'inside').length,
-        todayEntries: records.filter(r => isToday(r.entry_date)).length,
-        todayExits: records.filter(r => r.exit_date && isToday(r.exit_date)).length,
-        subcontractorCount: records.filter(r => r.status === 'inside' && r.subcontractor_worker).length,
-        electricStationCount: records.filter(r => r.status === 'inside' && r.for_electric_station).length,
-    }), [records]);
+        insideCount: nonDeletedRecords.filter(r => r.status === 'inside').length,
+        todayEntries: nonDeletedRecords.filter(r => isToday(r.entry_date)).length,
+        subcontractorCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.subcontractor_worker).length,
+        electricStationCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.for_electric_station).length,
+    }), [nonDeletedRecords]);
 
     const visitorVehicleCount = useMemo(() => {
         const uniquePlates = new Set<string>();
 
-        records.forEach((record) => {
+        nonDeletedRecords.forEach((record) => {
             if (record.status !== 'inside') return;
 
             const normalizedPlate = normalizePlate(record.vehicle_plate || '');
@@ -250,7 +255,7 @@ export default function Visitors() {
         });
 
         return uniquePlates.size;
-    }, [records]);
+    }, [nonDeletedRecords]);
 
     const parkingCapacity = useMemo(() => {
         const rawValue = localStorage.getItem(PARKING_CAPACITY_STORAGE_KEY);
@@ -285,13 +290,15 @@ export default function Visitors() {
         const normalizedCompany = columnFilters.companyName.trim().toLocaleLowerCase('tr-TR');
         const normalizedVisitingPerson = columnFilters.visitingPerson.trim().toLocaleLowerCase('tr-TR');
 
-        return records.filter(r => {
+        const sourceRecords = filter === 'deleted' ? todayDeletedRecords : nonDeletedRecords;
+
+        return sourceRecords.filter(r => {
             const matchesTopFilter = (() => {
                 if (filter === 'today') return isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date));
                 if (filter === 'inside') return r.status === 'inside';
                 if (filter === 'subcontractor') return r.status === 'inside' && r.subcontractor_worker;
                 if (filter === 'electric') return r.status === 'inside' && r.for_electric_station;
-                if (filter === 'exits') return r.exit_date && isToday(r.exit_date);
+                if (filter === 'deleted') return true;
                 return true;
             })();
 
@@ -318,7 +325,7 @@ export default function Visitors() {
 
             return true;
         });
-    }, [records, filter, columnFilters]);
+    }, [nonDeletedRecords, todayDeletedRecords, filter, columnFilters]);
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
         const text = (value || '-').toString();
@@ -416,7 +423,7 @@ export default function Visitors() {
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-20 flex flex-col gap-4">
                 <div className="w-full">
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 mb-2.5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 mb-2.5">
                         <div className={`${dashboardCardBase} border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700`}>
                             <div className="flex items-center gap-3 min-h-[48px]">
                                 <div className={`${dashboardIconBase} border-blue-300/60`}>
@@ -445,20 +452,6 @@ export default function Visitors() {
                             </div>
                         </div>
 
-                        <div className={`${dashboardCardBase} border-indigo-500 bg-gradient-to-br from-indigo-500 to-indigo-700`}>
-                            <div className="flex items-center gap-3 min-h-[48px]">
-                                <div className={`${dashboardIconBase} border-indigo-300/60`}>
-                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
-                                    </svg>
-                                </div>
-                                <div className="min-w-0 flex-1 text-center">
-                                    <p className={dashboardLabelBase}>Bugün Çıkış Yapan</p>
-                                    <p className={dashboardValueBase}>{stats.todayExits}</p>
-                                </div>
-                            </div>
-                        </div>
-
                         <div className={`${dashboardCardBase} border-amber-500 bg-gradient-to-br from-amber-500 to-orange-700`}>
                             <div className="flex items-center gap-3 min-h-[48px]">
                                 <div className={`${dashboardIconBase} border-amber-300/60`}>
@@ -478,7 +471,7 @@ export default function Visitors() {
                     <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button onClick={() => setFilter('today')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'today' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                                Bugünün Kayıtları ({records.filter(r => isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date))).length})
+                                Bugünün Kayıtları ({nonDeletedRecords.filter(r => isToday(r.entry_date) || (r.exit_date && isToday(r.exit_date))).length})
                             </button>
                             <button onClick={() => setFilter('inside')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'inside' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Aktif İçeridekiler ({stats.insideCount})
@@ -487,10 +480,10 @@ export default function Visitors() {
                                 Taşeron İşçiler ({stats.subcontractorCount})
                             </button>
                             <button onClick={() => setFilter('electric')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                                Elektrik İstasyonu ({stats.electricStationCount})
+                                Şarj İstasyonu ({stats.electricStationCount})
                             </button>
-                            <button onClick={() => setFilter('exits')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'exits' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                                Bugün Çıkış Yapanlar ({stats.todayExits})
+                            <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
                         </div>
 

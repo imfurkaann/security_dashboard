@@ -6,7 +6,7 @@ import { isValidUUID, sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
-import { getGateFromRequest } from '../utils/gate';
+import { getResolvedGateFromRequest } from '../utils/gate';
 
 // Tüm yangın alarm kayıtlarını getir
 export const getFireAlarms = async (req: Request, res: Response) => {
@@ -53,7 +53,7 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         const { alarm_number, location, alarm_time, false_alarm, resolution_notes } = req.body;
         const userId = req.user?.userId;
         const clientIp = getClientIp(req);
-        const gate = getGateFromRequest(req);
+        const gate = await getResolvedGateFromRequest(req);
 
         if (!userId) {
             return res.status(401).json({ success: false, message: 'Yetkilendirme gerekli' });

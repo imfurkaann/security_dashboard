@@ -95,11 +95,6 @@ export default function EquipmentCheck() {
             return false;
         }
 
-        if (equipment.length === 0) {
-            setError('Seçilen kapı için ekipman bulunamadı');
-            return false;
-        }
-
         const allStatusSet = equipment.every(item => item.status !== null);
         if (!allStatusSet) {
             setError('Lütfen tüm ekipmanlar için durum seçiniz');
@@ -117,30 +112,24 @@ export default function EquipmentCheck() {
         return true;
     }, [equipment, selectedGate]);
 
-    const handleSubmit = useCallback(
-        async (e: FormEvent) => {
-            e.preventDefault();
+    const submitEquipmentCheck = useCallback(
+        async (gateCode: string, equipmentItems: EquipmentItem[]) => {
+            setLoading(true);
             setError('');
 
-            if (!validateForm()) return;
-
-            setLoading(true);
-
             try {
-                localStorage.setItem(STORAGE_KEYS.SELECTED_GATE, selectedGate);
+                localStorage.setItem(STORAGE_KEYS.SELECTED_GATE, gateCode);
 
-                const equipmentStatuses = equipment.map(item => ({
+                const equipmentStatuses = equipmentItems.map(item => ({
                     name: item.name,
                     status: item.status === true,
                     reason: item.reason,
                 }));
 
-                const formData = {
-                    gate: selectedGate,
+                const response = await api.post('/equipment-check', {
+                    gate: gateCode,
                     equipmentStatuses,
-                };
-
-                const response = await api.post('/equipment-check', formData);
+                });
 
                 if (response.data?.data?.whatsappMessage) {
                     setWhatsappMessage(response.data.data.whatsappMessage);
@@ -155,7 +144,19 @@ export default function EquipmentCheck() {
                 setLoading(false);
             }
         },
-        [equipment, navigate, selectedGate, validateForm]
+        [navigate]
+    );
+
+    const handleSubmit = useCallback(
+        async (e: FormEvent) => {
+            e.preventDefault();
+            setError('');
+
+            if (!validateForm()) return;
+
+            await submitEquipmentCheck(selectedGate, equipment);
+        },
+        [equipment, selectedGate, submitEquipmentCheck, validateForm]
     );
 
     const handleWhatsAppClose = useCallback(() => {
@@ -232,16 +233,24 @@ export default function EquipmentCheck() {
                                 <button
                                     key={gate.id}
                                     type="button"
-                                    onClick={() => {
+                                    disabled={loading}
+                                    onClick={async () => {
+                                        const selectedEquipment = buildEquipmentFromGate(gate.code);
                                         setSelectedGate(gate.code);
-                                        setStage('equipment-check');
                                         setError('');
-                                        setEquipment(buildEquipmentFromGate(gate.code));
+                                        setEquipment(selectedEquipment);
+
+                                        if (selectedEquipment.length === 0) {
+                                            await submitEquipmentCheck(gate.code, []);
+                                            return;
+                                        }
+
+                                        setStage('equipment-check');
                                     }}
                                     className={`p-6 rounded-lg border-2 transition-all text-left ${selectedGate === gate.code
                                         ? 'border-blue-600 bg-blue-50'
                                         : 'border-gray-200 hover:border-gray-300'
-                                        }`}
+                                        } ${loading ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 >
                                     <h3 className="text-lg font-bold text-gray-900">{gate.name}</h3>
                                 </button>

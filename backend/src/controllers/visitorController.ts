@@ -6,7 +6,7 @@ import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidN
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
-import { getGateFromRequest } from '../utils/gate';
+import { getResolvedGateFromRequest } from '../utils/gate';
 
 const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
     if (value === null || value === undefined) return null;
@@ -105,7 +105,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, entry_time } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
-        const gate = getGateFromRequest(req);
+        const gate = await getResolvedGateFromRequest(req);
 
         // GÜVENLİK: Input sanitization
         const sanitizedFullName = sanitizePlainText(full_name, 100);

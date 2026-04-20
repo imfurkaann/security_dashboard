@@ -82,8 +82,18 @@ export default function VehicleRecords() {
             }
 
             // Status filter
-            if (filters.status !== 'all' && record.status !== filters.status) {
-                return false;
+            if (filters.status === 'deleted') {
+                if (!record.deleted_at) {
+                    return false;
+                }
+            } else if (filters.status === 'in_use') {
+                if (record.status !== 'in_use' || Boolean(record.deleted_at)) {
+                    return false;
+                }
+            } else if (filters.status === 'returned') {
+                if (record.status !== 'returned' || Boolean(record.deleted_at)) {
+                    return false;
+                }
             }
 
             // Gate filter
@@ -348,6 +358,7 @@ export default function VehicleRecords() {
                                 <option value="all">Tümü</option>
                                 <option value="in_use">Kullanımda</option>
                                 <option value="returned">Teslim Alındı</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
                             </select>
                         </div>
 

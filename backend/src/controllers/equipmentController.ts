@@ -26,8 +26,6 @@ interface GateEquipmentRow {
     is_active: boolean;
 }
 
-const DEFAULT_EQUIPMENT_NAMES = ['Televizyon', 'Monitör', 'Telefon', 'Alkol Metre'] as const;
-
 const normalizeText = (value: string): string =>
     value
         .trim()
@@ -195,7 +193,7 @@ export const equipmentCheckValidation = [
     body('monitor_reason').optional().isString().trim(),
     body('phone_reason').optional().isString().trim(),
     body('breathalyzer_reason').optional().isString().trim(),
-    body('equipmentStatuses').optional().isArray({ min: 1 }),
+    body('equipmentStatuses').optional().isArray(),
     body('equipmentStatuses.*.name').optional().isString().trim().isLength({ min: 1 }),
     body('equipmentStatuses.*.status').optional().isBoolean(),
     body('equipmentStatuses.*.reason').optional().isString().trim(),
@@ -287,14 +285,12 @@ export const createEquipmentGate = async (req: Request, res: Response): Promise<
             ? req.body.equipments.filter((item: unknown) => typeof item === 'string').map((item: string) => item.trim()).filter(Boolean)
             : [];
 
-        const equipmentNames = requestedEquipments.length > 0 ? requestedEquipments : [...DEFAULT_EQUIPMENT_NAMES];
-
-        for (let i = 0; i < equipmentNames.length; i += 1) {
+        for (let i = 0; i < requestedEquipments.length; i += 1) {
             await client.query(
                 `INSERT INTO gate_equipments (gate_id, name, sort_order, is_active)
                  VALUES ($1, $2, $3, TRUE)
                  ON CONFLICT (gate_id, name) DO NOTHING`,
-                [gateId, equipmentNames[i], i + 1]
+                [gateId, requestedEquipments[i], i + 1]
             );
         }
 
@@ -533,18 +529,18 @@ export const submitEquipmentCheck = async (req: Request, res: Response): Promise
         }
 
         const dynamicStatuses = sanitizeStatusItems(req.body?.equipmentStatuses);
+        
+        // Only fall back to legacy format if new format is empty AND legacy fields exist
+        const hasLegacyFields = ['television_status', 'monitor_status', 'phone_status', 'breathalyzer_status'].some(
+            key => key in (req.body || {})
+        );
+        
         const equipmentStatuses =
             dynamicStatuses.length > 0
                 ? dynamicStatuses
-                : mapStatusesFromLegacyPayload(req.body as Record<string, unknown>);
-
-        if (equipmentStatuses.length === 0) {
-            res.status(400).json({
-                success: false,
-                message: 'Ekipman listesi boş olamaz',
-            });
-            return;
-        }
+                : hasLegacyFields
+                    ? mapStatusesFromLegacyPayload(req.body as Record<string, unknown>)
+                    : [];
 
         const rejectedWithoutReason = equipmentStatuses.some(item => item.status === false && !item.reason?.trim());
         if (rejectedWithoutReason) {
