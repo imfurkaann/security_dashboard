@@ -45,10 +45,13 @@ export default function Visitors() {
     });
     const [formData, setFormData] = useState<VisitorFormData>(INITIAL_FORM_DATA);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const [guestQrNotification, setGuestQrNotification] = useState<{ count: number; latestName: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+    const recordsRef = useRef<VisitorRecord[]>([]);
+    const initializedRef = useRef(false);
 
     // Fetch visitor records
     const fetchData = useCallback(async () => {
@@ -65,6 +68,62 @@ export default function Visitors() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    useEffect(() => {
+        recordsRef.current = records;
+        if (!initializedRef.current && records.length > 0) {
+            initializedRef.current = true;
+        }
+    }, [records]);
+
+    useEffect(() => {
+        const pollRecords = async () => {
+            if (document.hidden) return;
+
+            try {
+                const res = await api.get('/visitors/records?includeDeleted=true');
+                const nextRecords: VisitorRecord[] = res.data || [];
+                const previousRecords = recordsRef.current;
+
+                if (initializedRef.current) {
+                    const previousIds = new Set(previousRecords.map((record) => record.id));
+                    const newGuestQrRecords = nextRecords.filter((record) => {
+                        const entryBy = (record.entry_by || '').toLocaleLowerCase('tr-TR');
+                        return !record.deleted_at && !previousIds.has(record.id) && entryBy.includes('misafir');
+                    });
+
+                    if (newGuestQrRecords.length > 0) {
+                        setGuestQrNotification({
+                            count: newGuestQrRecords.length,
+                            latestName: newGuestQrRecords[0].full_name || 'İsimsiz ziyaretçi'
+                        });
+                    }
+                }
+
+                setRecords(nextRecords);
+            } catch (error) {
+                console.error('Ziyaretçi canlı yenileme hatası:', error);
+            }
+        };
+
+        const intervalId = window.setInterval(pollRecords, 7000);
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!guestQrNotification) return;
+
+        const timer = window.setTimeout(() => {
+            setGuestQrNotification(null);
+        }, 8000);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [guestQrNotification]);
 
     // Reset form to initial state
     const resetForm = useCallback(() => {
@@ -871,6 +930,35 @@ export default function Visitors() {
                                 Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
                             </p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {guestQrNotification && (
+                <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[70] w-[92vw] max-w-2xl rounded-2xl border-2 border-emerald-400 bg-emerald-100 shadow-2xl p-5 animate-pulse">
+                    <div className="flex items-start gap-4">
+                        <div className="mt-0.5 p-2 rounded-full bg-emerald-600">
+                            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-base md:text-lg font-extrabold text-emerald-950 tracking-wide">YENI MISAFIR QR KAYDI</p>
+                            <p className="text-sm md:text-base text-emerald-900 mt-1 break-words font-medium">
+                                {guestQrNotification.count > 1
+                                    ? `${guestQrNotification.count} yeni kayıt eklendi. Son kayıt: ${guestQrNotification.latestName}`
+                                    : `${guestQrNotification.latestName} kaydı oluşturdu.`}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setGuestQrNotification(null)}
+                            className="text-emerald-900 hover:text-emerald-950 bg-emerald-200 hover:bg-emerald-300 rounded-lg p-1"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             )}

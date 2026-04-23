@@ -36,6 +36,7 @@ const menuItems = [
     { title: 'Kapı ve Ekipman Yönetimi', path: '/admin/gate-equipment-config' },
     { title: 'Otopark Yönetimi', path: '/admin/parking-management' },
     { title: 'Misafir Kayıtları', path: '/admin/misafir-kayitlari' },
+    { title: 'Misafir QR Yönetimi', path: '/admin/misafir-qr-yonetimi' },
     { title: 'İstatistikler', path: '/admin/statistics' },
     { title: 'Veri Dışa Aktarma', path: '/admin/export-data' }
 ];

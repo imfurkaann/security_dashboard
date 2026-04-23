@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
+import os from 'os';
 import pool from '../config/database';
 import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
@@ -378,6 +379,63 @@ export const getCurrentAdmin = async (req: Request, res: Response): Promise<void
         res.status(500).json({
             success: false,
             message: 'Kullanıcı bilgileri alınamadı',
+        });
+    }
+};
+
+const getLocalPrivateIPv4 = (): string | null => {
+    const interfaces = os.networkInterfaces();
+
+    for (const interfaceName of Object.keys(interfaces)) {
+        const addresses = interfaces[interfaceName] || [];
+        for (const address of addresses) {
+            if (!address || address.family !== 'IPv4' || address.internal) continue;
+
+            const ip = address.address;
+            if (
+                ip.startsWith('192.168.') ||
+                ip.startsWith('10.') ||
+                /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
+            ) {
+                return ip;
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Get admin network info for LAN-safe QR generation
+ * GET /api/admin/network-info
+ */
+export const getAdminNetworkInfo = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const localIp = getLocalPrivateIPv4();
+        const frontendPort = process.env.FRONTEND_PORT || '5173';
+        const backendPort = process.env.PORT || '5000';
+
+        const frontendBaseUrl = localIp
+            ? `http://${localIp}:${frontendPort}`
+            : `http://localhost:${frontendPort}`;
+
+        const backendBaseUrl = localIp
+            ? `http://${localIp}:${backendPort}`
+            : `http://localhost:${backendPort}`;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                localIp,
+                frontendBaseUrl,
+                backendBaseUrl
+            }
+        });
+    } catch (error) {
+        console.error('Get admin network info error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Ağ bilgisi alınamadı'
         });
     }
 };
