@@ -35,6 +35,8 @@ import FireAlarmRecords from './pages/FireAlarmRecords';
 import Sgk from './pages/Sgk';
 import EquipmentCheck from './pages/EquipmentCheck';
 import GuestRegistry from './pages/GuestRegistry';
+import QrVisitorCheckin from './pages/QrVisitorCheckin';
+import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
 
 function App() {
   return (
@@ -44,6 +46,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/qr/visitor-checkin" element={<QrVisitorCheckin />} />
 
             {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
             <Route path="/equipment-check" element={
@@ -76,6 +79,7 @@ function App() {
               <Route path="gate-equipment-config" element={<AdminGateEquipmentConfig />} />
               <Route path="parking-management" element={<AdminParkingManagement />} />
               <Route path="misafir-kayitlari" element={<GuestRegistry />} />
+              <Route path="misafir-qr-yonetimi" element={<AdminVisitorQrManagement />} />
             </Route>
 
             {/* Protected Routes - Authentication gerekli */}

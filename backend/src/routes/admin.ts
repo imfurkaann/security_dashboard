@@ -3,6 +3,7 @@ import {
     adminLogin,
     adminLogout,
     getCurrentAdmin,
+    getAdminNetworkInfo,
     adminLoginValidation,
 } from '../controllers/adminAuthController';
 import {
@@ -46,6 +47,13 @@ router.post('/logout', adminAuthMiddleware, adminLogout);
  * @access  Private (Admin only)
  */
 router.get('/me', adminAuthMiddleware, getCurrentAdmin);
+
+/**
+ * @route   GET /api/admin/network-info
+ * @desc    Get LAN-friendly frontend/backend base URLs for admin tools
+ * @access  Private (Admin only)
+ */
+router.get('/network-info', adminAuthMiddleware, getAdminNetworkInfo);
 
 /**
  * @route   GET /api/admin/equipment-config

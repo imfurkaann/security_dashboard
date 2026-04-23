@@ -51,6 +51,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.status,
                 vr.created_at,
                 ${deletedAtSelect}
+                vr.entry_by_name,
+                vr.exit_by_name,
                 pe.first_name as entry_by_first_name,
                 pe.last_name as entry_by_last_name,
                 px.first_name as exit_by_first_name,
@@ -83,8 +85,12 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             exit_time: row.exit_time,
             status: row.status,
             deleted_at: row.deleted_at || null,
-            entry_by: (row.entry_by_first_name || row.entry_by_last_name) ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim() : null,
-            exit_by: (row.exit_by_first_name || row.exit_by_last_name) ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim() : null,
+            entry_by: (row.entry_by_first_name || row.entry_by_last_name)
+                ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim()
+                : (row.entry_by_name || null),
+            exit_by: (row.exit_by_first_name || row.exit_by_last_name)
+                ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim()
+                : (row.exit_by_name || null),
             created_at: row.created_at
         }));
 
