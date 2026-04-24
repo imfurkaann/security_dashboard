@@ -73,6 +73,7 @@ export const createVisitorRecordMessage = (data: {
     phone?: string;
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
+    dailyGuest?: boolean;
     notes?: string;
 }): string => {
     // Mesaj satırlarını dinamik olarak oluştur
@@ -126,6 +127,9 @@ export const createVisitorRecordMessage = (data: {
     if (data.forElectricStation) {
         specialTags.push('Elektrik İstasyonu');
     }
+    if (data.dailyGuest) {
+        specialTags.push('Günübirlik Misafir');
+    }
     if (specialTags.length > 0) {
         lines.push(`Etiket: ${specialTags.join(', ')}`);
     }
@@ -155,6 +159,7 @@ export const createVisitorExitMessage = (data: {
     phone?: string;
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
+    dailyGuest?: boolean;
     notes?: string;
     exitTime: string;
 }): string => {
@@ -207,6 +212,9 @@ export const createVisitorExitMessage = (data: {
     }
     if (data.forElectricStation) {
         specialTags.push('Elektrik İstasyonu');
+    }
+    if (data.dailyGuest) {
+        specialTags.push('Günübirlik Misafir');
     }
     if (specialTags.length > 0) {
         lines.push(`Etiket: ${specialTags.join(', ')}`);

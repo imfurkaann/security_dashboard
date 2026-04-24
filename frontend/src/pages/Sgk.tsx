@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 // Initial form states
 const INITIAL_FORM_DATA: SgkFormData = {
@@ -232,6 +233,19 @@ export default function Sgk() {
             setLoading(false);
         }
     }, []);
+
+    useRealtimeRefetch({
+        topics: ['sgk'],
+        onMutation: async () => {
+            if (searchMode !== 'all') return;
+            try {
+                const response = await api.get('/sgk/records');
+                setAllRecords(response.data || []);
+            } catch (error) {
+                console.error('SGK canlı yenileme hatası:', error);
+            }
+        },
+    });
 
     // Reset filters
     const resetFilters = useCallback(() => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import type { GuestRegistryColumn, GuestRegistryRecord, GuestRegistrySchema } from '../types';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface ImportSummary {
     totalRows: number;
@@ -72,6 +73,11 @@ export default function GuestRegistry() {
 
         void fetchRecords(debouncedSearchText);
     }, [debouncedSearchText, fetchRecords]);
+
+    useRealtimeRefetch({
+        topics: ['guest-registry'],
+        onMutation: () => fetchRecords(debouncedSearchText),
+    });
 
     const onReset = async () => {
         setSearchText('');

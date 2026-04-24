@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { isValidLength } from '../utils/validation';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 // Vardiya tanımları
 const SHIFTS = [
@@ -112,6 +113,11 @@ export default function Incidents() {
     useEffect(() => {
         loadShiftReports();
     }, [loadShiftReports]);
+
+    useRealtimeRefetch({
+        topics: ['incidents'],
+        onMutation: loadShiftReports,
+    });
 
     // Vardiya raporunu kaydet veya güncelle
     const handleReportSubmit = useCallback(async () => {

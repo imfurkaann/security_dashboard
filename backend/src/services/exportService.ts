@@ -4,6 +4,8 @@ import { Response } from 'express';
 import type { PoolClient } from 'pg';
 import pool from '../config/database';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Türkçe ay isimleri
 const TURKISH_MONTHS = [
@@ -77,6 +79,27 @@ interface VisitorExportRow {
     exit_personnel_name?: string | null;
     [key: string]: any;
 }
+
+const LOGOUT_EXPORT_BASE_DIR_ENV = 'DAILY_EXPORT_BASE_DIR';
+
+const getLogoutExportBaseDir = (): string => {
+    const configuredDir = process.env[LOGOUT_EXPORT_BASE_DIR_ENV]?.trim();
+    if (configuredDir) {
+        return configuredDir;
+    }
+
+    // Docker kurulumunda compose volume bu yolu host masaüstüne mapler.
+    const dockerExportRoot = '/app/daily_exports';
+    if (fs.existsSync(dockerExportRoot)) {
+        return dockerExportRoot;
+    }
+
+    if (process.platform === 'win32') {
+        return path.join(os.homedir(), 'Desktop', 'Guvenlik_Kayitlari');
+    }
+
+    return path.resolve(process.cwd(), 'daily_exports');
+};
 
 interface FireAlarmExportRow {
     id: string;
@@ -449,18 +472,15 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
     const dateStr = `${year}-${monthNum}-${day}`;
     const fileDateStr = `${day}-${monthNum}-${year}`;
 
-    // Export klasörü: /app/daily_exports/Yıl/Ay/Gün/ (Admin panel yapısı ile aynı)
-    const exportDir = `/app/daily_exports/${year}/${month}/${day}`;
-    const vardiyaDir = `${exportDir}/Vardiya_Raporlari`;
+    const exportBaseDir = getLogoutExportBaseDir();
+    // Klasör yapısı: {base}/Yıl/Ay/Gün/
+    const exportDir = path.join(exportBaseDir, String(year), month, day);
+    const vardiyaDir = path.join(exportDir, 'Vardiya_Raporlari');
 
     try {
         // Klasörleri oluştur (yoksa)
-        if (!fs.existsSync(exportDir)) {
-            fs.mkdirSync(exportDir, { recursive: true });
-        }
-        if (!fs.existsSync(vardiyaDir)) {
-            fs.mkdirSync(vardiyaDir, { recursive: true });
-        }
+        fs.mkdirSync(exportDir, { recursive: true });
+        fs.mkdirSync(vardiyaDir, { recursive: true });
 
         console.log(`[Logout Export] Kullanıcı ${userId} çıkış yapıyor, kayıtlar ${exportDir} klasörüne kaydedilecek`);
 
@@ -469,7 +489,7 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
 
         if (managerRows.length > 0) {
             const workbook = await createManagersExcel(managerRows, dateStr);
-            const filePath = `${exportDir}/Mudur_Kayitlari_${fileDateStr}.xlsx`;
+            const filePath = path.join(exportDir, `Mudur_Kayitlari_${fileDateStr}.xlsx`);
             await workbook.xlsx.writeFile(filePath);
             console.log(`[Logout Export] Müdür kayıtları: ${managerRows.length} kayıt`);
         }
@@ -479,7 +499,7 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
 
         if (vehicleRows.length > 0) {
             const workbook = await createVehiclesExcel(vehicleRows, dateStr);
-            const filePath = `${exportDir}/Arac_Kayitlari_${fileDateStr}.xlsx`;
+            const filePath = path.join(exportDir, `Arac_Kayitlari_${fileDateStr}.xlsx`);
             await workbook.xlsx.writeFile(filePath);
             console.log(`[Logout Export] Araç kayıtları: ${vehicleRows.length} kayıt`);
         }
@@ -489,7 +509,7 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
 
         if (visitorRows.length > 0) {
             const workbook = await createVisitorsExcel(visitorRows, dateStr);
-            const filePath = `${exportDir}/Ziyaretci_Kayitlari_${fileDateStr}.xlsx`;
+            const filePath = path.join(exportDir, `Ziyaretci_Kayitlari_${fileDateStr}.xlsx`);
             await workbook.xlsx.writeFile(filePath);
             console.log(`[Logout Export] Ziyaretçi kayıtları: ${visitorRows.length} kayıt`);
         }
@@ -499,7 +519,7 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
 
         if (fireAlarmRows.length > 0) {
             const workbook = await createFireAlarmsExcel(fireAlarmRows, dateStr);
-            const filePath = `${exportDir}/Yangin_Alarm_Kayitlari_${fileDateStr}.xlsx`;
+            const filePath = path.join(exportDir, `Yangin_Alarm_Kayitlari_${fileDateStr}.xlsx`);
             await workbook.xlsx.writeFile(filePath);
             console.log(`[Logout Export] Yangın alarm kayıtları: ${fireAlarmRows.length} kayıt`);
         }
@@ -521,7 +541,7 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
             for (const record of incidentsResult.rows) {
                 if (record.report_file_path && fs.existsSync(record.report_file_path)) {
                     const shiftLabel = record.shift_label ? record.shift_label.replace(/:/g, '-') : '00-08';
-                    const destPath = `${vardiyaDir}/${shiftLabel}_${fileDateStr}.docx`;
+                    const destPath = path.join(vardiyaDir, `${shiftLabel}_${fileDateStr}.docx`);
                     fs.copyFileSync(record.report_file_path, destPath);
                     vardiyaCount++;
                 }

@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateFireAlarmForm, isValidLength } from '../utils/validation';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface FireAlarm {
     id: string;
@@ -66,9 +67,12 @@ export default function FireAlarms() {
 
     useEffect(() => {
         fetchData();
-        const refreshInterval = window.setInterval(fetchData, 15000);
-        return () => window.clearInterval(refreshInterval);
     }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['fire-alarms'],
+        onMutation: fetchData,
+    });
 
     useEffect(() => {
         const handleFocus = () => {

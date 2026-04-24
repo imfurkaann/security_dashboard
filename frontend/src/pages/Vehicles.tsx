@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import type { Vehicle, VehicleUsage, Manager, VehicleFormData, VehicleFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 // Initial form state
 const INITIAL_FORM_DATA: VehicleFormData = {
@@ -56,6 +57,11 @@ export default function Vehicles() {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['vehicles', 'managers'],
+        onMutation: fetchData,
+    });
 
     // Form submission handler
     const handleSubmit = useCallback(async (e: React.FormEvent) => {

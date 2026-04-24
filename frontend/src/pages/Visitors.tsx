@@ -5,6 +5,7 @@ import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateVisitorForm, normalizePlate, normalizePhone } from '../utils/validation';
 import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -21,6 +22,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     notes: '',
     subcontractor_worker: false,
     for_electric_station: false,
+    daily_guest: false,
     send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
@@ -76,42 +78,65 @@ export default function Visitors() {
         }
     }, [records]);
 
-    useEffect(() => {
-        const pollRecords = async () => {
-            if (document.hidden) return;
+    const refreshRecordsWithRealtimeNotification = useCallback(async () => {
+        if (document.hidden) return;
 
-            try {
-                const res = await api.get('/visitors/records?includeDeleted=true');
-                const nextRecords: VisitorRecord[] = res.data || [];
-                const previousRecords = recordsRef.current;
+        try {
+            const res = await api.get('/visitors/records?includeDeleted=true');
+            const nextRecords: VisitorRecord[] = res.data || [];
+            const previousRecords = recordsRef.current;
 
-                if (initializedRef.current) {
-                    const previousIds = new Set(previousRecords.map((record) => record.id));
-                    const newGuestQrRecords = nextRecords.filter((record) => {
-                        const entryBy = (record.entry_by || '').toLocaleLowerCase('tr-TR');
-                        return !record.deleted_at && !previousIds.has(record.id) && entryBy.includes('misafir');
+            if (initializedRef.current) {
+                const previousIds = new Set(previousRecords.map((record) => record.id));
+                const newGuestQrRecords = nextRecords.filter((record) => {
+                    const entryBy = (record.entry_by || '').toLocaleLowerCase('tr-TR');
+                    return !record.deleted_at && !previousIds.has(record.id) && entryBy.includes('misafir');
+                });
+
+                if (newGuestQrRecords.length > 0) {
+                    setGuestQrNotification({
+                        count: newGuestQrRecords.length,
+                        latestName: newGuestQrRecords[0].full_name || 'İsimsiz ziyaretçi'
                     });
-
-                    if (newGuestQrRecords.length > 0) {
-                        setGuestQrNotification({
-                            count: newGuestQrRecords.length,
-                            latestName: newGuestQrRecords[0].full_name || 'İsimsiz ziyaretçi'
-                        });
-                    }
                 }
+            }
 
-                setRecords(nextRecords);
-            } catch (error) {
-                console.error('Ziyaretçi canlı yenileme hatası:', error);
+            setRecords(nextRecords);
+        } catch (error) {
+            console.error('Ziyaretçi canlı yenileme hatası:', error);
+        }
+    }, []);
+
+    useRealtimeRefetch({
+        topics: ['visitors'],
+        onMutation: refreshRecordsWithRealtimeNotification,
+    });
+
+    useEffect(() => {
+        // Websocket baglantisi ag/proxy nedeniyle koparsa, sayfayi arka planda taze tut.
+        const intervalId = window.setInterval(() => {
+            void refreshRecordsWithRealtimeNotification();
+        }, 7000);
+
+        const handleFocus = () => {
+            void refreshRecordsWithRealtimeNotification();
+        };
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                void refreshRecordsWithRealtimeNotification();
             }
         };
 
-        const intervalId = window.setInterval(pollRecords, 7000);
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             window.clearInterval(intervalId);
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
-    }, []);
+    }, [refreshRecordsWithRealtimeNotification]);
 
     useEffect(() => {
         if (!guestQrNotification) return;
@@ -151,6 +176,7 @@ export default function Visitors() {
             notes: rec.notes || '',
             subcontractor_worker: rec.subcontractor_worker ?? false,
             for_electric_station: rec.for_electric_station ?? false,
+            daily_guest: rec.daily_guest ?? false,
             send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
             entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
             exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
@@ -172,6 +198,7 @@ export default function Visitors() {
         notes: formData.notes?.trim() || null,
         subcontractor_worker: !!formData.subcontractor_worker,
         for_electric_station: !!formData.for_electric_station,
+        daily_guest: !!formData.daily_guest,
         send_whatsapp: !!formData.send_whatsapp,  // WhatsApp bildirimi
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
@@ -295,6 +322,7 @@ export default function Visitors() {
         todayEntries: nonDeletedRecords.filter(r => isToday(r.entry_date)).length,
         subcontractorCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.subcontractor_worker).length,
         electricStationCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.for_electric_station).length,
+        dailyGuestCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.daily_guest).length,
     }), [nonDeletedRecords]);
 
     const visitorVehicleCount = useMemo(() => {
@@ -357,6 +385,7 @@ export default function Visitors() {
                 if (filter === 'inside') return r.status === 'inside';
                 if (filter === 'subcontractor') return r.status === 'inside' && r.subcontractor_worker;
                 if (filter === 'electric') return r.status === 'inside' && r.for_electric_station;
+                if (filter === 'daily_guest') return r.status === 'inside' && r.daily_guest;
                 if (filter === 'deleted') return true;
                 return true;
             })();
@@ -540,6 +569,9 @@ export default function Visitors() {
                             </button>
                             <button onClick={() => setFilter('electric')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'electric' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Şarj İstasyonu ({stats.electricStationCount})
+                            </button>
+                            <button onClick={() => setFilter('daily_guest')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'daily_guest' ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Günübirlik Misafir ({stats.dailyGuestCount})
                             </button>
                             <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Silinen Kayıtlar ({todayDeletedRecords.length})
@@ -834,6 +866,10 @@ export default function Visitors() {
                                         <label className="inline-flex items-center">
                                             <input type="checkbox" checked={!!formData.for_electric_station} onChange={(e) => setFormData({ ...formData, for_electric_station: e.target.checked })} className="mr-2" />
                                             <span className="text-sm">Şarj İstasyonu</span>
+                                        </label>
+                                        <label className="inline-flex items-center">
+                                            <input type="checkbox" checked={!!formData.daily_guest} onChange={(e) => setFormData({ ...formData, daily_guest: e.target.checked })} className="mr-2" />
+                                            <span className="text-sm">Günübirlik Misafir</span>
                                         </label>
                                         {!isEditing && (
                                             <label className="inline-flex items-center">

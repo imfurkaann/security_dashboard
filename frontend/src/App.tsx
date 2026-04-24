@@ -1,5 +1,7 @@
+import { useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
+import axios from 'axios';
 import trTR from 'antd/locale/tr_TR';
 import { ThemeProvider } from './context/ThemeContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -37,8 +39,19 @@ import EquipmentCheck from './pages/EquipmentCheck';
 import GuestRegistry from './pages/GuestRegistry';
 import QrVisitorCheckin from './pages/QrVisitorCheckin';
 import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
+import { getRealtimeClientId } from './realtime/clientId';
+import { initializeRealtimeClient } from './realtime/socket';
 
 function App() {
+  const currentClientId = useMemo(() => getRealtimeClientId(), []);
+
+  useEffect(() => {
+    // Ham axios kullanılan sayfalarda da self-echo filtreleme için aynı client id gönderilir.
+    axios.defaults.headers.common['X-Realtime-Client-Id'] = currentClientId;
+
+    initializeRealtimeClient();
+  }, [currentClientId]);
+
   return (
     <ConfigProvider locale={trTR}>
       <ThemeProvider>

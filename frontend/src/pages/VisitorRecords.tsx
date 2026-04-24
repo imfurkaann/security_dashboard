@@ -29,8 +29,7 @@ export default function VisitorRecords() {
         exit_by: '',
         status: 'all',
         gate: 'all',
-        subcontractor_worker: 'all',
-        for_electric_station: 'all',
+        visitor_tag: 'all',
         entryDateStart: '',
         entryDateEnd: '',
         exitDateStart: '',
@@ -110,19 +109,14 @@ export default function VisitorRecords() {
                 return false;
             }
 
-            // Subcontractor filter
-            if (filters.subcontractor_worker === 'yes' && !record.subcontractor_worker) {
+            // Visitor tag filter
+            if (filters.visitor_tag === 'subcontractor' && !record.subcontractor_worker) {
                 return false;
             }
-            if (filters.subcontractor_worker === 'no' && record.subcontractor_worker) {
+            if (filters.visitor_tag === 'electric' && !record.for_electric_station) {
                 return false;
             }
-
-            // Electric station filter
-            if (filters.for_electric_station === 'yes' && !record.for_electric_station) {
-                return false;
-            }
-            if (filters.for_electric_station === 'no' && record.for_electric_station) {
+            if (filters.visitor_tag === 'daily_guest' && !record.daily_guest) {
                 return false;
             }
 
@@ -193,8 +187,7 @@ export default function VisitorRecords() {
             exit_by: '',
             status: 'all',
             gate: 'all',
-            subcontractor_worker: 'all',
-            for_electric_station: 'all',
+            visitor_tag: 'all',
             entryDateStart: '',
             entryDateEnd: '',
             exitDateStart: '',
@@ -419,29 +412,17 @@ export default function VisitorRecords() {
                             />
                         </div>
 
-                        <div className="xl:col-span-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Taşeron İşçi</label>
+                        <div className="xl:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Etiket</label>
                             <select
-                                value={filters.subcontractor_worker}
-                                onChange={(e) => setFilters({ ...filters, subcontractor_worker: e.target.value })}
+                                value={filters.visitor_tag}
+                                onChange={(e) => setFilters({ ...filters, visitor_tag: e.target.value })}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
                                 <option value="all">Tümü</option>
-                                <option value="yes">Evet</option>
-                                <option value="no">Hayır</option>
-                            </select>
-                        </div>
-
-                        <div className="xl:col-span-1">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Şarj İstasyonu</label>
-                            <select
-                                value={filters.for_electric_station}
-                                onChange={(e) => setFilters({ ...filters, for_electric_station: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="yes">Evet</option>
-                                <option value="no">Hayır</option>
+                                <option value="subcontractor">Taşeron İşçi</option>
+                                <option value="electric">Şarj İstasyonu</option>
+                                <option value="daily_guest">Günübirlik Misafir</option>
                             </select>
                         </div>
 

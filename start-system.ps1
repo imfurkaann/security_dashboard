@@ -159,7 +159,29 @@ function Add-FirewallRulesIfNeeded {
 }
 
 function Get-HostIPAddress {
-    # Oncelik sirasi: Fiziksel adaptorler (Wi-Fi, Ethernet) > Sanal adaptorler
+    # Oncelik: Varsayilan internet rotasinin bagli oldugu adaptor
+    try {
+        $defaultRoute = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' |
+            Sort-Object RouteMetric, ifMetric |
+            Select-Object -First 1
+
+        if ($defaultRoute) {
+            $ipConfig = Get-NetIPAddress -InterfaceIndex $defaultRoute.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+            foreach ($ip in $ipConfig) {
+                if ($ip.IPAddress -ne '127.0.0.1' -and $ip.IPAddress -notlike '169.254.*' -and $ip.AddressState -eq 'Preferred') {
+                    $adapter = Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex -ErrorAction SilentlyContinue
+                    return @{
+                        IP            = $ip.IPAddress
+                        Adapter       = if ($adapter) { $adapter.Name } else { 'Unknown' }
+                        InCameraRange = Test-IPInCameraRange $ip.IPAddress
+                    }
+                }
+            }
+        }
+    }
+    catch { }
+
+    # Fallback: Fiziksel adaptorler (Wi-Fi, Ethernet)
     # Docker/WSL/Hyper-V sanal adaptorlerini (vEthernet) atla
     $physicalAdapters = Get-NetAdapter | Where-Object { 
         $_.Status -eq 'Up' -and 
@@ -462,22 +484,7 @@ Write-Host "  -----------------------------------------------------------------"
 Write-Host ""
 
 # Erisim bilgilerini dosyaya kaydet
-$accessInfo = @"
-Guvenlik Sistemi Erisim Bilgileri
-==================================
-Tarih: $(Get-Date -Format "yyyy-MM-dd HH:mm")
-
-Bu Bilgisayar: $localUrl
-Ag Erisimi: $networkUrl
-
-Frontend Port: $frontendPort
-Backend Port: $backendPort
-Host IP: $hostIP
-
-Ayni WiFi agindaki cihazlar $networkUrl adresinden erisebilir.
-"@
-
-Set-Content -Path "ERISIM_BILGILERI.txt" -Value $accessInfo -Encoding UTF8
+& "$PSScriptRoot\update-access-info.ps1" -FrontendPort $frontendPort -BackendPort $backendPort -HostIP $hostIP -Silent
 Write-INF "Erisim bilgileri ERISIM_BILGILERI.txt dosyasina kaydedildi"
 
 # Tarayici ac

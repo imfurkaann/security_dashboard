@@ -5,6 +5,7 @@
 
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { API_URL, API_TIMEOUT, STORAGE_KEYS } from '../constants';
+import { getRealtimeClientId } from '../realtime/clientId';
 
 // Constants
 const MAX_REQUEST_SIZE = 50000; // 50KB
@@ -74,6 +75,8 @@ api.interceptors.request.use(
         if (gate) {
             config.headers['X-Selected-Gate'] = gate;
         }
+
+        config.headers['X-Realtime-Client-Id'] = getRealtimeClientId();
 
         // Request body size validation (client-side DoS prevention)
         if (config.data) {
