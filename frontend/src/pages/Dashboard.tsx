@@ -4,6 +4,7 @@ import api from '../utils/api';
 import type { Vehicle, VehicleUsage, VisitorRecord } from '../types';
 import { STORAGE_KEYS } from '../constants';
 import { AlertCircle, Car, Users, UserCheck, Flame } from 'lucide-react';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -95,6 +96,11 @@ export default function Dashboard() {
     useEffect(() => {
         fetchAllData();
     }, [fetchAllData]);
+
+    useRealtimeRefetch({
+        topics: ['dashboard', 'vehicles', 'visitors', 'managers', 'fire-alarms'],
+        onMutation: fetchAllData,
+    });
 
     // Calculate stats
     const vehiclesInUse = vehicles.filter((vehicle) => vehicle.status === 'in_use').length;

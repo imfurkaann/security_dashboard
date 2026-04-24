@@ -6,6 +6,7 @@ import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { sanitizeInput, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
+import { generateLogoutExport } from '../services/exportService';
 
 interface TopPerformerRow {
     id: string;
@@ -305,6 +306,18 @@ export const adminLogout = async (req: Request, res: Response): Promise<void> =>
 
     if (adminId) {
         console.log(`Admin logout: ${adminId} from IP: ${clientIp}`);
+
+        try {
+            console.log(`[Admin Logout] Kullanıcı ${adminId} için günlük kayıtlar export ediliyor...`);
+            const exportResult = await generateLogoutExport(adminId);
+            if (exportResult.success) {
+                console.log(`[Admin Logout] Export başarılı: ${exportResult.exportPath}`);
+            } else {
+                console.error(`[Admin Logout] Export hatası: ${exportResult.error}`);
+            }
+        } catch (error) {
+            console.error('[Admin Logout] Export sırasında hata:', error);
+        }
 
         // Update personnel_record with logout time
         try {

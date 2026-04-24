@@ -2,6 +2,7 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { MulterError } from 'multer';
+import type { Server as HttpServer } from 'http';
 import pool from './config/database';
 import { runMigrations } from './config/migrations';
 import authRoutes from './routes/auth';
@@ -22,6 +23,7 @@ import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
 import { setWhatsAppTargetJid, warmupWhatsAppConnection } from './services/whatsappBaileys';
 import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
+import { initRealtime, emitApiMutation, resolveMutationTopics } from './realtime/socket';
 
 dotenv.config();
 
@@ -98,7 +100,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate', 'X-Realtime-Client-Id'],
     maxAge: 86400 // 24 saat önbellekleme
 }));
 
@@ -107,6 +109,30 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     const timestamp = new Date().toISOString();
     const ip = req.ip || req.socket.remoteAddress;
     console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${ip}`);
+    next();
+});
+
+// HTTP mutasyonlarını merkezi olarak websocket üzerinden yayınla
+app.use((req: Request, res: Response, next: NextFunction) => {
+    const isMutationMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    const clientIdHeader = req.header('x-realtime-client-id');
+    const clientId = clientIdHeader && clientIdHeader.trim().length > 0 ? clientIdHeader.trim() : null;
+
+    res.on('finish', () => {
+        if (!isMutationMethod) return;
+        if (res.statusCode >= 400) return;
+        if (!req.path.startsWith('/api/')) return;
+
+        emitApiMutation({
+            method: req.method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+            path: req.path,
+            statusCode: res.statusCode,
+            timestamp: new Date().toISOString(),
+            clientId,
+            topics: resolveMutationTopics(req.path),
+        });
+    });
+
     next();
 });
 
@@ -260,9 +286,9 @@ const startServer = async () => {
             return;
         }
 
-        const startListening = (port: number): Promise<number> => {
+        const startListening = (port: number): Promise<{ port: number; server: HttpServer }> => {
             return new Promise((resolve, reject) => {
-                const server = app.listen(port, () => resolve(port));
+                const server = app.listen(port, () => resolve({ port, server }));
                 server.once('error', (error: NodeJS.ErrnoException) => reject(error));
             });
         };
@@ -279,6 +305,7 @@ const startServer = async () => {
         }
 
         let runningPort: number | null = null;
+        let runningServer: HttpServer | null = null;
         let lastError: NodeJS.ErrnoException | null = null;
 
         for (const port of candidatePorts) {
@@ -287,7 +314,9 @@ const startServer = async () => {
                     console.warn(`⚠️ Port ${port - 1} kullanımda. Port ${port} deneniyor...`);
                 }
 
-                runningPort = await startListening(port);
+                const started = await startListening(port);
+                runningPort = started.port;
+                runningServer = started.server;
                 break;
             } catch (error) {
                 const listenError = error as NodeJS.ErrnoException;
@@ -301,6 +330,10 @@ const startServer = async () => {
 
         if (!runningPort) {
             throw lastError || new Error('Uygun port bulunamadı');
+        }
+
+        if (runningServer) {
+            initRealtime(runningServer);
         }
 
         console.log(`🚀 Server is running on port ${runningPort}`);

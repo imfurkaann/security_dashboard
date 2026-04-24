@@ -6,6 +6,7 @@ import dayjs from '../utils/dayjsConfig';
 import { isValidLength } from '../utils/validation';
 import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 // Personnel type for manager list
 interface Personnel {
@@ -67,6 +68,13 @@ export default function Managers() {
         fetchData();
         fetchManagers();
     }, [fetchData, fetchManagers]);
+
+    useRealtimeRefetch({
+        topics: ['managers', 'vehicles'],
+        onMutation: async () => {
+            await Promise.all([fetchData(), fetchManagers()]);
+        },
+    });
 
     // Reset form to initial state
     const resetForm = useCallback(() => {

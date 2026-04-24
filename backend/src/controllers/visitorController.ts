@@ -44,6 +44,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.notes,
                 vr.subcontractor_worker,
                 vr.for_electric_station,
+                vr.daily_guest,
                 vr.entry_date,
                 vr.entry_time,
                 vr.exit_date,
@@ -79,6 +80,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             notes: decodeStoredHtmlEntities(row.notes),
             subcontractor_worker: row.subcontractor_worker,
             for_electric_station: row.for_electric_station,
+            daily_guest: row.daily_guest,
             entry_date: row.entry_date,
             entry_time: row.entry_time,
             exit_date: row.exit_date,
@@ -108,7 +110,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, entry_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_time } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
@@ -192,13 +194,13 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         const insertQuery = `
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
-                person_count, children_count, gate, phone, notes, subcontractor_worker, for_electric_station,
+                person_count, children_count, gate, phone, notes, subcontractor_worker, for_electric_station, daily_guest,
                 entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
                 CURRENT_DATE, 
-                COALESCE($14::time, CURRENT_TIME), 
-                'inside', $15
+                COALESCE($15::time, CURRENT_TIME), 
+                'inside', $16
             )
             RETURNING entry_date, entry_time
         `;
@@ -217,6 +219,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             sanitizedNotes,
             Boolean(subcontractor_worker),
             Boolean(for_electric_station),
+            Boolean(daily_guest),
             personnel_id,
             entry_time || null,  // entry_time boşsa null, CURRENT_TIME kullanılacak
             sendWhatsApp
@@ -259,6 +262,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                     phone: normalizedPhone || undefined,
                     subcontractorWorker: Boolean(subcontractor_worker),
                     forElectricStation: Boolean(for_electric_station),
+                    dailyGuest: Boolean(daily_guest),
                     notes: sanitizedNotes || undefined
                 });
             } catch (error) {
@@ -282,7 +286,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, entry_time, exit_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_time, exit_time } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -343,6 +347,7 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         }
         if (subcontractor_worker !== undefined) { updates.push(`subcontractor_worker = $${idx++}`); params.push(Boolean(subcontractor_worker)); }
         if (for_electric_station !== undefined) { updates.push(`for_electric_station = $${idx++}`); params.push(Boolean(for_electric_station)); }
+        if (daily_guest !== undefined) { updates.push(`daily_guest = $${idx++}`); params.push(Boolean(daily_guest)); }
         if (phone !== undefined) {
             updates.push(`phone = $${idx++}`);
             params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
@@ -449,7 +454,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         try {
             const visitorInfo = await pool.query(
                 `SELECT full_name, company_name, visiting_person, vehicle_plate, 
-                        person_count, children_count, gate, phone, subcontractor_worker, for_electric_station, 
+                    person_count, children_count, gate, phone, subcontractor_worker, for_electric_station, daily_guest,
                         notes, exit_time, send_whatsapp 
                  FROM visitor_records WHERE id = $1`,
                 [id]
@@ -471,6 +476,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                     phone: record.phone || undefined,
                     subcontractorWorker: Boolean(record.subcontractor_worker),
                     forElectricStation: Boolean(record.for_electric_station),
+                    dailyGuest: Boolean(record.daily_guest),
                     notes: record.notes || undefined,
                     exitTime
                 });

@@ -90,6 +90,7 @@ export interface VisitorRecord {
     notes: string | null;
     subcontractor_worker?: boolean;
     for_electric_station?: boolean;
+    daily_guest?: boolean;
     entry_date: string | null;
     entry_time: string | null;
     exit_date: string | null;
@@ -202,6 +203,7 @@ export interface VisitorFormData {
     notes: string;
     subcontractor_worker: boolean;
     for_electric_station: boolean;
+    daily_guest: boolean;
     send_whatsapp?: boolean;  // WhatsApp bildirimi (opsiyonel, sadece yeni kayıtlarda)
     entry_time?: string;  // Giriş saati (HH:MM formatında)
     exit_time?: string;  // Çıkış saati (HH:MM formatında)
@@ -237,6 +239,6 @@ export interface PaginatedResponse<T> {
 
 // Filter Types
 export type VehicleFilterType = 'all' | 'in_use' | 'deleted';
-export type VisitorFilterType = 'today' | 'inside' | 'all' | 'subcontractor' | 'electric' | 'deleted';
+export type VisitorFilterType = 'today' | 'inside' | 'all' | 'subcontractor' | 'electric' | 'daily_guest' | 'deleted';
 export type ManagerFilterType = 'all' | 'inside' | 'deleted';
 export type IncidentFilterType = 'all' | 'open' | 'closed';

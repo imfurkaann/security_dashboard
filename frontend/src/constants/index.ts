@@ -14,8 +14,15 @@ const getApiUrl = () => {
     if (typeof window !== 'undefined') {
         const protocol = window.location.protocol;
         const hostname = window.location.hostname;
-        // Eğer localhost ise port 5000, değilse port 5000
-        return `${protocol}//${hostname}:5000/api`;
+        const port = window.location.port;
+
+        // Vite dev modunda backend portu dogrudan 5000
+        if (port === '5173' || port === '5174' || port === '5175') {
+            return `${protocol}//${hostname}:5000/api`;
+        }
+
+        // Docker/NGINX veya prod benzeri ortamlarda ayni origin uzerinden API
+        return `${protocol}//${hostname}${port ? `:${port}` : ''}/api`;
     }
 
     // Fallback
