@@ -31,10 +31,13 @@ export default function GuestRegistry() {
 
     const columns = schema.columns;
 
-    const fetchRecords = useCallback(async (searchValue = '') => {
-        setLoading(true);
+    const fetchRecords = useCallback(async (searchValue = '', options?: { silent?: boolean }) => {
+        const silent = options?.silent ?? false;
+        if (!silent) {
+            setLoading(true);
+        }
         try {
-            const params: Record<string, string | number> = { page: 1, limit: 500 };
+            const params: Record<string, string | number> = { page: 1, limit: 500, _t: Date.now() };
 
             if (searchValue.trim()) {
                 params.search = searchValue.trim();
@@ -49,7 +52,9 @@ export default function GuestRegistry() {
             console.error('Misafir kayitlari yuklenemedi:', error);
             alert('Misafir kayitlari yuklenemedi');
         } finally {
-            setLoading(false);
+            if (!silent) {
+                setLoading(false);
+            }
         }
     }, []);
 
@@ -71,12 +76,17 @@ export default function GuestRegistry() {
             return;
         }
 
-        void fetchRecords(debouncedSearchText);
+        void fetchRecords(debouncedSearchText, { silent: true });
     }, [debouncedSearchText, fetchRecords]);
+
+    const refreshGuestRegistryRealtime = useCallback(() => {
+        return fetchRecords(debouncedSearchText, { silent: true });
+    }, [fetchRecords, debouncedSearchText]);
 
     useRealtimeRefetch({
         topics: ['guest-registry'],
-        onMutation: () => fetchRecords(debouncedSearchText),
+        onMutation: refreshGuestRegistryRealtime,
+        enabled: true,
     });
 
     const onReset = async () => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface WhatsAppStatus {
     enabled: boolean;
@@ -222,6 +223,19 @@ export default function AdminWhatsAppSettings() {
 
         return () => window.clearInterval(interval);
     }, [status?.connected, fetchQr, fetchStatus]);
+
+    const refreshWhatsAppRealtime = useCallback(async () => {
+        await fetchStatus();
+        if (!status?.connected) {
+            await fetchQr();
+        }
+    }, [fetchQr, fetchStatus, status?.connected]);
+
+    useRealtimeRefetch({
+        topics: ['whatsapp'],
+        onMutation: refreshWhatsAppRealtime,
+        enabled: true,
+    });
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">

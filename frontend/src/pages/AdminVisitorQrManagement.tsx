@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import api from '../utils/api';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const VISITOR_QR_PATH = '/qr/visitor-checkin';
 
@@ -46,32 +47,37 @@ export default function AdminVisitorQrManagement() {
         return [...gates].sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name, 'tr'));
     }, [gates]);
 
-    useEffect(() => {
-        const loadGates = async () => {
-            try {
-                const response = await api.get('/admin/equipment-config');
-                const gateOptions = (response.data?.data || [])
-                    .map((gate: any) => ({
-                        code: String(gate.code || '').trim(),
-                        name: String(gate.name || '').trim(),
-                        isActive: Boolean(gate.isActive)
-                    }))
-                    .filter((gate: GateOption) => gate.code && gate.name);
+    const loadGates = async () => {
+        try {
+            const response = await api.get('/admin/equipment-config');
+            const gateOptions = (response.data?.data || [])
+                .map((gate: any) => ({
+                    code: String(gate.code || '').trim(),
+                    name: String(gate.name || '').trim(),
+                    isActive: Boolean(gate.isActive)
+                }))
+                .filter((gate: GateOption) => gate.code && gate.name);
 
-                setGates(gateOptions);
+            setGates(gateOptions);
 
-                const preferred = gateOptions.find((gate: GateOption) => gate.isActive) || gateOptions[0];
-                if (preferred) {
-                    setExpandedGateCode(preferred.code);
-                    setCreateGateCode(preferred.code);
-                }
-            } catch (error) {
-                console.error('Kapı listesi alınamadı:', error);
+            const preferred = gateOptions.find((gate: GateOption) => gate.isActive) || gateOptions[0];
+            if (preferred) {
+                setExpandedGateCode(preferred.code);
+                setCreateGateCode(preferred.code);
             }
-        };
+        } catch (error) {
+            console.error('Kapı listesi alınamadı:', error);
+        }
+    };
 
+    useEffect(() => {
         void loadGates();
     }, []);
+
+    useRealtimeRefetch({
+        topics: ['gate-config'],
+        onMutation: loadGates,
+    });
 
     useEffect(() => {
         const resolveLanTargetIfNeeded = async () => {
@@ -90,6 +96,10 @@ export default function AdminVisitorQrManagement() {
 
         void resolveLanTargetIfNeeded();
     }, [isLocalhostOrigin]);
+
+    useEffect(() => {
+        setQrDataUrlByGate({});
+    }, [qrBaseUrl]);
 
     useEffect(() => {
         if (expandedGateCode) {

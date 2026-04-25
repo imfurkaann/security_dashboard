@@ -5,6 +5,7 @@ import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -68,6 +69,12 @@ export default function FireAlarmRecords() {
         const refreshInterval = window.setInterval(fetchData, 15000);
         return () => window.clearInterval(refreshInterval);
     }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['fire-alarms'],
+        onMutation: fetchData,
+        enabled: true,
+    });
 
     useEffect(() => {
         const handleFocus = () => {

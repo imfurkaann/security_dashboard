@@ -123,13 +123,22 @@ app.use((req: Request, res: Response, next: NextFunction) => {
         if (res.statusCode >= 400) return;
         if (!req.path.startsWith('/api/')) return;
 
+        const topics = resolveMutationTopics(req.path);
+        console.log('[realtime] HTTP mutation finished', {
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            topics,
+            clientId,
+        });
+
         emitApiMutation({
             method: req.method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
             path: req.path,
             statusCode: res.statusCode,
             timestamp: new Date().toISOString(),
             clientId,
-            topics: resolveMutationTopics(req.path),
+            topics,
         });
     });
 

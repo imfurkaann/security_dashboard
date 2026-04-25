@@ -5,6 +5,7 @@ import {
     getVehicleRecords,
     createVehicleRecord,
     returnVehicle,
+    undoVehicleReturn,
     updateVehicleRecord,
     deleteVehicleRecord,
     restoreVehicleRecord,
@@ -46,6 +47,9 @@ router.put('/records/:id', updateVehicleRecord);
 
 // Return vehicle
 router.post('/records/:id/return', returnVehicle);
+
+// Undo vehicle return
+router.post('/records/:id/undo-return', undoVehicleReturn);
 
 // Soft delete vehicle record
 router.delete('/records/:id', deleteVehicleRecord);

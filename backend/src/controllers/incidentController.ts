@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, sanitizePlainText, isValidEnum, isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createWordFromHtml } from '../utils/wordGenerator';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 // Geçerli severity ve type değerleri
 const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical'] as const;
@@ -114,6 +115,15 @@ export const createIncidentRecord = async (req: Request, res: Response) => {
             clientIp
         );
 
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/incidents/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/incidents/records'),
+        });
+
         res.status(201).json({ success: true, data: result.rows[0], message: 'Olay kaydedildi' });
     } catch (error) {
         console.error('Create incident error:', error);
@@ -179,6 +189,15 @@ export const updateIncidentStatus = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'PATCH',
+            path: `/api/incidents/records/${id}/status`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/incidents/records/${id}/status`),
+        });
 
         res.status(200).json({ success: true, message: 'Olay durumu güncellendi' });
     } catch (error) {
@@ -296,6 +315,15 @@ export const createShiftReport = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/incidents/reports',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/incidents/reports'),
+        });
 
         // Kategorileri kaydet
         if (categories && Object.keys(categories).length > 0) {
@@ -446,6 +474,15 @@ export const updateShiftReport = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/incidents/reports/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/incidents/reports/${id}`),
+        });
 
         // Kategorileri güncelle veya ekle
         if (categories && Object.keys(categories).length > 0) {

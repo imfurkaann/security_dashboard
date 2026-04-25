@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
 import api from '../utils/api';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 type PeriodType = 'weekly' | 'monthly' | 'yearly';
 
@@ -130,6 +131,14 @@ export default function AdminPersonnelStatistics() {
     useEffect(() => {
         fetchStats(period);
     }, [period, fetchStats]);
+
+    const refreshStatsRealtime = useCallback(() => fetchStats(period), [fetchStats, period]);
+
+    useRealtimeRefetch({
+        topics: ['dashboard', 'incidents', 'sgk', 'personnel'],
+        onMutation: refreshStatsRealtime,
+        enabled: true,
+    });
 
     const chartData = useMemo(() => rows
         .filter((row) => row.totalCount > 0)

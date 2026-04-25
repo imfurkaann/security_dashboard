@@ -61,6 +61,7 @@ export default function Vehicles() {
     useRealtimeRefetch({
         topics: ['vehicles', 'managers'],
         onMutation: fetchData,
+        enabled: true,
     });
 
     // Form submission handler
@@ -102,6 +103,19 @@ export default function Vehicles() {
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             alert(err.response?.data?.message || 'İade kaydı başarısız');
+        }
+    }, [fetchData]);
+
+    const handleUndoReturn = useCallback(async (usageId: string) => {
+        if (!confirm('Yanlış teslim alma işlemini geri almak istediğinize emin misiniz?')) return;
+
+        try {
+            await api.post(`/vehicles/records/${usageId}/undo-return`, {});
+            fetchData();
+            alert('Teslim alma işlemi geri alındı. Doğru araç için tekrar işlem yapabilirsiniz.');
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err.response?.data?.message || 'Teslim alma geri alma işlemi başarısız');
         }
     }, [fetchData]);
 
@@ -476,6 +490,9 @@ export default function Vehicles() {
                                                                 <ActionButton onClick={() => openEditModal(usage)} variant="primary" className="shrink-0">Düzenle</ActionButton>
                                                                 {usage.status === 'in_use' && (
                                                                     <ActionButton onClick={() => handleReturn(usage.id)} variant="success" className="shrink-0">Teslim Al</ActionButton>
+                                                                )}
+                                                                {usage.status === 'returned' && (
+                                                                    <ActionButton onClick={() => handleUndoReturn(usage.id)} variant="neutral" className="shrink-0">Geri Al</ActionButton>
                                                                 )}
                                                                 <ActionButton onClick={() => handleDeleteRecord(usage.id)} variant="danger" className="shrink-0">Sil</ActionButton>
                                                             </>

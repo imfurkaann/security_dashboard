@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -36,6 +37,28 @@ export default function AdminParkingManagement() {
     const [reservedInput, setReservedInput] = useState<string>(getInitialReserved);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
+
+    const refreshParkingSettings = useCallback(() => {
+        setCapacityInput(getInitialCapacity());
+        setReservedInput(getInitialReserved());
+    }, []);
+
+    useEffect(() => {
+        const onStorageChange = (event: StorageEvent) => {
+            if (!event.key || event.key === PARKING_CAPACITY_STORAGE_KEY || event.key === PARKING_RESERVED_STORAGE_KEY) {
+                refreshParkingSettings();
+            }
+        };
+
+        window.addEventListener('storage', onStorageChange);
+        return () => window.removeEventListener('storage', onStorageChange);
+    }, [refreshParkingSettings]);
+
+    useRealtimeRefetch({
+        topics: ['dashboard'],
+        onMutation: refreshParkingSettings,
+        enabled: true,
+    });
 
     const previewMessage = useMemo(() => {
         if (!capacityInput) {

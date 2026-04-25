@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
@@ -239,6 +240,15 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             personnel_id,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/visitors/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/visitors/records'),
+        });
 
         // WhatsApp mesaj şablonu oluştur (sadece send_whatsapp = true ise)
         let whatsappMessage = '';

@@ -6,6 +6,7 @@ import 'antd/dist/reset.css';
 import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -72,6 +73,12 @@ export default function AdminFireAlarmRecords() {
         const refreshInterval = window.setInterval(fetchData, 15000);
         return () => window.clearInterval(refreshInterval);
     }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['fire-alarms'],
+        onMutation: fetchData,
+        enabled: true,
+    });
 
     useEffect(() => {
         const handleFocus = () => {

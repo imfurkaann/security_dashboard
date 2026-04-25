@@ -11,6 +11,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import api from '../utils/api';
 import WordCloud from '../components/WordCloud';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 // Renk paleti
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
@@ -80,6 +81,11 @@ const AdminStatistics = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['dashboard', 'incidents', 'sgk'],
+        onMutation: fetchData,
+    });
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
