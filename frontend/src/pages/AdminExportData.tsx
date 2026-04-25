@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { DatePicker } from 'antd';
@@ -6,6 +6,7 @@ import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -57,7 +58,7 @@ export default function AdminExportData() {
     };
 
     // Önizleme getir
-    const fetchPreview = async () => {
+    const fetchPreview = useCallback(async () => {
         if (!startDate || !endDate) {
             alert('Lütfen tarih aralığı seçin');
             return;
@@ -85,7 +86,16 @@ export default function AdminExportData() {
         } finally {
             setPreviewLoading(false);
         }
-    };
+    }, [startDate, endDate]);
+
+    useRealtimeRefetch({
+        topics: ['dashboard', 'incidents', 'sgk', 'export'],
+        onMutation: async () => {
+            if (preview) {
+                await fetchPreview();
+            }
+        },
+    });
 
     // Export indir
     const handleExport = async () => {

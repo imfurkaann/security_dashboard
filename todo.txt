@@ -1,0 +1,6 @@
+araç kayıtlarındaki geri al butonu hatası düzeltiecek
+websocket için kalan sayfalar baklıacak misafir ve sonrası
+sgk sayfası admin paneline eklenecek, websocket bağlantısı yapıalcak
+sgk için qr da kişliern kedni belgesini yükleme işi yapılacak.
+qr da ziyaretçi ve sgk için büyük harf çevirmesi uygulanacak.
+excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.

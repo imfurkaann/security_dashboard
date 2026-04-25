@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput, isValidDate } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { getResolvedGateFromRequest } from '../utils/gate';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 /**
  * Get all manager records with joins
@@ -179,6 +180,15 @@ export const createManager = async (req: Request, res: Response): Promise<void> 
             message: 'Müdür başarıyla eklendi',
             data: newManager
         });
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/managers',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/managers'),
+        });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error creating manager:', error);
@@ -290,6 +300,15 @@ export const updateManager = async (req: Request, res: Response): Promise<void> 
             message: 'Müdür başarıyla güncellendi',
             data: updatedManager
         });
+
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/managers/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/${id}`),
+        });
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Error updating manager:', error);
@@ -362,6 +381,15 @@ export const deleteManager = async (req: Request, res: Response): Promise<void> 
         res.json({
             success: true,
             message: 'Müdür başarıyla silindi'
+        });
+
+        emitApiMutation({
+            method: 'DELETE',
+            path: `/api/managers/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/${id}`),
         });
     } catch (error) {
         await client.query('ROLLBACK');
@@ -517,6 +545,15 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         );
 
         res.status(201).json({ success: true, message: 'Müdür kaydı oluşturuldu', data: { id } });
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/managers/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/managers/records'),
+        });
     } catch (error) {
         await pool.query('ROLLBACK');
         console.error('Create manager record error:', error instanceof Error ? error.message : error);
@@ -583,6 +620,15 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
         );
 
         res.status(200).json({ success: true, message: 'Çıkış kaydedildi' });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/managers/records/${id}/exit`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/records/${id}/exit`),
+        });
     } catch (error) {
         console.error('Exit manager error:', error);
         res.status(500).json({ success: false, message: 'Çıkış kaydedilirken hata oluştu' });
@@ -675,6 +721,15 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
         await pool.query(query, params);
 
         res.status(200).json({ success: true, message: 'Kayıt güncellendi' });
+
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/managers/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/records/${id}`),
+        });
     } catch (error) {
         console.error('Update manager record error:', error);
         res.status(500).json({ success: false, message: 'Kayıt güncellenirken hata oluştu' });
@@ -726,6 +781,15 @@ export const deleteManagerRecord = async (req: Request, res: Response): Promise<
         );
 
         res.status(200).json({ success: true, message: 'Kayıt silindi' });
+
+        emitApiMutation({
+            method: 'DELETE',
+            path: `/api/managers/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/records/${id}`),
+        });
     } catch (error) {
         console.error('Delete manager record error:', error);
         res.status(500).json({ success: false, message: 'Kayıt silinirken hata oluştu' });
@@ -777,6 +841,15 @@ export const restoreManagerRecord = async (req: Request, res: Response): Promise
         );
 
         res.status(200).json({ success: true, message: 'Kayıt geri alındı' });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/managers/records/${id}/restore`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/managers/records/${id}/restore`),
+        });
     } catch (error) {
         console.error('Restore manager record error:', error);
         res.status(500).json({ success: false, message: 'Kayıt geri alınırken hata oluştu' });

@@ -389,15 +389,17 @@ Write-INF "Bu islem 1-3 dakika surebilir..."
 # Override dosyasi olustur
 $overrideContent = @"
 services:
-  frontend:
-    ports:
-      - "${frontendPort}:80"
-  backend:
-    ports:
-      - "${backendPort}:5000"
-    environment:
-      # Yerel ag paylasimi icin tum originlere izin ver
-      - CORS_ORIGIN=*
+    frontend:
+        ports:
+            - "${frontendPort}:80"
+    backend:
+        ports:
+            - "${backendPort}:5000"
+        environment:
+            # Yerel ag paylasimi icin tum originlere izin ver
+            - CORS_ORIGIN=*
+            - FRONTEND_PORT=${frontendPort}
+            - PUBLIC_HOST_IP=${hostIP}
 "@
 
 Set-Content -Path "docker-compose.override.yml" -Value $overrideContent -Encoding UTF8

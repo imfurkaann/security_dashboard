@@ -12,7 +12,17 @@ export type ApiMutationEvent = {
 
 type MutationListener = (event: ApiMutationEvent) => void;
 
-const SOCKET_SERVER_URL = API_URL.replace(/\/api\/?$/, '');
+const DEV_PORTS = new Set(['5173', '5174', '5175']);
+
+const getSocketServerUrl = (): string => {
+    if (typeof window !== 'undefined' && !DEV_PORTS.has(window.location.port)) {
+        return window.location.origin;
+    }
+
+    return API_URL.replace(/\/api\/?$/, '');
+};
+
+const SOCKET_SERVER_URL = getSocketServerUrl();
 
 let socket: Socket | null = null;
 

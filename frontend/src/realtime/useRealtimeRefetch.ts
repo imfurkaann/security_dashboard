@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { getRealtimeClientId } from './clientId';
 import { subscribeToApiMutations, type ApiMutationEvent } from './socket';
 
 type UseRealtimeRefetchOptions = {
@@ -14,10 +13,14 @@ const LOCAL_TOPICS: Array<{ prefix: string; topics: string[] }> = [
     { prefix: '/api/visitors', topics: ['visitors', 'dashboard'] },
     { prefix: '/api/visitor-public', topics: ['visitors', 'dashboard'] },
     { prefix: '/api/managers', topics: ['managers', 'dashboard'] },
+    { prefix: '/api/personnel', topics: ['personnel'] },
     { prefix: '/api/guest-registry', topics: ['guest-registry'] },
     { prefix: '/api/fire-alarms', topics: ['fire-alarms', 'dashboard'] },
     { prefix: '/api/incidents', topics: ['incidents'] },
     { prefix: '/api/sgk', topics: ['sgk'] },
+    { prefix: '/api/admin/equipment-config', topics: ['gate-config'] },
+    { prefix: '/api/admin/whatsapp', topics: ['whatsapp'] },
+    { prefix: '/api/export', topics: ['export'] },
 ];
 
 const fallbackTopicsFromPath = (path: string): string[] => {
@@ -52,9 +55,9 @@ export const useRealtimeRefetch = ({
     useEffect(() => {
         if (!enabled) return;
 
-        const currentClientId = getRealtimeClientId();
         const unsubscribe = subscribeToApiMutations((event) => {
-            if (event.clientId && event.clientId === currentClientId) return;
+            // Self-echo suppression is intentionally disabled so same-browser tabs
+            // (personnel/admin) always receive live updates.
             if (!hasTopicOverlap(event, watchedTopicsRef.current)) return;
 
             if (timeoutRef.current) {

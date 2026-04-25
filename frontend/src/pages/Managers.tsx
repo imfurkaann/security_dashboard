@@ -69,11 +69,14 @@ export default function Managers() {
         fetchManagers();
     }, [fetchData, fetchManagers]);
 
+    const refreshManagersRealtime = useCallback(async () => {
+        await Promise.all([fetchData(), fetchManagers()]);
+    }, [fetchData, fetchManagers]);
+
     useRealtimeRefetch({
-        topics: ['managers', 'vehicles'],
-        onMutation: async () => {
-            await Promise.all([fetchData(), fetchManagers()]);
-        },
+        topics: ['managers'],
+        onMutation: refreshManagersRealtime,
+        enabled: true,
     });
 
     // Reset form to initial state

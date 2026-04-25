@@ -3,6 +3,7 @@ import pool from '../config/database';
 import bcrypt from 'bcryptjs';
 import { sanitizeInput } from '../utils/validation';
 import { logDataChange } from '../utils/auditLog';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 // Get all personnel
 export const getAllPersonnel = async (req: Request, res: Response): Promise<void> => {
@@ -111,6 +112,15 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
         );
 
         await client.query('COMMIT');
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/personnel',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/personnel'),
+        });
 
         res.status(201).json({
             success: true,
@@ -272,6 +282,15 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
 
         await client.query('COMMIT');
 
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/personnel/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/personnel/${id}`),
+        });
+
         res.json({
             success: true,
             message: 'Personel başarıyla güncellendi',
@@ -347,6 +366,15 @@ export const deletePersonnel = async (req: Request, res: Response): Promise<void
         );
 
         await client.query('COMMIT');
+
+        emitApiMutation({
+            method: 'DELETE',
+            path: `/api/personnel/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/personnel/${id}`),
+        });
 
         res.json({
             success: true,

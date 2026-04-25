@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database';
 import { getClientIp } from '../middleware/rateLimiter';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 import { logDataChange } from '../utils/auditLog';
 import { getResolvedGateFromRequest } from '../utils/gate';
 import { normalizePlate, sanitizePlainText } from '../utils/validation';
@@ -241,6 +242,15 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
             guestPersonnelId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/visitor-public/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/visitor-public/records'),
+        });
 
         res.status(201).json({
             success: true,

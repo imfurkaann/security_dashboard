@@ -117,6 +117,7 @@ export default function Incidents() {
     useRealtimeRefetch({
         topics: ['incidents'],
         onMutation: loadShiftReports,
+        enabled: true,
     });
 
     // Vardiya raporunu kaydet veya güncelle

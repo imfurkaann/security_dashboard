@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -8,6 +8,7 @@ import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -34,31 +35,37 @@ export default function AdminIncidentRecords() {
     const [selectedReport, setSelectedReport] = useState<IncidentRecord | null>(null);
     const navigate = useNavigate();
 
+    const fetchData = useCallback(async () => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+            const res = await axios.get(`${API_URL}/incidents/records`, config);
+            setRecords(res.data?.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
     // Filter states
     const [reportedBy, setReportedBy] = useState('');
     const [dateStart, setDateStart] = useState('');
     const [dateEnd, setDateEnd] = useState('');
 
-    // Fetch all records with admin authentication
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const adminToken = localStorage.getItem('adminToken');
-                const config = {
-                    headers: {
-                        Authorization: `Bearer ${adminToken}`
-                    }
-                };
-                const res = await axios.get(`${API_URL}/incidents/records`, config);
-                setRecords(res.data?.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['incidents'],
+        onMutation: fetchData,
+        enabled: true,
+    });
 
     // Filtered records
     const filteredRecords = useMemo(() => {

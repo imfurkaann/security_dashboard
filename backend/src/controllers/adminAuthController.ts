@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
+import fs from 'fs';
+import path from 'path';
 import os from 'os';
 import pool from '../config/database';
 import { comparePassword } from '../utils/password';
@@ -418,13 +420,58 @@ const getLocalPrivateIPv4 = (): string | null => {
     return null;
 };
 
+const ACCESS_INFO_FILE_CANDIDATES = [
+    path.resolve(process.cwd(), 'ERISIM_BILGILERI.txt'),
+    path.resolve(process.cwd(), '..', 'ERISIM_BILGILERI.txt'),
+    path.resolve(__dirname, '..', '..', 'ERISIM_BILGILERI.txt'),
+];
+
+const extractHostIpFromAccessInfo = (): string | null => {
+    for (const filePath of ACCESS_INFO_FILE_CANDIDATES) {
+        try {
+            if (!fs.existsSync(filePath)) continue;
+
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            const hostLine = fileContent.match(/^Host IP:\s*(.+)$/im)?.[1]?.trim();
+            if (hostLine) return hostLine;
+
+            const networkLine = fileContent.match(/^Ag Erisimi:\s*http:\/\/([^:\s/]+)(?::\d+)?/im)?.[1]?.trim();
+            if (networkLine) return networkLine;
+        } catch {
+            continue;
+        }
+    }
+
+    return null;
+};
+
+const extractHostFromRequest = (req: Request): string | null => {
+    const origin = req.header('origin') || req.header('referer') || req.header('host');
+    if (!origin) return null;
+
+    try {
+        const url = origin.startsWith('http://') || origin.startsWith('https://') ? new URL(origin) : new URL(`http://${origin}`);
+        const hostname = url.hostname.trim();
+        if (!hostname || hostname === 'localhost' || hostname === '127.0.0.1') {
+            return null;
+        }
+
+        return hostname;
+    } catch {
+        return null;
+    }
+};
+
 /**
  * Get admin network info for LAN-safe QR generation
  * GET /api/admin/network-info
  */
-export const getAdminNetworkInfo = async (_req: Request, res: Response): Promise<void> => {
+export const getAdminNetworkInfo = async (req: Request, res: Response): Promise<void> => {
     try {
-        const localIp = getLocalPrivateIPv4();
+        const configuredHostIp = process.env.PUBLIC_HOST_IP?.trim() || process.env.HOST_IP?.trim() || '';
+        const accessInfoHostIp = extractHostIpFromAccessInfo();
+        const requestHostIp = extractHostFromRequest(req);
+        const localIp = configuredHostIp || accessInfoHostIp || requestHostIp || getLocalPrivateIPv4();
         const frontendPort = process.env.FRONTEND_PORT || '5173';
         const backendPort = process.env.PORT || '5000';
 

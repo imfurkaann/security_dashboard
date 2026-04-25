@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface Personnel {
     id: string;
@@ -39,11 +40,7 @@ export default function AdminManagePersonnel() {
     const shouldValidatePasswordMatch = !editingPersonnel || password.trim().length > 0 || confirmPassword.trim().length > 0;
     const passwordsDoNotMatch = shouldValidatePasswordMatch && password !== confirmPassword;
 
-    useEffect(() => {
-        fetchPersonnel();
-    }, []);
-
-    const fetchPersonnel = async () => {
+    const fetchPersonnel = useCallback(async () => {
         try {
             const token = localStorage.getItem('adminToken');
             const response = await axios.get(`${API_URL}/personnel`, {
@@ -56,7 +53,17 @@ export default function AdminManagePersonnel() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        void fetchPersonnel();
+    }, [fetchPersonnel]);
+
+    useRealtimeRefetch({
+        topics: ['personnel'],
+        onMutation: fetchPersonnel,
+        enabled: true,
+    });
 
     const openAddModal = () => {
         setEditingPersonnel(null);

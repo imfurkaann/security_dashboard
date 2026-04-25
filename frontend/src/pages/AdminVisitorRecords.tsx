@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -7,6 +7,7 @@ import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -18,6 +19,24 @@ export default function AdminVisitorRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+
+            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true`, config);
+            setRecords(res.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -37,26 +56,14 @@ export default function AdminVisitorRecords() {
         exitDateEnd: ''
     });
 
-    // Fetch all records with admin authentication
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const adminToken = localStorage.getItem('adminToken');
-                const config = {
-                    headers: {
-                        Authorization: `Bearer ${adminToken}`
-                    }
-                };
-                const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true`, config);
-                setRecords(res.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['visitors'],
+        onMutation: fetchData,
+    });
 
     // Filtered records
     const filteredRecords = useMemo(() => {

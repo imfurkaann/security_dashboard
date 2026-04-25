@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface GateEquipment {
     id: number;
@@ -82,6 +83,11 @@ export default function AdminGateEquipmentConfig() {
     useEffect(() => {
         fetchConfig();
     }, []);
+
+    useRealtimeRefetch({
+        topics: ['gate-config'],
+        onMutation: fetchConfig,
+    });
 
     const resetCreateModal = () => {
         setNewGateName('');

@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface Manager {
     id: string;
@@ -32,11 +33,7 @@ export default function AdminManageManagers() {
     const [title, setTitle] = useState('');
     const [isActive, setIsActive] = useState(true);
 
-    useEffect(() => {
-        fetchManagers();
-    }, []);
-
-    const fetchManagers = async () => {
+    const fetchManagers = useCallback(async () => {
         try {
             const token = localStorage.getItem('adminToken');
             const response = await axios.get(`${API_URL}/managers`, {
@@ -49,7 +46,16 @@ export default function AdminManageManagers() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        void fetchManagers();
+    }, [fetchManagers]);
+
+    useRealtimeRefetch({
+        topics: ['managers'],
+        onMutation: fetchManagers,
+    });
 
     const openAddModal = () => {
         setEditingManager(null);

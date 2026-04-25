@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -6,6 +6,7 @@ import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -18,6 +19,21 @@ export default function VehicleRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const [recordsRes, vehiclesRes] = await Promise.all([
+                api.get('/vehicles/records?includeDeleted=true'),
+                api.get('/vehicles')
+            ]);
+            setRecords(recordsRes.data || []);
+            setVehicles(vehiclesRes.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -34,24 +50,15 @@ export default function VehicleRecords() {
         returnDateEnd: ''
     });
 
-    // Fetch all records and vehicles
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [recordsRes, vehiclesRes] = await Promise.all([
-                    api.get('/vehicles/records?includeDeleted=true'),
-                    api.get('/vehicles')
-                ]);
-                setRecords(recordsRes.data || []);
-                setVehicles(vehiclesRes.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['vehicles'],
+        onMutation: fetchData,
+        enabled: true,
+    });
 
     // Filtered records
     const filteredRecords = useMemo(() => {

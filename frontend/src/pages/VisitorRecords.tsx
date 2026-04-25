@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -6,6 +6,7 @@ import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
@@ -17,6 +18,17 @@ export default function VisitorRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const res = await api.get('/visitors/records?includeDeleted=true');
+            setRecords(res.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -36,20 +48,14 @@ export default function VisitorRecords() {
         exitDateEnd: ''
     });
 
-    // Fetch all records
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const res = await api.get('/visitors/records?includeDeleted=true');
-                setRecords(res.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+        void fetchData();
+    }, [fetchData]);
+
+    useRealtimeRefetch({
+        topics: ['visitors'],
+        onMutation: fetchData,
+    });
 
     // Filtered records
     const filteredRecords = useMemo(() => {

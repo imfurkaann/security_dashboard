@@ -7,6 +7,7 @@ import { getClientIp } from '../middleware/rateLimiter';
 import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 const formatDriveDuration = (totalMinutes: number): string => {
     const normalized = Number.isFinite(totalMinutes) ? Math.max(0, Math.floor(totalMinutes)) : 0;
@@ -377,6 +378,15 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             message: 'Araç kaydı oluşturuldu',
             whatsappMessage
         });
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/vehicles/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/vehicles/records'),
+        });
     } catch (error) {
         await pool.query('ROLLBACK');
         console.error('Create vehicle record error:', error);
@@ -665,6 +675,15 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             success: true,
             message: 'Araç kaydı güncellendi'
         });
+
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/vehicles/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
+        });
     } catch (error) {
         await pool.query('ROLLBACK');
         console.error('Update vehicle record error:', error);
@@ -799,12 +818,140 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
             message: 'Araç iadesi kaydedildi',
             whatsappMessage
         });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/vehicles/records/${id}/return`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/vehicles/records/${id}/return`),
+        });
     } catch (error) {
         await pool.query('ROLLBACK');
         console.error('Return vehicle error:', error);
         res.status(500).json({
             success: false,
             message: 'Araç iadesi kaydedilirken hata oluştu'
+        });
+    }
+};
+
+/**
+ * Undo vehicle return
+ * POST /api/vehicles/records/:id/undo-return
+ */
+export const undoVehicleReturn = async (req: Request, res: Response): Promise<void> => {
+    let transactionStarted = false;
+
+    try {
+        const { id } = req.params;
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({
+                success: false,
+                message: 'Geçersiz kayıt ID formatı'
+            });
+            return;
+        }
+
+        const recordCheck = await pool.query(
+            'SELECT vehicle_id, status FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+
+        if (recordCheck.rows.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Kayıt bulunamadı'
+            });
+            return;
+        }
+
+        if (recordCheck.rows[0].status !== 'returned') {
+            res.status(400).json({
+                success: false,
+                message: 'Sadece teslim alınmış kayıtlar geri alınabilir'
+            });
+            return;
+        }
+
+        const vehicleId = recordCheck.rows[0].vehicle_id;
+
+        const activeInUseRecord = await pool.query(
+            `SELECT id
+             FROM vehicle_records
+             WHERE vehicle_id = $1
+               AND id <> $2
+               AND deleted_at IS NULL
+               AND status = 'in_use'
+             LIMIT 1`,
+            [vehicleId, id]
+        );
+
+        if (activeInUseRecord.rows.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Bu araç için aktif kullanım kaydı bulunduğu için teslim alma geri alınamaz'
+            });
+            return;
+        }
+
+        await pool.query('BEGIN');
+        transactionStarted = true;
+
+        await pool.query(
+            `UPDATE vehicle_records
+             SET return_date = NULL,
+                 return_time = NULL,
+                 returned_by = NULL,
+                 status = 'in_use',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [id]
+        );
+
+        await pool.query(
+            'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            ['in_use', vehicleId]
+        );
+
+        await pool.query('COMMIT');
+        transactionStarted = false;
+
+        const clientIp = getClientIp(req);
+        await logDataChange(
+            'vehicle_records',
+            id,
+            'UPDATE',
+            { status: 'returned' },
+            { status: 'in_use', return_date: null },
+            req.user?.userId || null,
+            clientIp
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Teslim alma işlemi geri alındı'
+        });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/vehicles/records/${id}/undo-return`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/vehicles/records/${id}/undo-return`),
+        });
+    } catch (error) {
+        if (transactionStarted) {
+            await pool.query('ROLLBACK');
+        }
+
+        console.error('Undo vehicle return error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Teslim alma işlemi geri alınırken hata oluştu'
         });
     }
 };
@@ -892,6 +1039,15 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
         res.status(200).json({
             success: true,
             message: 'Kayıt silindi'
+        });
+
+        emitApiMutation({
+            method: 'DELETE',
+            path: `/api/vehicles/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
         });
     } catch (error) {
         await pool.query('ROLLBACK');
@@ -1009,6 +1165,15 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
         res.status(200).json({
             success: true,
             message: 'Kayıt geri alındı'
+        });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/vehicles/records/${id}/restore`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/vehicles/records/${id}/restore`),
         });
     } catch (error) {
         await pool.query('ROLLBACK');

@@ -5,6 +5,7 @@ import pool from '../config/database';
 import { getClientIp } from '../middleware/rateLimiter';
 import { logDataChange } from '../utils/auditLog';
 import { sanitizePlainText } from '../utils/validation';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 interface ParsedRow {
     sheetName: string;
@@ -438,6 +439,15 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                 errors: rowErrors
             }
         });
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/guest-registry/upload',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/guest-registry/upload'),
+        });
     } catch (error) {
         console.error('Misafir Excel import error:', error);
         res.status(500).json({ success: false, message: 'Excel dosyasi islenirken hata olustu' });
@@ -446,6 +456,9 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
 
 export const getGuestRecords = async (req: Request, res: Response): Promise<void> => {
     try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
 

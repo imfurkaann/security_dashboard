@@ -72,6 +72,7 @@ export default function FireAlarms() {
     useRealtimeRefetch({
         topics: ['fire-alarms'],
         onMutation: fetchData,
+        enabled: true,
     });
 
     useEffect(() => {

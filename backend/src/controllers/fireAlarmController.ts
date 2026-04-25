@@ -7,6 +7,7 @@ import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 // Tüm yangın alarm kayıtlarını getir
 export const getFireAlarms = async (req: Request, res: Response) => {
@@ -120,6 +121,15 @@ export const createFireAlarm = async (req: Request, res: Response) => {
         }
 
         res.status(201).json({ success: true, data: result.rows[0], whatsappMessage });
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/fire-alarms/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/fire-alarms/records'),
+        });
     } catch (error) {
         console.error('Create fire alarm error:', error);
         res.status(500).json({ success: false, message: 'Yangın alarm kaydı oluşturulamadı' });
@@ -197,6 +207,15 @@ export const updateFireAlarm = async (req: Request, res: Response) => {
         );
 
         res.json({ success: true, data: result.rows[0] });
+
+        emitApiMutation({
+            method: 'PUT',
+            path: `/api/fire-alarms/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/fire-alarms/records/${id}`),
+        });
     } catch (error) {
         console.error('Update fire alarm error:', error);
         res.status(500).json({ success: false, message: 'Yangın alarm kaydı güncellenemedi' });
@@ -271,6 +290,15 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
         }
 
         res.json({ success: true, data: result.rows[0], whatsappMessage });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/fire-alarms/records/${id}/resolve`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/fire-alarms/records/${id}/resolve`),
+        });
     } catch (error) {
         console.error('Resolve fire alarm error:', error);
         res.status(500).json({ success: false, message: 'Yangın alarm çözümlenemedi' });
@@ -314,6 +342,15 @@ export const deleteFireAlarm = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'DELETE',
+            path: `/api/fire-alarms/records/${id}`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/fire-alarms/records/${id}`),
+        });
 
         return res.status(200).json({ success: true, message: 'Kayıt silindi' });
     } catch (error) {
@@ -359,6 +396,15 @@ export const restoreFireAlarm = async (req: Request, res: Response) => {
             userId,
             clientIp
         );
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/fire-alarms/records/${id}/restore`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/fire-alarms/records/${id}/restore`),
+        });
 
         return res.status(200).json({ success: true, message: 'Kayıt geri alındı' });
     } catch (error) {

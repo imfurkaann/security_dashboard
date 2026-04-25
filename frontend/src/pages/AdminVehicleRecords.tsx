@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -7,6 +7,7 @@ import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types';
 import { API_URL } from '../constants';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 const { RangePicker } = DatePicker;
 
 export default function AdminVehicleRecords() {
@@ -18,6 +19,28 @@ export default function AdminVehicleRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+
+            const [recordsRes, vehiclesRes] = await Promise.all([
+                axios.get(`${API_URL}/vehicles/records?includeDeleted=true`, config),
+                axios.get(`${API_URL}/vehicles`, config)
+            ]);
+            setRecords(recordsRes.data || []);
+            setVehicles(vehiclesRes.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -34,31 +57,15 @@ export default function AdminVehicleRecords() {
         returnDateEnd: ''
     });
 
-    // Fetch all records and vehicles with admin authentication
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const adminToken = localStorage.getItem('adminToken');
-                const config = {
-                    headers: {
-                        Authorization: `Bearer ${adminToken}`
-                    }
-                };
+        void fetchData();
+    }, [fetchData]);
 
-                const [recordsRes, vehiclesRes] = await Promise.all([
-                    axios.get(`${API_URL}/vehicles/records?includeDeleted=true`, config),
-                    axios.get(`${API_URL}/vehicles`, config)
-                ]);
-                setRecords(recordsRes.data || []);
-                setVehicles(vehiclesRes.data || []);
-            } catch (error) {
-                console.error('Veriler yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
+    useRealtimeRefetch({
+        topics: ['vehicles'],
+        onMutation: fetchData,
+        enabled: true,
+    });
 
     // Filtered records
     const filteredRecords = useMemo(() => {
