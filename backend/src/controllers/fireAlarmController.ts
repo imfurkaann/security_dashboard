@@ -305,6 +305,69 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
     }
 };
 
+// Çözümleme işlemini geri al (alarmı tekrar aktif yap)
+export const undoResolveFireAlarm = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+        }
+
+        const existing = await pool.query(
+            'SELECT * FROM fire_alarms WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+        }
+
+        if (!existing.rows[0].resolved) {
+            return res.status(400).json({ success: false, message: 'Sadece çözülen alarmlar geri alınabilir' });
+        }
+
+        const result = await pool.query(
+            `UPDATE fire_alarms
+             SET resolved = false,
+                 resolution_time = NULL,
+                 resolution_notes = NULL,
+                 false_alarm = false,
+                 resolved_by = NULL,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING *`,
+            [id]
+        );
+
+        await logDataChange(
+            'fire_alarms',
+            id,
+            'UPDATE',
+            existing.rows[0],
+            { resolved: false, resolution_time: null, resolution_notes: null },
+            userId,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, data: result.rows[0], message: 'Alarm tekrar aktif hale getirildi' });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/fire-alarms/records/${id}/undo-resolve`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/fire-alarms/records/${id}/undo-resolve`),
+        });
+    } catch (error) {
+        console.error('Undo resolve fire alarm error:', error);
+        return res.status(500).json({ success: false, message: 'Çözümleme geri alınırken hata oluştu' });
+    }
+};
+
 // Yangın alarm kaydını soft-delete yap
 export const deleteFireAlarm = async (req: Request, res: Response) => {
     try {

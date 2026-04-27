@@ -14,6 +14,7 @@ export default function AdminVehicleRecords() {
     const [records, setRecords] = useState<VehicleUsage[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [loading, setLoading] = useState(true);
+    const [infoMessage, setInfoMessage] = useState<string | null>(null);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
@@ -220,12 +221,15 @@ export default function AdminVehicleRecords() {
     };
 
     const handleRestoreRecord = async (id: string) => {
+        if (!confirm('Bu kaydı geri almak istediğinize emin misiniz?')) return;
+
         try {
             const adminToken = localStorage.getItem('adminToken');
             await axios.post(`${API_URL}/vehicles/records/${id}/restore`, {}, {
                 headers: { Authorization: `Bearer ${adminToken}` }
             });
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            setInfoMessage('Kayıt geri alındı.');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
@@ -277,6 +281,12 @@ export default function AdminVehicleRecords() {
         };
     }, [filteredRecords.length, loading]);
 
+    useEffect(() => {
+        if (!infoMessage) return;
+        const t = setTimeout(() => setInfoMessage(null), 3000);
+        return () => clearTimeout(t);
+    }, [infoMessage]);
+
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
@@ -321,6 +331,11 @@ export default function AdminVehicleRecords() {
             </header>
 
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
+                {infoMessage && (
+                    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+                        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-md text-sm">{infoMessage}</div>
+                    </div>
+                )}
                 {/* Filters Panel */}
                 <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                     <div className="flex justify-between items-center mb-3">
