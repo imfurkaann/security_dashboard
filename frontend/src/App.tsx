@@ -38,6 +38,7 @@ import Sgk from './pages/Sgk';
 import EquipmentCheck from './pages/EquipmentCheck';
 import GuestRegistry from './pages/GuestRegistry';
 import QrVisitorCheckin from './pages/QrVisitorCheckin';
+import QrSgkUpload from './pages/QrSgkUpload';
 import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
 import { getRealtimeClientId } from './realtime/clientId';
 import { initializeRealtimeClient } from './realtime/socket';
@@ -60,6 +61,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/qr/visitor-checkin" element={<QrVisitorCheckin />} />
+            <Route path="/qr/sgk-upload" element={<QrSgkUpload />} />
 
             {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
             <Route path="/equipment-check" element={
@@ -82,6 +84,7 @@ function App() {
               <Route path="managers" element={<Managers />} />
               <Route path="manager-records" element={<AdminManagerRecords />} />
               <Route path="incident-records" element={<AdminIncidentRecords />} />
+              <Route path="sgk" element={<Sgk />} />
               <Route path="fire-alarm-records" element={<AdminFireAlarmRecords />} />
               <Route path="manage-personnel" element={<AdminManagePersonnel />} />
               <Route path="personnel-statistics" element={<AdminPersonnelStatistics />} />

@@ -130,20 +130,23 @@ export default function Sgk() {
     const [searchMode, setSearchMode] = useState<'all' | 'tc' | 'passport'>('all');
     const [searching, setSearching] = useState(false);
 
+    const fetchAllSgkRecords = useCallback(async () => {
+        try {
+            const response = await api.get('/sgk/records');
+            setAllRecords(response.data || []);
+        } catch (error) {
+            console.error('SGK kayıtları yüklenemedi:', error);
+        }
+    }, []);
+
     // Fetch all records on mount
     useEffect(() => {
         const fetchRecords = async () => {
-            try {
-                const response = await api.get('/sgk/records');
-                setAllRecords(response.data || []);
-            } catch (error) {
-                console.error('SGK kayıtları yüklenemedi:', error);
-            } finally {
-                setLoading(false);
-            }
+            await fetchAllSgkRecords();
+            setLoading(false);
         };
-        fetchRecords();
-    }, []);
+        void fetchRecords();
+    }, [fetchAllSgkRecords]);
 
     // Filtered records with useMemo
     const filteredRecords = useMemo(() => {
@@ -224,27 +227,17 @@ export default function Sgk() {
     const resetToAllRecords = useCallback(async () => {
         setSearchMode('all');
         setLoading(true);
-        try {
-            const response = await api.get('/sgk/records');
-            setAllRecords(response.data || []);
-        } catch (error) {
-            console.error('Kayıtlar yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+        await fetchAllSgkRecords();
+        setLoading(false);
+    }, [fetchAllSgkRecords]);
 
     useRealtimeRefetch({
         topics: ['sgk'],
         onMutation: async () => {
             if (searchMode !== 'all') return;
-            try {
-                const response = await api.get('/sgk/records');
-                setAllRecords(response.data || []);
-            } catch (error) {
-                console.error('SGK canlı yenileme hatası:', error);
-            }
+            await fetchAllSgkRecords();
         },
+        enabled: true,
     });
 
     // Reset filters

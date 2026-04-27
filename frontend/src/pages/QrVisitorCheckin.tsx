@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import { API_URL } from '../constants';
@@ -24,55 +24,94 @@ const INITIAL_FORM_DATA: QrVisitorFormData = {
 };
 
 export default function QrVisitorCheckin() {
-    const isCompletedFromUrl = useMemo(() => {
+    const completionFromUrl = useMemo(() => {
         if (typeof window === 'undefined') return false;
         return new URLSearchParams(window.location.search).get('done') === '1';
     }, []);
 
+    const initialAction = useMemo(() => {
+        if (typeof window === 'undefined') return 'menu';
+        const action = new URLSearchParams(window.location.search).get('action');
+        return action === 'visitor' ? 'visitor' : 'menu';
+    }, []);
+
     const [formData, setFormData] = useState<QrVisitorFormData>(INITIAL_FORM_DATA);
+    const [activeStep] = useState<'menu' | 'visitor'>(initialAction as 'menu' | 'visitor');
     const [formToken, setFormToken] = useState('');
     const [loadingToken, setLoadingToken] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [submitted, setSubmitted] = useState(isCompletedFromUrl);
+    const [completedMessage, setCompletedMessage] = useState(
+        completionFromUrl ? 'Basarili kayit olusturuldu. Yeni kayit icin QR kodunu tekrar okutmaniz gerekir.' : ''
+    );
     const [errorMessage, setErrorMessage] = useState('');
     const [website, setWebsite] = useState('');
 
     const isSubmitDisabled = useMemo(() => {
-        return loadingToken || submitting || submitted || !formToken;
-    }, [loadingToken, submitting, submitted, formToken]);
+        return loadingToken || submitting || !!completedMessage || !formToken;
+    }, [loadingToken, submitting, completedMessage, formToken]);
 
     const selectedGate = useMemo(() => {
         if (typeof window === 'undefined') return '';
         return new URLSearchParams(window.location.search).get('gate')?.trim() || '';
     }, []);
 
+    const loadToken = useCallback(async () => {
+        try {
+            setLoadingToken(true);
+            setErrorMessage('');
+
+            const response = await axios.get(`${API_URL}/visitor-public/form-token`);
+            if (response.data?.success && response.data?.data?.formToken) {
+                setFormToken(response.data.data.formToken);
+            } else {
+                setErrorMessage('Form acilamadi. Lutfen QR kodu tekrar okutun.');
+            }
+        } catch (error) {
+            console.error('QR form token alinamadi:', error);
+            setErrorMessage('Form acilamadi. Lutfen QR kodu tekrar okutun.');
+        } finally {
+            setLoadingToken(false);
+        }
+    }, []);
+
     useEffect(() => {
-        if (submitted) {
+        if (completedMessage) {
             setLoadingToken(false);
             return;
         }
 
-        const loadToken = async () => {
-            try {
-                setLoadingToken(true);
-                setErrorMessage('');
+        void loadToken();
+    }, [completedMessage, loadToken]);
 
-                const response = await axios.get(`${API_URL}/visitor-public/form-token`);
-                if (response.data?.success && response.data?.data?.formToken) {
-                    setFormToken(response.data.data.formToken);
-                } else {
-                    setErrorMessage('Form acilamadi. Lutfen QR kodu tekrar okutun.');
-                }
-            } catch (error) {
-                console.error('QR form token alinamadi:', error);
-                setErrorMessage('Form acilamadi. Lutfen QR kodu tekrar okutun.');
-            } finally {
-                setLoadingToken(false);
-            }
-        };
+    const markCompleted = useCallback((message: string) => {
+        setCompletedMessage(message);
+        setFormToken('');
 
-        loadToken();
-    }, [submitted]);
+        if (typeof window !== 'undefined') {
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set('done', '1');
+            currentUrl.searchParams.delete('action');
+            window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}`);
+        }
+    }, []);
+
+    const redirectToVisitorForm = useCallback(() => {
+        if (typeof window === 'undefined') return;
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.delete('done');
+        currentUrl.searchParams.set('action', 'visitor');
+        window.location.assign(`${currentUrl.pathname}${currentUrl.search}`);
+    }, []);
+
+    const redirectToSgkUploadPage = useCallback(() => {
+        if (typeof window === 'undefined') return;
+
+        const currentUrl = new URL(window.location.href);
+        currentUrl.pathname = '/qr/sgk-upload';
+        currentUrl.searchParams.delete('done');
+        currentUrl.searchParams.delete('action');
+        window.location.assign(`${currentUrl.pathname}${currentUrl.search}`);
+    }, []);
 
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
@@ -111,14 +150,7 @@ export default function QrVisitorCheckin() {
             });
 
             if (response.data?.success) {
-                setSubmitted(true);
-                setFormToken('');
-
-                if (typeof window !== 'undefined') {
-                    const currentUrl = new URL(window.location.href);
-                    currentUrl.searchParams.set('done', '1');
-                    window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}`);
-                }
+                markCompleted('Giris kaydiniz alindi. Yeni kayit icin QR kodunu tekrar okutmaniz gerekir.');
             } else {
                 setErrorMessage(response.data?.message || 'Kayit olusturulamadi.');
             }
@@ -132,15 +164,40 @@ export default function QrVisitorCheckin() {
     return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center px-4 py-10">
             <div className="w-full max-w-lg bg-white rounded-2xl shadow-lg border border-slate-200 p-6">
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Ziyaretci Giris Formu</h1>
+                <h1 className="text-2xl font-bold text-slate-900 mb-1">QR Misafir Islemleri</h1>
                 <div className="mb-6" />
 
-                {submitted ? (
+                {completedMessage ? (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                         <h2 className="text-lg font-semibold text-emerald-800 mb-2">Kaydiniz alindi</h2>
                         <p className="text-sm text-emerald-700">
-                            Basarili kayit olusturuldu. Yeni kayit icin QR kodunu tekrar okutmaniz gerekir.
+                            {completedMessage}
                         </p>
+                    </div>
+                ) : activeStep === 'menu' ? (
+                    <div className="space-y-3">
+                        <button
+                            type="button"
+                            onClick={redirectToSgkUploadPage}
+                            disabled={loadingToken || !formToken}
+                            className="w-full rounded-lg bg-blue-700 text-white py-3 font-medium disabled:bg-slate-400 disabled:cursor-not-allowed"
+                        >
+                            SGK Belgesi Yukle
+                        </button>
+                        <button
+                            type="button"
+                            onClick={redirectToVisitorForm}
+                            disabled={loadingToken || !formToken}
+                            className="w-full rounded-lg bg-slate-900 text-white py-3 font-medium disabled:bg-slate-400 disabled:cursor-not-allowed"
+                        >
+                            Giris Kaydi Olustur
+                        </button>
+
+                        {errorMessage && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                {errorMessage}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">

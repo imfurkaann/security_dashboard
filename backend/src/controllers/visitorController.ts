@@ -605,6 +605,68 @@ export const restoreVisitorRecord = async (req: Request, res: Response): Promise
 };
 
 /**
+ * Undo visitor exit
+ * POST /api/visitors/records/:id/undo-exit
+ */
+export const undoVisitorExit = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const recordCheck = await pool.query('SELECT id, status FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
+        if (recordCheck.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        if (recordCheck.rows[0].status !== 'exited') {
+            res.status(400).json({ success: false, message: 'Sadece çıkış yapmış kayıtlar geri alınabilir' });
+            return;
+        }
+
+        await pool.query(
+            `UPDATE visitor_records
+             SET exit_date = NULL,
+                 exit_time = NULL,
+                 exit_by = NULL,
+                 status = 'inside',
+                 updated_at = now()
+             WHERE id = $1`,
+            [id]
+        );
+
+        await logDataChange(
+            'visitor_records',
+            id,
+            'UPDATE',
+            { status: 'exited' },
+            { status: 'inside', exit_date: null },
+            req.user?.userId || null,
+            clientIp
+        );
+
+        res.status(200).json({ success: true, message: 'Çıkış işlemi geri alındı' });
+
+        emitApiMutation({
+            method: 'POST',
+            path: `/api/visitors/records/${id}/undo-exit`,
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics(`/api/visitors/records/${id}/undo-exit`),
+        });
+    } catch (error) {
+        console.error('Undo visitor exit error:', error);
+        res.status(500).json({ success: false, message: 'Çıkış geri alınırken hata oluştu' });
+    }
+};
+
+/**
  * POST /api/visitors/send-whatsapp-message
  */
 export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {

@@ -30,6 +30,7 @@ const menuItems = [
     { title: 'Müdür Kayıtları Yönetimi', path: '/admin/manager-records' },
     { title: 'Yangın Kayıtları Yönetimi', path: '/admin/fire-alarm-records' },
     { title: 'Vardiya Raporları Yönetimi', path: '/admin/incident-records' },
+    { title: 'SGK Belgesi Sorgulama', path: '/admin/sgk' },
     { title: 'Personel Yönetimi', path: '/admin/manage-personnel' },
     { title: 'Personel İstatistiği', path: '/admin/personnel-statistics' },
     { title: 'WhatsApp Bağlantı Yönetimi', path: '/admin/whatsapp-settings' },

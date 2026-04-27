@@ -4,6 +4,7 @@ import {
     createFireAlarm,
     updateFireAlarm,
     resolveFireAlarm,
+    undoResolveFireAlarm,
     deleteFireAlarm,
     restoreFireAlarm,
     sendFireAlarmWhatsAppMessage,
@@ -26,6 +27,9 @@ router.put('/records/:id', updateFireAlarm);
 
 // Yangın alarmını çözümle
 router.post('/records/:id/resolve', resolveFireAlarm);
+
+// Çözümleme işlemini geri al
+router.post('/records/:id/undo-resolve', undoResolveFireAlarm);
 
 // Yangın alarm kaydını soft-delete yap
 router.delete('/records/:id', deleteFireAlarm);

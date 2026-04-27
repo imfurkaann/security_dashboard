@@ -4,6 +4,7 @@ import {
     createVisitorRecord,
     updateVisitorRecord,
     exitVisitor,
+    undoVisitorExit,
     deleteVisitorRecord,
     restoreVisitorRecord,
     sendVisitorWhatsAppMessage
@@ -26,6 +27,9 @@ router.put('/records/:id', updateVisitorRecord);
 
 // Exit visitor
 router.post('/records/:id/exit', exitVisitor);
+
+// Undo exit
+router.post('/records/:id/undo-exit', undoVisitorExit);
 
 // Soft delete visitor record
 router.delete('/records/:id', deleteVisitorRecord);

@@ -14,6 +14,7 @@ const { RangePicker } = DatePicker;
 export default function AdminVisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [infoMessage, setInfoMessage] = useState<string | null>(null);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
@@ -225,15 +226,35 @@ export default function AdminVisitorRecords() {
     };
 
     const handleRestoreRecord = async (id: string) => {
+        if (!confirm('Bu kaydı geri almak istediğinize emin misiniz?')) return;
+
         try {
             const adminToken = localStorage.getItem('adminToken');
             await axios.post(`${API_URL}/visitors/records/${id}/restore`, {}, {
                 headers: { Authorization: `Bearer ${adminToken}` }
             });
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            setInfoMessage('Kayıt geri alındı.');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
             alert('Kayıt geri alınırken bir hata oluştu');
+        }
+    };
+
+    const handleUndoExit = async (id: string) => {
+        if (!confirm('Bu çıkışı geri almak istediğinize emin misiniz?')) return;
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/visitors/records/${id}/undo-exit`, {}, {
+                headers: { Authorization: `Bearer ${adminToken}` }
+            });
+
+            setRecords(prev => prev.map(record => record.id === id ? { ...record, status: 'inside', exit_date: null, exit_time: null, exit_by: null } : record));
+            setInfoMessage('Çıkış geri alındı.');
+        } catch (error) {
+            console.error('Çıkış geri alınamadı:', error);
+            alert('Çıkış geri alınırken bir hata oluştu');
         }
     };
 
@@ -282,6 +303,12 @@ export default function AdminVisitorRecords() {
         };
     }, [filteredRecords.length, loading]);
 
+    useEffect(() => {
+        if (!infoMessage) return;
+        const t = setTimeout(() => setInfoMessage(null), 3000);
+        return () => clearTimeout(t);
+    }, [infoMessage]);
+
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
@@ -315,6 +342,11 @@ export default function AdminVisitorRecords() {
             </header>
 
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
+                {infoMessage && (
+                    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+                        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-2 rounded-md text-sm">{infoMessage}</div>
+                    </div>
+                )}
                 {/* Filters Panel */}
                 <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
                     <div className="flex justify-between items-center mb-3">
@@ -550,7 +582,8 @@ export default function AdminVisitorRecords() {
                                     <table className="w-full min-w-[2050px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                                   <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                   <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
@@ -569,6 +602,15 @@ export default function AdminVisitorRecords() {
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                            <div className="flex items-center gap-2">
+                                                                {record.deleted_at ? (
+                                                                    <button onClick={() => handleRestoreRecord(record.id)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">Geri Al</button>
+                                                                ) : record.status === 'exited' ? (
+                                                                    <button onClick={() => handleUndoExit(record.id)} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">Geri Al</button>
+                                                                ) : null}
+                                                            </div>
+                                                        </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</div>
                                                     </td>

@@ -4,6 +4,7 @@ import axios from 'axios';
 import type { Vehicle } from '../types';
 import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
+import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface VehicleFormData {
     plate: string;
@@ -50,6 +51,12 @@ export default function AdminManageVehicles() {
     useEffect(() => {
         fetchVehicles();
     }, []);
+
+    useRealtimeRefetch({
+        topics: ['vehicles'],
+        onMutation: fetchVehicles,
+        enabled: true,
+    });
 
     // Open modal for adding new vehicle
     const handleAddNew = () => {

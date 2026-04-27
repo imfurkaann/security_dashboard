@@ -242,6 +242,18 @@ export default function FireAlarms() {
         }
     }, [fetchData]);
 
+    const handleUndoResolve = useCallback(async (id: string) => {
+        if (!confirm('Bu alarmı tekrar aktif yapmak istediğinize emin misiniz?')) return;
+
+        try {
+            await api.post(`/fire-alarms/records/${id}/undo-resolve`);
+            fetchData();
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Çözümleme geri alma işlemi başarısız');
+        }
+    }, [fetchData]);
+
     const handleSendWhatsAppAutomatic = useCallback(async () => {
         setSendingWhatsApp(true);
         try {
@@ -483,6 +495,8 @@ export default function FireAlarms() {
                                                             )}
                                                             {record.deleted_at ? (
                                                                 <ActionButton onClick={() => handleRestore(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                            ) : record.resolved ? (
+                                                                <ActionButton onClick={() => handleUndoResolve(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
                                                             ) : (
                                                                 <ActionButton onClick={() => handleDelete(record.id)} variant="danger" className="shrink-0">Sil</ActionButton>
                                                             )}

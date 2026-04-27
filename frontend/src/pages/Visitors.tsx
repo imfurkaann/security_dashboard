@@ -281,6 +281,21 @@ export default function Visitors() {
         }
     }, []);
 
+    const handleUndoExit = useCallback(async (id: string) => {
+        if (!confirm('Bu çıkışı geri almak istediğinize emin misiniz?')) return;
+
+        try {
+            await api.post(`/visitors/records/${id}/undo-exit`);
+            setRecords(prev => prev.map(record => record.id === id
+                ? { ...record, status: 'inside', exit_date: null, exit_time: null, exit_by: null }
+                : record
+            ));
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            alert(err?.response?.data?.message || 'Çıkış geri alınamadı');
+        }
+    }, []);
+
     const handleSendWhatsAppAutomatic = useCallback(async () => {
         setSendingWhatsApp(true);
         try {
@@ -680,6 +695,16 @@ export default function Visitors() {
                                                                         className="shrink-0"
                                                                     >
                                                                         Çıkış Yap
+                                                                    </ActionButton>
+                                                                )}
+                                                                {rec.status === 'exited' && (
+                                                                    <ActionButton
+                                                                        onClick={() => handleUndoExit(rec.id)}
+                                                                        variant="success"
+                                                                        title="Geri Al"
+                                                                        className="shrink-0"
+                                                                    >
+                                                                        Geri Al
                                                                     </ActionButton>
                                                                 )}
                                                                 <ActionButton onClick={() => handleDeleteRecord(rec.id)} variant="danger" className="shrink-0">Sil</ActionButton>
