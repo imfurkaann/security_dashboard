@@ -1,1 +1,6 @@
+bildirimler daha güçlü modeller ile kontrol edilecek
+websocket kodları güçlü modeller ile açıkları kapatıalcak.
+tüm proje genel olarak tekrardan güvenlik önlemleri ve hatalı kısımları düzeltiecek
+
+
 excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.

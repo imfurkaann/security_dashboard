@@ -45,9 +45,23 @@ export const initializeRealtimeClient = (): Socket => getSocket();
 
 export const subscribeToApiMutations = (listener: MutationListener): (() => void) => {
     const client = getSocket();
-    client.on('api:mutation', listener);
+
+    const wrapper = (event: ApiMutationEvent) => {
+        try {
+            // Temporary debug logging to inspect incoming realtime events
+            // Remove or guard this in production.
+            // eslint-disable-next-line no-console
+            console.debug('[realtime] api:mutation received', event);
+        } catch (err) {
+            // ignore logging errors
+        }
+
+        listener(event);
+    };
+
+    client.on('api:mutation', wrapper);
 
     return () => {
-        client.off('api:mutation', listener);
+        client.off('api:mutation', wrapper);
     };
 };

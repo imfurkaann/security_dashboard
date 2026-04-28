@@ -48,6 +48,7 @@ export default function AdminSidebarLayout() {
     const [topPerformers, setTopPerformers] = useState<AdminTopPerformer[]>([]);
     const [showTopPerformersModal, setShowTopPerformersModal] = useState(false);
     const navigate = useNavigate();
+
     const rawAdmin = localStorage.getItem('adminUser');
     const parsedAdmin = rawAdmin ? JSON.parse(rawAdmin) : null;
     const adminName = parsedAdmin?.fullName || parsedAdmin?.username || 'Yonetici';
@@ -60,6 +61,8 @@ export default function AdminSidebarLayout() {
         const widthInCh = Math.min(30, Math.max(20, longestLabel + 7));
         return `${widthInCh}ch`;
     }, []);
+
+
 
     useEffect(() => {
         const raw = localStorage.getItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
