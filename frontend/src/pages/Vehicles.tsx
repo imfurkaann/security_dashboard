@@ -64,6 +64,8 @@ export default function Vehicles() {
         enabled: true,
     });
 
+
+
     // Form submission handler
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();

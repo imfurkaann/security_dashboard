@@ -5,6 +5,8 @@ import type { Vehicle, VehicleUsage, VisitorRecord } from '../types';
 import { STORAGE_KEYS } from '../constants';
 import { AlertCircle, Car, Users, UserCheck, Flame } from 'lucide-react';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useToastNotification } from '../hooks/useToastNotification';
+import { ToastContainer } from '../components/Toast';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -43,6 +45,7 @@ export default function Dashboard() {
     const [visitorsInside, setVisitorsInside] = useState(0);
     const [managersInside, setManagersInside] = useState(0);
     const navigate = useNavigate();
+    const { toasts, addToast, removeToast } = useToastNotification();
 
     // Fetch all data in parallel for better performance
     const fetchAllData = useCallback(async () => {
@@ -371,6 +374,8 @@ export default function Dashboard() {
                     </div>
                 </div>
             </main>
+
+            <ToastContainer messages={toasts} onClose={removeToast} />
         </div>
     );
 }

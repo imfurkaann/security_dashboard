@@ -30,6 +30,7 @@ export default function UserSidebarLayout() {
     const [logoutLoading, setLogoutLoading] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const navigate = useNavigate();
+
     const rawUser = localStorage.getItem(STORAGE_KEYS.USER);
     const parsedUser = rawUser ? JSON.parse(rawUser) : null;
     const userName = parsedUser?.fullName || parsedUser?.username || 'Kullanici';
@@ -44,6 +45,8 @@ export default function UserSidebarLayout() {
         const widthInCh = Math.min(26, Math.max(16, longestLabel + 7));
         return `${widthInCh}ch`;
     }, []);
+
+
 
     const handleLogout = async () => {
         setLogoutLoading(true);
