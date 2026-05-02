@@ -92,11 +92,16 @@ export default function AdminVisitorQrManagement() {
                 // 2. Tarayıcıdan o anki portu al (Örn: "5173")
                 const currentPort = window.location.port;
 
-                // 3. Eğer backend'den gelen adreste port yoksa (içinde ":" geçmiyorsa) 
-                // ve tarayıcıda bir port varsa, portu ekle
-                if (currentPort && !frontendBaseUrl.includes(':')) {
-                    // "http://172.16.33.8" -> "http://172.16.33.8:5173" olur
-                    frontendBaseUrl = `${frontendBaseUrl}:${currentPort}`;
+                // 3. Eğer backend'den gelen adreste explicit port yoksa ve tarayıcıda bir port varsa, portu ekle
+                if (currentPort) {
+                    try {
+                        const parsed = new URL(frontendBaseUrl);
+                        if (!parsed.port) {
+                            frontendBaseUrl = `${frontendBaseUrl}:${currentPort}`;
+                        }
+                    } catch {
+                        // URL parse edilemezse mevcut davranisi bozma
+                    }
                 }
 
                 setQrBaseUrl(frontendBaseUrl);
