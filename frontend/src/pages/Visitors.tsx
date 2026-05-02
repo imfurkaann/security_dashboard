@@ -10,6 +10,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 // Initial form state
 const INITIAL_FORM_DATA: VisitorFormData = {
     vehicle_plate: '',
@@ -29,6 +33,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
 };
 
 export default function Visitors() {
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -262,6 +267,8 @@ export default function Visitors() {
         try {
             const response = await api.post('/visitors/send-whatsapp-message', {
                 message: whatsappMessage,
+            }, {
+                timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
@@ -269,11 +276,18 @@ export default function Visitors() {
                 setAutoSendFailed(false);
             } else {
                 setAutoSendFailed(true);
-                alert(`Mesaj gönderilemedi: ${response.data?.reason || 'Bilinmeyen hata'}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
+                const reason = response.data?.reason || 'Bilinmeyen hata';
+                const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
+                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (error: any) {
             setAutoSendFailed(true);
-            alert(`WhatsApp mesajı gönderilemedi: ${error.response?.data?.message || error.message}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            const isTimeout = error?.code === 'ECONNABORTED';
+            const details = isTimeout
+                ? 'Otomatik gönderim zaman aşımına uğradı.'
+                : (error.response?.data?.message || error.message);
+            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }
@@ -348,10 +362,10 @@ export default function Visitors() {
 
     // Memoized filtered records
     const filteredRecords = useMemo(() => {
-        const normalizedFullName = columnFilters.fullName.trim().toLocaleLowerCase('tr-TR');
-        const normalizedPlate = (normalizePlate(columnFilters.vehiclePlate.trim()) || '').toLocaleLowerCase('tr-TR');
-        const normalizedCompany = columnFilters.companyName.trim().toLocaleLowerCase('tr-TR');
-        const normalizedVisitingPerson = columnFilters.visitingPerson.trim().toLocaleLowerCase('tr-TR');
+        const normalizedFullName = normalizeSearchText(columnFilters.fullName.trim());
+        const normalizedPlate = normalizeSearchText(normalizePlate(columnFilters.vehiclePlate.trim()) || '');
+        const normalizedCompany = normalizeSearchText(columnFilters.companyName.trim());
+        const normalizedVisitingPerson = normalizeSearchText(columnFilters.visitingPerson.trim());
 
         const sourceRecords = filter === 'deleted' ? todayDeletedRecords : nonDeletedRecords;
 
@@ -368,22 +382,22 @@ export default function Visitors() {
 
             if (!matchesTopFilter) return false;
 
-            if (normalizedFullName && !(r.full_name || '').toLocaleLowerCase('tr-TR').includes(normalizedFullName)) {
+            if (normalizedFullName && !normalizeSearchText(r.full_name).includes(normalizedFullName)) {
                 return false;
             }
 
             if (normalizedPlate) {
-                const recordPlate = (normalizePlate(r.vehicle_plate || '') || '').toLocaleLowerCase('tr-TR');
+                const recordPlate = normalizeSearchText(normalizePlate(r.vehicle_plate || '') || '');
                 if (!recordPlate.includes(normalizedPlate)) {
                     return false;
                 }
             }
 
-            if (normalizedCompany && !(r.company_name || '').toLocaleLowerCase('tr-TR').includes(normalizedCompany)) {
+            if (normalizedCompany && !normalizeSearchText(r.company_name).includes(normalizedCompany)) {
                 return false;
             }
 
-            if (normalizedVisitingPerson && !(r.visiting_person || '').toLocaleLowerCase('tr-TR').includes(normalizedVisitingPerson)) {
+            if (normalizedVisitingPerson && !normalizeSearchText(r.visiting_person).includes(normalizedVisitingPerson)) {
                 return false;
             }
 

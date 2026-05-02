@@ -795,11 +795,7 @@ export const sendWhatsAppMessage = async (req: Request, res: Response): Promise<
 
         const result = await sendWhatsAppTextMessage(message.trim());
 
-        res.status(200).json({
-            success: result.success,
-            messageId: result.messageId,
-            reason: result.reason,
-        });
+        res.status(200).json(result);
     } catch (error) {
         console.error('Send WhatsApp message error:', error);
         res.status(500).json({

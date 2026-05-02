@@ -788,7 +788,7 @@ async function createFireAlarmsExcel(records: any[], date: string): Promise<Exce
             alarmTime: formatTime(record.alarm_time),
             resolveDate: formatDate(record.resolution_time),
             resolveTime: formatTime(record.resolution_time),
-            description: record.description || '-',
+            description: record.resolution_notes || '-',
             openedBy: record.entry_personnel_name || record.personnel_name || '-',
             closedBy: record.exit_personnel_name || '-'
         });

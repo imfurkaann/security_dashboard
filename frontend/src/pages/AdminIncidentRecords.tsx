@@ -12,6 +12,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 interface IncidentRecord {
     id: string;
     description: string;
@@ -70,7 +74,7 @@ export default function AdminIncidentRecords() {
     // Filtered records
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
-            if (reportedBy && !record.reported_by?.toLowerCase().includes(reportedBy.toLowerCase())) return false;
+            if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
 
             // Date filtering - dayjs ile yerel tarihe çevir
             if (dateStart && dateEnd) {

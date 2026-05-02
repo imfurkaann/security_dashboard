@@ -14,6 +14,10 @@ import NotificationBanner from './notifications/NotificationBanner';
 export default function NotificationManager() {
   const context = useContext(NotificationContext);
 
+  if (window.location.pathname.startsWith('/qr')) {
+    return null;
+  }
+
   if (!context) {
     return null;
   }

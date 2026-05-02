@@ -10,6 +10,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 export default function VisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -61,22 +65,22 @@ export default function VisitorRecords() {
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
             // Full name filter
-            if (filters.full_name && (!record.full_name || !record.full_name.toLowerCase().includes(filters.full_name.toLowerCase()))) {
+            if (filters.full_name && !normalizeSearchText(record.full_name).includes(normalizeSearchText(filters.full_name))) {
                 return false;
             }
 
             // Company name filter
-            if (filters.company_name && (!record.company_name || !record.company_name.toLowerCase().includes(filters.company_name.toLowerCase()))) {
+            if (filters.company_name && !normalizeSearchText(record.company_name).includes(normalizeSearchText(filters.company_name))) {
                 return false;
             }
 
             // Vehicle plate filter
-            if (filters.vehicle_plate && (!record.vehicle_plate || !record.vehicle_plate.toLowerCase().includes(filters.vehicle_plate.toLowerCase()))) {
+            if (filters.vehicle_plate && !normalizeSearchText(record.vehicle_plate).includes(normalizeSearchText(filters.vehicle_plate))) {
                 return false;
             }
 
             // Visiting person filter
-            if (filters.visiting_person && (!record.visiting_person || !record.visiting_person.toLowerCase().includes(filters.visiting_person.toLowerCase()))) {
+            if (filters.visiting_person && !normalizeSearchText(record.visiting_person).includes(normalizeSearchText(filters.visiting_person))) {
                 return false;
             }
 
@@ -86,12 +90,12 @@ export default function VisitorRecords() {
             }
 
             // Entry by filter
-            if (filters.entry_by && record.entry_by && !record.entry_by.toLowerCase().includes(filters.entry_by.toLowerCase())) {
+            if (filters.entry_by && !normalizeSearchText(record.entry_by).includes(normalizeSearchText(filters.entry_by))) {
                 return false;
             }
 
             // Exit by filter
-            if (filters.exit_by && record.exit_by && !record.exit_by.toLowerCase().includes(filters.exit_by.toLowerCase())) {
+            if (filters.exit_by && !normalizeSearchText(record.exit_by).includes(normalizeSearchText(filters.exit_by))) {
                 return false;
             }
 

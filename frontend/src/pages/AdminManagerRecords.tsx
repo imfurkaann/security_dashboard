@@ -12,6 +12,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 export default function AdminManagerRecords() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [managersList, setManagersList] = useState<Array<{ id: string; full_name: string; first_name?: string; last_name?: string; title?: string; department?: string | null; phone?: string | null; email?: string | null }>>([]);
@@ -85,17 +89,26 @@ export default function AdminManagerRecords() {
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
             // Manager name filter
-            if (filters.manager_name && (!record.manager || !record.manager.toLowerCase().includes(filters.manager_name.toLowerCase()))) {
+            if (
+                filters.manager_name
+                && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager_name))
+            ) {
                 return false;
             }
 
             // Entry by filter
-            if (filters.entry_by && (!record.entry_by || !record.entry_by.toLowerCase().includes(filters.entry_by.toLowerCase()))) {
+            if (
+                filters.entry_by
+                && !normalizeSearchText(record.entry_by).includes(normalizeSearchText(filters.entry_by))
+            ) {
                 return false;
             }
 
             // Exit by filter
-            if (filters.exit_by && (!record.exit_by || !record.exit_by.toLowerCase().includes(filters.exit_by.toLowerCase()))) {
+            if (
+                filters.exit_by
+                && !normalizeSearchText(record.exit_by).includes(normalizeSearchText(filters.exit_by))
+            ) {
                 return false;
             }
 

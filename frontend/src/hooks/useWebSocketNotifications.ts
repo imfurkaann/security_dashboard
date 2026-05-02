@@ -10,13 +10,16 @@ import { NotificationType } from '../types/notifications';
 import api from '../utils/api';
 
 export function useWebSocketNotifications() {
-  const { notify, success, error, warning } = useNotification();
+  const { notify, error } = useNotification();
 
   useEffect(() => {
     let isMounted = true;
 
     const unsubscribe = subscribeToApiMutations(async (event: ApiMutationEvent) => {
       if (!isMounted) return;
+
+      // QR sayfalarinda bildirim gostermeyelim.
+      if (window.location.pathname.startsWith('/qr')) return;
 
       // Debug: log every incoming api:mutation event
       try {
@@ -30,6 +33,7 @@ export function useWebSocketNotifications() {
         // QR Ziyaretçi Kaydı
         if (
           event.path.includes('/visitor-public') &&
+          !event.path.includes('/visitor-public/sgk-records') &&
           event.method === 'POST' &&
           event.statusCode === 201
         ) {
@@ -79,7 +83,7 @@ export function useWebSocketNotifications() {
         }
         // QR SGK Belgesi
         else if (
-          event.path.includes('/sgk') &&
+          event.path.includes('/visitor-public/sgk-records') &&
           event.method === 'POST' &&
           event.statusCode === 201
         ) {
@@ -103,50 +107,6 @@ export function useWebSocketNotifications() {
             });
           }
         }
-        // Araç Kaydı Oluşturuldu
-        else if (
-          event.path.includes('/vehicles') &&
-          event.method === 'POST' &&
-          event.statusCode === 201
-        ) {
-          notify({
-            type: NotificationType.RECORD_CREATED,
-            title: '✓ Araç Kaydedildi',
-            message: 'Yeni araç kaydı başarıyla oluşturuldu',
-          });
-        }
-        // Araç Kaydı Güncellendi
-        else if (
-          event.path.includes('/vehicles') &&
-          event.method === 'PUT' &&
-          event.statusCode === 200
-        ) {
-          notify({
-            type: NotificationType.RECORD_UPDATED,
-            title: '🔄 Araç Güncellenendi',
-            message: 'Araç kaydı başarıyla güncellendi',
-          });
-        }
-        // Araç Kaydı Silindi
-        else if (
-          event.path.includes('/vehicles') &&
-          event.method === 'DELETE' &&
-          event.statusCode === 200
-        ) {
-          warning('🗑️ Araç Silindi', 'Araç kaydı başarıyla silindi');
-        }
-        // Müdür Kaydı Oluşturuldu
-        else if (
-          event.path.includes('/managers') &&
-          event.method === 'POST' &&
-          event.statusCode === 201
-        ) {
-          notify({
-            type: NotificationType.RECORD_CREATED,
-            title: '✓ Müdür Kaydedildi',
-            message: 'Yeni müdür kaydı başarıyla oluşturuldu',
-          });
-        }
         // Genel Hata
         else if (event.statusCode >= 500) {
           error(
@@ -163,5 +123,5 @@ export function useWebSocketNotifications() {
       isMounted = false;
       unsubscribe();
     };
-  }, [notify, success, error, warning]);
+  }, [notify, error]);
 }

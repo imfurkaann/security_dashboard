@@ -336,6 +336,7 @@ export const undoResolveFireAlarm = async (req: Request, res: Response) => {
                  resolution_notes = NULL,
                  false_alarm = false,
                  resolved_by = NULL,
+                 resolved_by_name = NULL,
                  updated_at = NOW()
              WHERE id = $1
              RETURNING *`,
@@ -490,11 +491,7 @@ export const sendFireAlarmWhatsAppMessage = async (req: Request, res: Response):
         }
 
         const result = await sendWhatsAppTextMessage(message.trim());
-        res.status(200).json({
-            success: result.success,
-            messageId: result.messageId,
-            reason: result.reason,
-        });
+        res.status(200).json(result);
     } catch (error) {
         console.error('Send fire alarm WhatsApp message error:', error);
         res.status(500).json({

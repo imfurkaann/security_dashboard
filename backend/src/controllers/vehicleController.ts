@@ -905,6 +905,7 @@ export const undoVehicleReturn = async (req: Request, res: Response): Promise<vo
              SET return_date = NULL,
                  return_time = NULL,
                  returned_by = NULL,
+                 returned_by_name = NULL,
                  status = 'in_use',
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = $1`,
@@ -1201,11 +1202,7 @@ export const sendVehicleWhatsAppMessage = async (req: Request, res: Response): P
         }
 
         const result = await sendWhatsAppTextMessage(message.trim());
-        res.status(200).json({
-            success: result.success,
-            messageId: result.messageId,
-            reason: result.reason,
-        });
+        res.status(200).json(result);
     } catch (error) {
         console.error('Send vehicle WhatsApp message error:', error);
         res.status(500).json({

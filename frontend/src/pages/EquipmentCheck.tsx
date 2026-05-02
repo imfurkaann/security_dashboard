@@ -35,6 +35,7 @@ interface WeeklyRankingCelebration {
 }
 
 export default function EquipmentCheck() {
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
     const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
     const [gates, setGates] = useState<GateInfo[]>([]);
     const [selectedGate, setSelectedGate] = useState('');
@@ -204,6 +205,8 @@ export default function EquipmentCheck() {
         try {
             const response = await api.post('/equipment-check/send-whatsapp-message', {
                 message: whatsappMessage,
+            }, {
+                timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
@@ -213,11 +216,18 @@ export default function EquipmentCheck() {
                 completeFlowWithCelebrationCheck();
             } else {
                 setAutoSendFailed(true);
-                alert(`Mesaj gönderilemedi: ${response.data?.reason || 'Bilinmeyen hata'}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
+                const reason = response.data?.reason || 'Bilinmeyen hata';
+                const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
+                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (err: any) {
             setAutoSendFailed(true);
-            alert(`WhatsApp mesajı gönderilemedi: ${err.response?.data?.message || err.message}. Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            const isTimeout = err?.code === 'ECONNABORTED';
+            const details = isTimeout
+                ? 'Otomatik gönderim zaman aşımına uğradı.'
+                : (err.response?.data?.message || err.message);
+            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }
