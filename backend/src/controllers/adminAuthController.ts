@@ -401,23 +401,50 @@ export const getCurrentAdmin = async (req: Request, res: Response): Promise<void
 const getLocalPrivateIPv4 = (): string | null => {
     const interfaces = os.networkInterfaces();
 
+    type Candidate = {
+        ip: string;
+        interfaceName: string;
+        score: number;
+    };
+
+    const candidates: Candidate[] = [];
+
     for (const interfaceName of Object.keys(interfaces)) {
         const addresses = interfaces[interfaceName] || [];
         for (const address of addresses) {
             if (!address || address.family !== 'IPv4' || address.internal) continue;
 
             const ip = address.address;
-            if (
+            const isPrivate =
                 ip.startsWith('192.168.') ||
                 ip.startsWith('10.') ||
-                /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
-            ) {
-                return ip;
-            }
+                /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
+
+            if (!isPrivate) continue;
+
+            const nameLower = interfaceName.toLowerCase();
+
+            let score = 0;
+            if (ip.startsWith('192.168.')) score += 100;
+            else if (ip.startsWith('10.')) score += 80;
+            else score += 60; // 172.16-31
+
+            // Docker bridge IPs are often in 172.17/172.18 and not reachable from LAN devices.
+            if (ip.startsWith('172.17.') || ip.startsWith('172.18.')) score -= 50;
+
+            // Deprioritize virtual adapters (Docker/Hyper-V/WSL/VM)
+            if (/docker|vethernet|hyper-v|virtualbox|vmware|wsl|loopback|nat/.test(nameLower)) score -= 30;
+
+            // Slightly prefer physical adapters
+            if (/wi-?fi|wireless|ethernet/.test(nameLower)) score += 10;
+
+            candidates.push({ ip, interfaceName, score });
         }
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].ip;
 };
 
 const ACCESS_INFO_FILE_CANDIDATES = [
