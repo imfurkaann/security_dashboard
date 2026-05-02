@@ -34,6 +34,10 @@ const normalizeDisplayFileName = (value: string): string => {
     }
 };
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 export default function Sgk() {
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -152,12 +156,12 @@ export default function Sgk() {
     const filteredRecords = useMemo(() => {
         return allRecords.filter(record => {
             // Full name filter
-            if (filters.full_name && !record.full_name.toLowerCase().includes(filters.full_name.toLowerCase())) {
+            if (filters.full_name && !normalizeSearchText(record.full_name).includes(normalizeSearchText(filters.full_name))) {
                 return false;
             }
 
             // Company name filter
-            if (filters.company_name && record.company_name && !record.company_name.toLowerCase().includes(filters.company_name.toLowerCase())) {
+            if (filters.company_name && !normalizeSearchText(record.company_name).includes(normalizeSearchText(filters.company_name))) {
                 return false;
             }
 
@@ -269,8 +273,11 @@ export default function Sgk() {
             return;
         }
 
-        if (selectedFiles.length > 10) {
-            alert('En fazla 10 dosya yükleyebilirsiniz');
+        const maxTotalBytes = 50 * 1024 * 1024;
+        const totalBytes = selectedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+
+        if (totalBytes > maxTotalBytes) {
+            alert('Toplam dosya boyutu en fazla 50MB olabilir');
             return;
         }
 

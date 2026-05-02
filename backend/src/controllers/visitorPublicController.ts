@@ -552,7 +552,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
 
         emitApiMutation({
             method: 'POST',
-            path: '/api/sgk/records',
+            path: '/api/visitor-public/sgk-records',
             statusCode: 201,
             timestamp: new Date().toISOString(),
             clientId: req.header('x-realtime-client-id')?.trim() || null,

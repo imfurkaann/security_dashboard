@@ -445,6 +445,33 @@ const extractHostIpFromAccessInfo = (): string | null => {
     return null;
 };
 
+const extractFrontendPortFromFrontendEnv = (): string | null => {
+    // Look for frontend/.env or ../frontend/.env relative to project root
+    const candidates = [
+        path.resolve(process.cwd(), 'frontend', '.env'),
+        path.resolve(process.cwd(), '..', 'frontend', '.env'),
+        path.resolve(__dirname, '..', '..', 'frontend', '.env')
+    ];
+
+    for (const filePath of candidates) {
+        try {
+            if (!fs.existsSync(filePath)) continue;
+            const content = fs.readFileSync(filePath, 'utf8');
+            // Look for FRONTEND_PORT= or VITE_PORT=
+            const matchFront = content.match(/^\s*FRONTEND_PORT\s*=\s*(\d+)\s*$/m);
+            if (matchFront && matchFront[1]) return matchFront[1].trim();
+            const matchVite = content.match(/^\s*VITE_PORT\s*=\s*(\d+)\s*$/m);
+            if (matchVite && matchVite[1]) return matchVite[1].trim();
+            const matchPort = content.match(/^\s*PORT\s*=\s*(\d+)\s*$/m);
+            if (matchPort && matchPort[1]) return matchPort[1].trim();
+        } catch {
+            continue;
+        }
+    }
+
+    return null;
+};
+
 const extractHostFromRequest = (req: Request): string | null => {
     const origin = req.header('origin') || req.header('referer') || req.header('host');
     if (!origin) return null;
@@ -472,7 +499,7 @@ export const getAdminNetworkInfo = async (req: Request, res: Response): Promise<
         const accessInfoHostIp = extractHostIpFromAccessInfo();
         const requestHostIp = extractHostFromRequest(req);
         const localIp = configuredHostIp || accessInfoHostIp || requestHostIp || getLocalPrivateIPv4();
-        const frontendPort = process.env.FRONTEND_PORT || '5173';
+        const frontendPort = process.env.FRONTEND_PORT || extractFrontendPortFromFrontendEnv() || '5173';
         const backendPort = process.env.PORT || '5000';
 
         const frontendBaseUrl = localIp

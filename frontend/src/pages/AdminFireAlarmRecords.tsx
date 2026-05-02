@@ -10,6 +10,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 interface FireAlarmRecord {
     id: string;
     alarm_number: string | null;
@@ -103,10 +107,10 @@ export default function AdminFireAlarmRecords() {
     // Filtered records
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
-            if (alarmNumber && !record.alarm_number?.toLowerCase().includes(alarmNumber.toLowerCase())) return false;
-            if (location && !record.location.toLowerCase().includes(location.toLowerCase())) return false;
-            if (recordedBy && !record.recorded_by_name?.toLowerCase().includes(recordedBy.toLowerCase())) return false;
-            if (resolvedBy && !record.resolved_by_name?.toLowerCase().includes(resolvedBy.toLowerCase())) return false;
+            if (alarmNumber && !normalizeSearchText(record.alarm_number).includes(normalizeSearchText(alarmNumber))) return false;
+            if (location && !normalizeSearchText(record.location).includes(normalizeSearchText(location))) return false;
+            if (recordedBy && !normalizeSearchText(record.recorded_by_name).includes(normalizeSearchText(recordedBy))) return false;
+            if (resolvedBy && !normalizeSearchText(record.resolved_by_name).includes(normalizeSearchText(resolvedBy))) return false;
             if (status === 'deleted' && !record.deleted_at) return false;
             if (status === 'active' && (record.resolved || Boolean(record.deleted_at))) return false;
             if (status === 'resolved' && (!record.resolved || Boolean(record.deleted_at))) return false;

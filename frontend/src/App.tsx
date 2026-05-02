@@ -41,6 +41,7 @@ import EquipmentCheck from './pages/EquipmentCheck';
 import GuestRegistry from './pages/GuestRegistry';
 import QrVisitorCheckin from './pages/QrVisitorCheckin';
 import QrSgkUpload from './pages/QrSgkUpload';
+import QrLanding from './pages/QrLanding';
 import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
 import { getRealtimeClientId } from './realtime/clientId';
 import { initializeRealtimeClient } from './realtime/socket';
@@ -57,6 +58,7 @@ function AppShell() {
         <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/qr" element={<QrLanding />} />
           <Route path="/qr/visitor-checkin" element={<QrVisitorCheckin />} />
           <Route path="/qr/sgk-upload" element={<QrSgkUpload />} />
 

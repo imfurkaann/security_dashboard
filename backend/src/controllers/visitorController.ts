@@ -634,6 +634,7 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
              SET exit_date = NULL,
                  exit_time = NULL,
                  exit_by = NULL,
+                 exit_by_name = NULL,
                  status = 'inside',
                  updated_at = now()
              WHERE id = $1`,
@@ -682,11 +683,7 @@ export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): P
         }
 
         const result = await sendWhatsAppTextMessage(message.trim());
-        res.status(200).json({
-            success: result.success,
-            messageId: result.messageId,
-            reason: result.reason,
-        });
+        res.status(200).json(result);
     } catch (error) {
         console.error('Send visitor WhatsApp message error:', error);
         res.status(500).json({

@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
-const VISITOR_QR_PATH = '/qr/visitor-checkin';
+const VISITOR_QR_PATH = '/qr';
 
 interface GateOption {
     code: string;
@@ -80,22 +80,35 @@ export default function AdminVisitorQrManagement() {
     });
 
     useEffect(() => {
-        const resolveLanTargetIfNeeded = async () => {
-            if (!isLocalhostOrigin) return;
+    const resolveLanTarget = async () => {
+        try {
+            const response = await api.get('/admin/network-info');
+            let frontendBaseUrl = response.data?.data?.frontendBaseUrl;
 
-            try {
-                const response = await api.get('/admin/network-info');
-                const frontendBaseUrl = response.data?.data?.frontendBaseUrl;
-                if (frontendBaseUrl) {
-                    setQrBaseUrl(String(frontendBaseUrl).replace(/\/$/, ''));
+            if (frontendBaseUrl) {
+                // 1. Backend'den gelen IP'nin sonundaki "/" işaretini temizle
+                frontendBaseUrl = String(frontendBaseUrl).replace(/\/$/, '');
+                
+                // 2. Tarayıcıdan o anki portu al (Örn: "5173")
+                const currentPort = window.location.port;
+
+                // 3. Eğer backend'den gelen adreste port yoksa (içinde ":" geçmiyorsa) 
+                // ve tarayıcıda bir port varsa, portu ekle
+                if (currentPort && !frontendBaseUrl.includes(':')) {
+                    // "http://172.16.33.8" -> "http://172.16.33.8:5173" olur
+                    frontendBaseUrl = `${frontendBaseUrl}:${currentPort}`;
                 }
-            } catch (error) {
-                console.error('LAN adresi alınamadı, localhost kullanılacak:', error);
-            }
-        };
 
-        void resolveLanTargetIfNeeded();
-    }, [isLocalhostOrigin]);
+                setQrBaseUrl(frontendBaseUrl);
+            }
+        } catch (error) {
+            // Eğer admin endpoint erişilemezse mevcut qrBaseUrl (window.origin) kullanılacak
+            console.error('LAN adresi alınamadı; mevcut origin kullanılacak:', error);
+        }
+    };
+
+    void resolveLanTarget();
+}, [isLocalhostOrigin]);
 
     useEffect(() => {
         setQrDataUrlByGate({});

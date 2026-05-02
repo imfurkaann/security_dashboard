@@ -16,6 +16,10 @@ interface Personnel {
     updated_at: string;
 }
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 export default function AdminManagePersonnel() {
     const [personnel, setPersonnel] = useState<Personnel[]>([]);
     const [loading, setLoading] = useState(true);
@@ -190,10 +194,11 @@ export default function AdminManagePersonnel() {
 
     // Filter personnel based on search and filters
     const filteredPersonnel = personnel.filter(person => {
-        const matchesSearch = searchTerm === '' ||
-            person.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            person.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            person.username.toLowerCase().includes(searchTerm.toLowerCase());
+        const normalizedSearch = normalizeSearchText(searchTerm);
+        const matchesSearch = normalizedSearch === '' ||
+            normalizeSearchText(person.first_name).includes(normalizedSearch) ||
+            normalizeSearchText(person.last_name).includes(normalizedSearch) ||
+            normalizeSearchText(person.username).includes(normalizedSearch);
 
         const matchesRole = roleFilter === 'all' || person.role === roleFilter;
 

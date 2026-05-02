@@ -62,15 +62,27 @@ export default function QrSgkUpload() {
     const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = Array.from(e.target.files || []);
         const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-        const hasInvalidType = selectedFiles.some((file) => !allowedTypes.includes(file.type));
+        const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png'];
+
+        const hasInvalidType = selectedFiles.some((file) => {
+            if (allowedTypes.includes(file.type)) return false;
+            const name = file.name || '';
+            const dot = name.lastIndexOf('.');
+            if (dot === -1) return true;
+            const ext = name.slice(dot).toLowerCase();
+            return !allowedExts.includes(ext);
+        });
 
         if (hasInvalidType) {
             setErrorMessage('Sadece PDF, JPG, JPEG ve PNG dosyalari yuklenebilir.');
             return;
         }
 
-        if (selectedFiles.length > 10) {
-            setErrorMessage('En fazla 10 dosya yukleyebilirsiniz.');
+        const maxTotalBytes = 50 * 1024 * 1024;
+        const totalBytes = selectedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+
+        if (totalBytes > maxTotalBytes) {
+            setErrorMessage('Toplam dosya boyutu en fazla 50MB olabilir.');
             return;
         }
 
@@ -92,7 +104,7 @@ export default function QrSgkUpload() {
     const goBackToMenu = useCallback(() => {
         if (typeof window === 'undefined') return;
         const currentUrl = new URL(window.location.href);
-        currentUrl.pathname = '/qr/visitor-checkin';
+        currentUrl.pathname = '/qr';
         currentUrl.searchParams.delete('done');
         currentUrl.searchParams.delete('action');
         window.location.assign(`${currentUrl.pathname}${currentUrl.search}`);

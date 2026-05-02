@@ -10,6 +10,10 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
 
+const normalizeSearchText = (value: string | null | undefined): string => {
+    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
+};
+
 export default function VehicleRecords() {
     const [records, setRecords] = useState<VehicleUsage[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -69,22 +73,22 @@ export default function VehicleRecords() {
             }
 
             // Manager filter
-            if (filters.manager && !record.manager.toLowerCase().includes(filters.manager.toLowerCase())) {
+            if (filters.manager && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager))) {
                 return false;
             }
 
             // Destination filter
-            if (filters.destination && !record.destination.toLowerCase().includes(filters.destination.toLowerCase())) {
+            if (filters.destination && !normalizeSearchText(record.destination).includes(normalizeSearchText(filters.destination))) {
                 return false;
             }
 
             // Given by filter
-            if (filters.given_by && record.given_by && !record.given_by.toLowerCase().includes(filters.given_by.toLowerCase())) {
+            if (filters.given_by && !normalizeSearchText(record.given_by).includes(normalizeSearchText(filters.given_by))) {
                 return false;
             }
 
             // Returned by filter
-            if (filters.returned_by && record.returned_by && !record.returned_by.toLowerCase().includes(filters.returned_by.toLowerCase())) {
+            if (filters.returned_by && !normalizeSearchText(record.returned_by).includes(normalizeSearchText(filters.returned_by))) {
                 return false;
             }
 

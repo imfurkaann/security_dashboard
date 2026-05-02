@@ -28,8 +28,11 @@ const normalizeMultipartText = (value: string | undefined): string | undefined =
     return fixed.includes('�') ? value : fixed;
 };
 
-export const SGK_MAX_FILE_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_FILE_SIZE_MB, 25);
+export const SGK_MAX_FILE_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_FILE_SIZE_MB, 50);
 export const SGK_MAX_FILE_SIZE_BYTES = SGK_MAX_FILE_SIZE_MB * 1024 * 1024;
+
+export const SGK_MAX_TOTAL_UPLOAD_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_TOTAL_UPLOAD_SIZE_MB, 50);
+export const SGK_MAX_TOTAL_UPLOAD_SIZE_BYTES = SGK_MAX_TOTAL_UPLOAD_SIZE_MB * 1024 * 1024;
 
 // Klasör yoksa oluştur
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -158,7 +161,11 @@ const fileFilter = (_req: Express.Request, file: Express.Multer.File, cb: multer
         'image/png'
     ];
 
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    // Fallback: some mobile browsers/providers send PDFs as application/octet-stream
+    // so also allow by file extension when mimetype is generic
+    const ext = path.extname(file.originalname || '').toLowerCase();
+
+    if (allowedMimeTypes.includes(file.mimetype) || (ext === '.pdf' && (file.mimetype === 'application/octet-stream' || !file.mimetype))) {
         cb(null, true);
     } else {
         cb(new Error('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir'));
@@ -172,10 +179,47 @@ export const sgkUpload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-        fileSize: SGK_MAX_FILE_SIZE_BYTES,
-        files: 10
+        fileSize: SGK_MAX_FILE_SIZE_BYTES
     }
 });
+
+export const collectUploadedFiles = (req: Express.Request): Express.Multer.File[] => {
+    const filesFromSingle = (req as any).file ? [((req as any).file as Express.Multer.File)] : [];
+    const files = (req as any).files as unknown;
+
+    if (!files) {
+        return filesFromSingle;
+    }
+
+    if (Array.isArray(files)) {
+        return [...filesFromSingle, ...files];
+    }
+
+    const filesMap = files as { [fieldname: string]: Express.Multer.File[] };
+    const filesFromFields = Object.values(filesMap).flat();
+    return [...filesFromSingle, ...filesFromFields];
+};
+
+export const enforceSgkTotalUploadLimit: import('express').RequestHandler = (req, res, next) => {
+    const uploadedFiles = collectUploadedFiles(req);
+    const totalBytes = uploadedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
+
+    if (totalBytes <= SGK_MAX_TOTAL_UPLOAD_SIZE_BYTES) {
+        next();
+        return;
+    }
+
+    uploadedFiles.forEach((file) => {
+        if (file && (file as any).filename) {
+            deleteFile((file as any).filename);
+        }
+    });
+
+    res.status(413).json({
+        success: false,
+        message: `Toplam yükleme boyutu çok büyük. En fazla ${SGK_MAX_TOTAL_UPLOAD_SIZE_MB}MB olabilir.`
+    });
+};
 
 /**
  * Dosya yolunu al (absolute path garantili)

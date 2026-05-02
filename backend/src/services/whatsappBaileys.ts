@@ -13,6 +13,10 @@ type WhatsAppSendResult = {
     success: boolean;
     messageId?: string;
     reason?: string;
+    errorCode?: string;
+    debugId?: string;
+    manualFallbackSuggested?: boolean;
+    durationMs?: number;
 };
 
 type WhatsAppConnectionStatus = {
@@ -40,7 +44,68 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let configuredTargetJid: string | null = process.env.WHATSAPP_TARGET_GROUP_JID || process.env.WHATSAPP_TARGET_JID || null;
 
 const CONNECTION_TIMEOUT_MS = Number(process.env.WHATSAPP_CONNECT_TIMEOUT_MS || 30000);
+const SEND_CONNECT_TIMEOUT_MS = Number(process.env.WHATSAPP_SEND_CONNECT_TIMEOUT_MS || 8000);
+const SEND_MESSAGE_TIMEOUT_MS = Number(process.env.WHATSAPP_SEND_MESSAGE_TIMEOUT_MS || 8000);
 const MAX_RECONNECT_ATTEMPTS = 5;
+
+const createDebugId = (): string => {
+    return `wa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+        promise
+            .then((value) => {
+                clearTimeout(timer);
+                resolve(value);
+            })
+            .catch((error) => {
+                clearTimeout(timer);
+                reject(error);
+            });
+    });
+};
+
+const classifySendError = (error: unknown): { errorCode: string; reason: string; recoverable: boolean } => {
+    const message = error instanceof Error ? error.message : String(error || 'Bilinmeyen hata');
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('timeout')) {
+        return {
+            errorCode: 'WHATSAPP_TIMEOUT',
+            reason: 'WhatsApp mesaj gönderimi zaman aşımına uğradı.',
+            recoverable: true,
+        };
+    }
+
+    if (
+        normalized.includes('connection closed')
+        || normalized.includes('connection was lost')
+        || normalized.includes('connection terminated')
+        || normalized.includes('socket closed')
+    ) {
+        return {
+            errorCode: 'WHATSAPP_CONNECTION_CLOSED',
+            reason: 'WhatsApp bağlantısı mesaj gönderimi sırasında koptu.',
+            recoverable: true,
+        };
+    }
+
+    if (normalized.includes('not connected') || normalized.includes('not open')) {
+        return {
+            errorCode: 'WHATSAPP_NOT_CONNECTED',
+            reason: 'WhatsApp bağlı değil. Lütfen QR kodunu okutun.',
+            recoverable: true,
+        };
+    }
+
+    return {
+        errorCode: 'WHATSAPP_SEND_FAILED',
+        reason: message,
+        recoverable: false,
+    };
+};
 
 const scheduleWarmupReconnect = (delayMs: number): void => {
     if (reconnectTimer) {
@@ -264,7 +329,7 @@ const createConnection = async (): Promise<WASocket> => {
     return waSocket;
 };
 
-const ensureConnection = async (): Promise<WASocket> => {
+const ensureConnection = async (timeoutMs: number = CONNECTION_TIMEOUT_MS): Promise<WASocket> => {
     // Socket mevcutsa ve açıksa, return et
     if (socket && isSocketOpen) {
         return socket;
@@ -272,7 +337,7 @@ const ensureConnection = async (): Promise<WASocket> => {
 
     // connectingPromise mevcutsa, bekle
     if (connectingPromise) {
-        return connectingPromise;
+        return withTimeout(connectingPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
     }
 
     // Yeni connection oluştur
@@ -287,7 +352,7 @@ const ensureConnection = async (): Promise<WASocket> => {
         }
     })();
 
-    return connectingPromise;
+    return withTimeout(connectingPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
 };
 
 export const getWhatsAppConnectionStatus = (): WhatsAppConnectionStatus => ({
@@ -299,52 +364,111 @@ export const getWhatsAppConnectionStatus = (): WhatsAppConnectionStatus => ({
 });
 
 export const sendWhatsAppTextMessage = async (text: string): Promise<WhatsAppSendResult> => {
+    const debugId = createDebugId();
+    const startedAt = Date.now();
+
     if (!isWhatsAppAutoSendEnabled()) {
-        return { success: false, reason: 'WHATSAPP_ENABLED=false' };
+        return {
+            success: false,
+            reason: 'WHATSAPP_ENABLED=false',
+            errorCode: 'WHATSAPP_DISABLED',
+            debugId,
+            manualFallbackSuggested: true,
+            durationMs: Date.now() - startedAt,
+        };
     }
 
     const targetJid = getTargetJid();
     if (!targetJid) {
-        return { success: false, reason: 'WHATSAPP_TARGET_GROUP_JID veya WHATSAPP_TARGET_JID tanımlı değil' };
+        return {
+            success: false,
+            reason: 'WHATSAPP_TARGET_GROUP_JID veya WHATSAPP_TARGET_JID tanımlı değil',
+            errorCode: 'WHATSAPP_TARGET_MISSING',
+            debugId,
+            manualFallbackSuggested: true,
+            durationMs: Date.now() - startedAt,
+        };
     }
 
-    const isRecoverableSendError = (error: unknown): boolean => {
-        const message = error instanceof Error ? error.message : String(error || '');
-        const normalized = message.toLowerCase();
-        return normalized.includes('connection closed')
-            || normalized.includes('connection was lost')
-            || normalized.includes('timed out')
-            || normalized.includes('connection terminated');
+    // Normalize text and ensure emoji presentation for ambiguous symbols
+    const normalizeTextForWhatsApp = (input: string): string => {
+        if (!input) return input;
+
+        // Normalize Unicode to NFC to avoid split codepoints
+        let out = input.normalize('NFC');
+
+        // Some characters (in Misc Symbols / Dingbats ranges) may be rendered
+        // as text by some clients unless followed by Variation Selector-16 (FE0F).
+        // Force FE0F where missing for those ranges to improve rendering consistency.
+        out = out.replace(/([\u2600-\u26FF\u2700-\u27BF])(?!\uFE0F)/g, '$1\uFE0F');
+
+        return out;
     };
 
     const sendOnce = async (): Promise<WhatsAppSendResult> => {
-        const waSocket = await ensureConnection();
-        const result = await waSocket.sendMessage(targetJid, { text });
+        const waSocket = await ensureConnection(SEND_CONNECT_TIMEOUT_MS);
+        const preparedText = normalizeTextForWhatsApp(text);
+        const result = await withTimeout(
+            waSocket.sendMessage(targetJid, { text: preparedText }),
+            SEND_MESSAGE_TIMEOUT_MS,
+            'WhatsApp mesaj gönderimi timeout oldu.'
+        );
         return {
             success: true,
             messageId: result?.key?.id ?? undefined,
+            debugId,
+            durationMs: Date.now() - startedAt,
         };
     };
 
     try {
         return await sendOnce();
     } catch (error) {
-        if (isRecoverableSendError(error)) {
+        const classified = classifySendError(error);
+        if (classified.recoverable) {
             console.warn('WhatsApp send: bağlantı gönderim anında kapandı, yeniden bağlanıp tekrar deneniyor...');
             try {
                 restartWhatsAppConnection();
                 return await sendOnce();
             } catch (retryError) {
+                const retryClassified = classifySendError(retryError);
+                console.error('[WhatsAppSendFail][Retry]', {
+                    debugId,
+                    errorCode: retryClassified.errorCode,
+                    reason: retryClassified.reason,
+                    durationMs: Date.now() - startedAt,
+                    targetJid,
+                    isSocketOpen,
+                    lastDisconnectReason,
+                });
                 return {
                     success: false,
-                    reason: retryError instanceof Error ? retryError.message : 'Mesaj gönderimi yeniden denemede başarısız oldu',
+                    reason: retryClassified.reason,
+                    errorCode: retryClassified.errorCode,
+                    debugId,
+                    manualFallbackSuggested: true,
+                    durationMs: Date.now() - startedAt,
                 };
             }
         }
 
+        console.error('[WhatsAppSendFail]', {
+            debugId,
+            errorCode: classified.errorCode,
+            reason: classified.reason,
+            durationMs: Date.now() - startedAt,
+            targetJid,
+            isSocketOpen,
+            lastDisconnectReason,
+        });
+
         return {
             success: false,
-            reason: error instanceof Error ? error.message : 'Mesaj gönderiminde bilinmeyen hata',
+            reason: classified.reason,
+            errorCode: classified.errorCode,
+            debugId,
+            manualFallbackSuggested: true,
+            durationMs: Date.now() - startedAt,
         };
     }
 };
