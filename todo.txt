@@ -3,8 +3,7 @@ websocket kodları güçlü modeller ile açıkları kapatıalcak.
 tüm proje genel olarak tekrardan güvenlik önlemleri ve hatalı kısımları düzeltiecek
 
 port düzenlemesi dinamikleştirilecek. port değşince fronten oromatik o porta bağlancak
-whatapp mesajı gödnerilemediğinde hata düşmeli
 KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
-KAYITLAR GERİ ALINDIĞIND VERİLER GÜNCELLENİYOR MU
 excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.
 
+telefon daha okunaklı yazılacak

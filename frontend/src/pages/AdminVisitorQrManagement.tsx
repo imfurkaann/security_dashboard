@@ -80,40 +80,42 @@ export default function AdminVisitorQrManagement() {
     });
 
     useEffect(() => {
-    const resolveLanTarget = async () => {
-        try {
-            const response = await api.get('/admin/network-info');
-            let frontendBaseUrl = response.data?.data?.frontendBaseUrl;
+        if (!isLocalhostOrigin) return;
 
-            if (frontendBaseUrl) {
-                // 1. Backend'den gelen IP'nin sonundaki "/" işaretini temizle
-                frontendBaseUrl = String(frontendBaseUrl).replace(/\/$/, '');
-                
-                // 2. Tarayıcıdan o anki portu al (Örn: "5173")
-                const currentPort = window.location.port;
+        const resolveLanTarget = async () => {
+            try {
+                const response = await api.get('/admin/network-info');
+                let frontendBaseUrl = response.data?.data?.frontendBaseUrl;
 
-                // 3. Eğer backend'den gelen adreste explicit port yoksa ve tarayıcıda bir port varsa, portu ekle
-                if (currentPort) {
-                    try {
-                        const parsed = new URL(frontendBaseUrl);
-                        if (!parsed.port) {
-                            frontendBaseUrl = `${frontendBaseUrl}:${currentPort}`;
+                if (frontendBaseUrl) {
+                    // 1. Backend'den gelen IP'nin sonundaki "/" işaretini temizle
+                    frontendBaseUrl = String(frontendBaseUrl).replace(/\/$/, '');
+
+                    // 2. Tarayıcıdan o anki portu al (Örn: "5173")
+                    const currentPort = window.location.port;
+
+                    // 3. Eğer backend'den gelen adreste explicit port yoksa ve tarayıcıda bir port varsa, portu ekle
+                    if (currentPort) {
+                        try {
+                            const parsed = new URL(frontendBaseUrl);
+                            if (!parsed.port) {
+                                frontendBaseUrl = `${frontendBaseUrl}:${currentPort}`;
+                            }
+                        } catch {
+                            // URL parse edilemezse mevcut davranisi bozma
                         }
-                    } catch {
-                        // URL parse edilemezse mevcut davranisi bozma
                     }
+
+                    setQrBaseUrl(frontendBaseUrl);
                 }
-
-                setQrBaseUrl(frontendBaseUrl);
+            } catch (error) {
+                // Eğer admin endpoint erişilemezse mevcut qrBaseUrl (window.origin) kullanılacak
+                console.error('LAN adresi alınamadı; mevcut origin kullanılacak:', error);
             }
-        } catch (error) {
-            // Eğer admin endpoint erişilemezse mevcut qrBaseUrl (window.origin) kullanılacak
-            console.error('LAN adresi alınamadı; mevcut origin kullanılacak:', error);
-        }
-    };
+        };
 
-    void resolveLanTarget();
-}, [isLocalhostOrigin]);
+        void resolveLanTarget();
+    }, [isLocalhostOrigin]);
 
     useEffect(() => {
         setQrDataUrlByGate({});
