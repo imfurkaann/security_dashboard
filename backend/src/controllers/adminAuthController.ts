@@ -525,7 +525,9 @@ export const getAdminNetworkInfo = async (req: Request, res: Response): Promise<
         const configuredHostIp = process.env.PUBLIC_HOST_IP?.trim() || process.env.HOST_IP?.trim() || '';
         const accessInfoHostIp = extractHostIpFromAccessInfo();
         const requestHostIp = extractHostFromRequest(req);
-        const localIp = configuredHostIp || accessInfoHostIp || requestHostIp || getLocalPrivateIPv4();
+        // Prefer the actual host used by the admin UI request (LAN-safe and not stale),
+        // then fall back to access-info file or container/OS network probing.
+        const localIp = configuredHostIp || requestHostIp || accessInfoHostIp || getLocalPrivateIPv4();
         const frontendPort = process.env.FRONTEND_PORT || extractFrontendPortFromFrontendEnv() || '5173';
         const backendPort = process.env.PORT || '5000';
 
