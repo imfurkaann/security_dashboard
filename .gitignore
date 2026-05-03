@@ -40,8 +40,9 @@ backups/*.sql.gz
 # Docker (auto-generated)
 docker-compose.override.yml
 ERISIM_BILGILERI.txt
-backend\reports
-backend\sgk_kayitlari
+backend/reports/
+backend/sgk_kayitlari/
+
 
 # TypeScript
 *.tsbuildinfo
