@@ -6,6 +6,5 @@ port düzenlemesi dinamikleştirilecek. port değşince fronten oromatik o porta
 whatapp mesajı gödnerilemediğinde hata düşmeli
 KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
 KAYITLAR GERİ ALINDIĞIND VERİLER GÜNCELLENİYOR MU
-KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
 excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.
 
