@@ -159,37 +159,92 @@ function Add-FirewallRulesIfNeeded {
 }
 
 function Get-HostIPAddress {
+    function Test-IsVirtualAdapter($adapter) {
+        if (-not $adapter) { return $true }
+
+        # Birçok sanal adaptörde HardwareInterface=false olur (Hyper-V/WSL/Docker/VPN)
+        if ($adapter.PSObject.Properties.Name -contains 'HardwareInterface') {
+            if (-not $adapter.HardwareInterface) { return $true }
+        }
+
+        $name = ($adapter.Name | ForEach-Object { "$_" }).ToLowerInvariant()
+        $desc = ($adapter.InterfaceDescription | ForEach-Object { "$_" }).ToLowerInvariant()
+
+        if ($name -match 'docker|wsl|vethernet|hyper-v|virtualbox|vmware|loopback|nat|tap|vpn') { return $true }
+        if ($desc -match 'docker|wsl|hyper-v|virtual|virtualbox|vmware|loopback|nat|tap|vpn') { return $true }
+
+        return $false
+    }
+
+    function Get-ScoredCandidate($ipAddress, $adapterName) {
+        $score = 0
+        if ($ipAddress.StartsWith('192.168.')) { $score += 100 }
+        elseif ($ipAddress.StartsWith('10.')) { $score += 80 }
+        elseif ($ipAddress -match '^172\.(1[6-9]|2\d|3[0-1])\.') { $score += 60 }
+
+        $adapterLower = ("$adapterName").ToLowerInvariant()
+        if ($adapterLower -match 'wi-?fi|wireless') { $score += 10 }
+        if ($adapterLower -match 'ethernet') { $score += 5 }
+
+        return @{ Score = $score; IP = $ipAddress; Adapter = $adapterName }
+    }
+
     # Oncelik: Varsayilan internet rotasinin bagli oldugu adaptor
     try {
-        $defaultRoute = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' |
+        $defaultRoutes = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' |
             Sort-Object RouteMetric, ifMetric |
-            Select-Object -First 1
+            Select-Object -First 5
 
-        if ($defaultRoute) {
-            $ipConfig = Get-NetIPAddress -InterfaceIndex $defaultRoute.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $routeCandidates = @()
+
+        foreach ($route in $defaultRoutes) {
+            $adapter = Get-NetAdapter -InterfaceIndex $route.InterfaceIndex -ErrorAction SilentlyContinue
+            if (Test-IsVirtualAdapter $adapter) { continue }
+
+            $ipConfig = Get-NetIPAddress -InterfaceIndex $route.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
             foreach ($ip in $ipConfig) {
-                if ($ip.IPAddress -ne '127.0.0.1' -and $ip.IPAddress -notlike '169.254.*' -and $ip.AddressState -eq 'Preferred') {
-                    $adapter = Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex -ErrorAction SilentlyContinue
-                    return @{
-                        IP            = $ip.IPAddress
-                        Adapter       = if ($adapter) { $adapter.Name } else { 'Unknown' }
-                        InCameraRange = Test-IPInCameraRange $ip.IPAddress
-                    }
+                if ($ip.IPAddress -eq '127.0.0.1') { continue }
+                if ($ip.IPAddress -like '169.254.*') { continue }
+                if ($ip.AddressState -ne 'Preferred') { continue }
+
+                $isPrivate = (
+                    $ip.IPAddress.StartsWith('192.168.') -or
+                    $ip.IPAddress.StartsWith('10.') -or
+                    ($ip.IPAddress -match '^172\.(1[6-9]|2\d|3[0-1])\.')
+                )
+                if (-not $isPrivate) { continue }
+
+                $scored = Get-ScoredCandidate $ip.IPAddress $adapter.Name
+                $routeCandidates += @{
+                    Score      = $scored.Score
+                    IP         = $scored.IP
+                    Adapter    = $scored.Adapter
+                    RouteMetric = $route.RouteMetric
+                    IfMetric    = $route.ifMetric
                 }
+            }
+        }
+
+        if ($routeCandidates.Count -gt 0) {
+            $best = $routeCandidates | Sort-Object -Property @(
+                @{ Expression = 'Score'; Descending = $true },
+                @{ Expression = 'RouteMetric'; Descending = $false },
+                @{ Expression = 'IfMetric'; Descending = $false }
+            ) | Select-Object -First 1
+            return @{
+                IP            = $best.IP
+                Adapter       = $best.Adapter
+                InCameraRange = Test-IPInCameraRange $best.IP
             }
         }
     }
     catch { }
 
     # Fallback: Fiziksel adaptorler (Wi-Fi, Ethernet)
-    # Docker/WSL/Hyper-V sanal adaptorlerini (vEthernet) atla
+    # Sanal adaptorleri (Docker/WSL/Hyper-V/VPN) atla
     $physicalAdapters = Get-NetAdapter | Where-Object { 
         $_.Status -eq 'Up' -and 
-        $_.Name -notlike 'vEthernet*' -and 
-        $_.Name -notlike 'Docker*' -and
-        $_.Name -notlike 'WSL*' -and
-        $_.InterfaceDescription -notlike '*Virtual*' -and
-        $_.InterfaceDescription -notlike '*Hyper-V*'
+        -not (Test-IsVirtualAdapter $_)
     }
     
     # Once fiziksel adaptorlerden IP bul
@@ -207,21 +262,38 @@ function Get-HostIPAddress {
         }
     }
     
-    # Fiziksel bulunamazsa tum adaptorlerden dene (eski davranis)
+    # Fiziksel bulunamazsa tum adaptorlerden skorlu secim yap (en iyi aday)
+    $candidates = @()
     $allAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
     foreach ($adapter in $allAdapters) {
+        if (Test-IsVirtualAdapter $adapter) { continue }
+
         $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        
         foreach ($ip in $ipConfig) {
-            if ($ip.IPAddress -ne "127.0.0.1" -and $ip.IPAddress -notlike "169.254.*") {
-                return @{
-                    IP            = $ip.IPAddress
-                    Adapter       = $adapter.Name
-                    InCameraRange = Test-IPInCameraRange $ip.IPAddress
-                }
-            }
+            if ($ip.IPAddress -eq '127.0.0.1') { continue }
+            if ($ip.IPAddress -like '169.254.*') { continue }
+            if ($ip.AddressState -ne 'Preferred') { continue }
+
+            $isPrivate = (
+                $ip.IPAddress.StartsWith('192.168.') -or
+                $ip.IPAddress.StartsWith('10.') -or
+                ($ip.IPAddress -match '^172\.(1[6-9]|2\d|3[0-1])\.')
+            )
+            if (-not $isPrivate) { continue }
+
+            $candidates += (Get-ScoredCandidate $ip.IPAddress $adapter.Name)
         }
     }
+
+    if ($candidates.Count -gt 0) {
+        $best = $candidates | Sort-Object Score -Descending | Select-Object -First 1
+        return @{
+            IP            = $best.IP
+            Adapter       = $best.Adapter
+            InCameraRange = Test-IPInCameraRange $best.IP
+        }
+    }
+
     return $null
 }
 

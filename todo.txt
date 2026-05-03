@@ -6,4 +6,4 @@ port düzenlemesi dinamikleştirilecek. port değşince fronten oromatik o porta
 KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
 excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.
 
-telefon daha okunaklı yazılacak
+telefon daha okunaklı yazılacak 
