@@ -704,8 +704,7 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
         { header: 'Çıkış Tarihi', key: 'exitDate', width: 15 },
         { header: 'Çıkış Saati', key: 'exitTime', width: 12 },
         { header: 'Açıklama', key: 'description', width: 25 },
-        { header: 'Elektrik İstasyonu', key: 'isElectric', width: 15 },
-        { header: 'Taşeron İşçi', key: 'isContractor', width: 12 },
+        { header: 'Etiket', key: 'tags', width: 25 },
         { header: 'Giriş Kaydı Yapan', key: 'entryPersonnel', width: 20 },
         { header: 'Çıkış Kaydı Yapan', key: 'exitPersonnel', width: 20 }
     ];
@@ -723,6 +722,17 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
     });
 
     records.forEach((record) => {
+        // Etiket: her kayıt için tek değer
+        // Öncelik: Günübirlik Misafir -> Şarj İstasyonu -> Taşeron İşçi
+        let tag = '';
+        if (record.daily_guest) {
+            tag = 'Günübirlik Misafir';
+        } else if (record.for_electric_station) {
+            tag = 'Şarj İstasyonu';
+        } else if (record.subcontractor_worker) {
+            tag = 'Taşeron İşçi';
+        }
+
         const row = worksheet.addRow({
             plate: record.vehicle_plate || '-',
             name: record.full_name || '-',
@@ -736,8 +746,7 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
             exitDate: formatDate(record.exit_date),
             exitTime: record.exit_time ? record.exit_time.substring(0, 5) : '-',
             description: record.notes || '-',
-            isElectric: record.for_electric_station ? 'Evet' : 'Hayır',
-            isContractor: record.subcontractor_worker ? 'Evet' : 'Hayır',
+            tags: tag || '-',
             entryPersonnel: record.entry_personnel_name || record.entry_by_name || '-',
             exitPersonnel: record.exit_personnel_name || record.exit_by_name || '-'
         });

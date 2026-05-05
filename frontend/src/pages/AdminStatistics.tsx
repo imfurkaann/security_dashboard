@@ -1212,10 +1212,10 @@ const AdminStatistics = () => {
                                     </div>
                                 )}
 
-                                {/* Elektrik İstasyonu Ziyaretleri */}
+                                {/* Şarj İstasyonu Ziyaretleri */}
                                 {visitorTrends.electricStationVisitors && visitorTrends.electricStationVisitors.length > 0 && (
                                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Elektrik İstasyonu Ziyaretleri ({getDaysLabel()})</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800 mb-4">⚡ Şarj İstasyonu Ziyaretleri ({getDaysLabel()})</h3>
                                         <ResponsiveContainer width="100%" height={300}>
                                             <BarChart data={visitorTrends.electricStationVisitors}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
