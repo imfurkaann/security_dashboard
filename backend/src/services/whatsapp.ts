@@ -125,7 +125,7 @@ export const createVisitorRecordMessage = (data: {
         specialTags.push('Taşeron İşçi');
     }
     if (data.forElectricStation) {
-        specialTags.push('Elektrik İstasyonu');
+        specialTags.push('Şarj İstasyonu');
     }
     if (data.dailyGuest) {
         specialTags.push('Günübirlik Misafir');
@@ -211,7 +211,7 @@ export const createVisitorExitMessage = (data: {
         specialTags.push('Taşeron İşçi');
     }
     if (data.forElectricStation) {
-        specialTags.push('Elektrik İstasyonu');
+        specialTags.push('Şarj İstasyonu');
     }
     if (data.dailyGuest) {
         specialTags.push('Günübirlik Misafir');

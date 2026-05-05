@@ -4,6 +4,5 @@ tüm proje genel olarak tekrardan güvenlik önlemleri ve hatalı kısımları d
 
 port düzenlemesi dinamikleştirilecek. port değşince fronten oromatik o porta bağlancak
 KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
-excel verilerinde kadyederken etiket kısmı kolon oalcak ve orada yazacak.
 
 telefon daha okunaklı yazılacak 

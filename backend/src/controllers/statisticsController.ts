@@ -197,7 +197,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
             const categoryComparison = await client.query(`
                 SELECT 
                     CASE 
-                        WHEN for_electric_station = true THEN 'Elektrik İstasyonu'
+                        WHEN for_electric_station = true THEN 'Şarj İstasyonu'
                         WHEN subcontractor_worker = true THEN 'Taşeron İşçi'
                         ELSE 'Diğer'
                     END as category,
@@ -208,7 +208,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                   AND deleted_at IS NULL
                 GROUP BY 
                     CASE 
-                        WHEN for_electric_station = true THEN 'Elektrik İstasyonu'
+                        WHEN for_electric_station = true THEN 'Şarj İstasyonu'
                         WHEN subcontractor_worker = true THEN 'Taşeron İşçi'
                         ELSE 'Diğer'
                     END
