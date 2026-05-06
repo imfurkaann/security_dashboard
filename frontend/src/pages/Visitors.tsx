@@ -214,7 +214,7 @@ export default function Visitors() {
         daily_guest: !!formData.daily_guest,
         entry_tag: !!formData.entry_tag,
         exit_tag: !!formData.exit_tag,
-        send_whatsapp: true,  // WhatsApp modalı her yeni kayıtta otomatik açılsın
+        send_whatsapp: !!formData.send_whatsapp,  // WhatsApp modalı her yeni kayıtta otomatik açılsın (kullanıcının seçimine göre)
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
     }), [formData]);
@@ -839,12 +839,12 @@ export default function Visitors() {
 
             {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
                             <div className="flex justify-between items-center gap-4 mb-6">
                                 <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Ziyaretçi Düzenle' : 'Yeni Ziyaretçi'}</h2>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2">
                                         {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
                                             <button
                                                 key={option.value}
@@ -857,7 +857,8 @@ export default function Visitors() {
                                             />
                                         ))}
                                     </div>
-                                    <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
+                                        {/* WhatsApp toggle removed from header; placed with other tag checkboxes below */}
+                                        <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -957,6 +958,10 @@ export default function Visitors() {
                                         <label className="inline-flex items-center">
                                             <input type="checkbox" checked={!!formData.exit_tag} onChange={(e) => setFormData({ ...formData, exit_tag: e.target.checked })} className="mr-2" />
                                             <span className="text-sm">Çıkış</span>
+                                        </label>
+                                        <label className="inline-flex items-center">
+                                            <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
+                                            <span className="text-sm">WhatsApp Mesajı Gönder</span>
                                         </label>
                                     </div>
                                 </div>
