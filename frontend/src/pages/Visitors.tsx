@@ -24,6 +24,36 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     return tags;
 };
 
+const VISITOR_HIGHLIGHT_OPTIONS = [
+    { value: 'none', label: 'Varsayılan', color: '#f3f4f6' },
+    { value: 'rose', label: 'Gül Kırmızısı', color: '#e11d48' },
+    { value: 'amber', label: 'Sarı', color: '#d97706' },
+    { value: 'emerald', label: 'Yeşil', color: '#059669' },
+    { value: 'sky', label: 'Mavi', color: '#0284c7' },
+    { value: 'violet', label: 'Mor', color: '#7c3aed' },
+    { value: 'orange', label: 'Turuncu', color: '#ea580c' },
+    { value: 'pink', label: 'Pembe', color: '#db2777' },
+    { value: 'brown', label: 'Kahverengi', color: '#92400e' },
+] as const;
+
+const VISITOR_ROW_BG_COLORS: Record<string, string> = {
+    none: '',
+    rose: '#fb7185',
+    amber: '#fbbf24',
+    emerald: '#6ee7b7',
+    sky: '#7dd3fc',
+    violet: '#a78bfa',
+    orange: '#fdba74',
+    pink: '#f472b6',
+    brown: '#d4a373',
+};
+
+const getVisitorRowStyle = (record: VisitorRecord): { backgroundColor: string } | undefined => {
+    const color = VISITOR_ROW_BG_COLORS[record.highlight_color || 'none'];
+    if (!color) return undefined;
+    return { backgroundColor: color };
+};
+
 // Initial form state
 const INITIAL_FORM_DATA: VisitorFormData = {
     vehicle_plate: '',
@@ -34,6 +64,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     children_count: '',
     phone: '',
     notes: '',
+    highlight_color: 'none',
     subcontractor_worker: false,
     for_electric_station: false,
     daily_guest: false,
@@ -152,6 +183,7 @@ export default function Visitors() {
             children_count: rec.children_count ?? 0,
             phone: rec.phone || '',
             notes: rec.notes || '',
+            highlight_color: rec.highlight_color || 'none',
             subcontractor_worker: rec.subcontractor_worker ?? false,
             for_electric_station: rec.for_electric_station ?? false,
             daily_guest: rec.daily_guest ?? false,
@@ -176,6 +208,7 @@ export default function Visitors() {
         children_count: formData.children_count === '' ? 0 : Number(formData.children_count),
         phone: normalizePhone(formData.phone) || null,
         notes: formData.notes?.trim() || null,
+        highlight_color: formData.highlight_color || 'none',
         subcontractor_worker: !!formData.subcontractor_worker,
         for_electric_station: !!formData.for_electric_station,
         daily_guest: !!formData.daily_guest,
@@ -681,7 +714,7 @@ export default function Visitors() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {filteredRecords.map(rec => (
-                                            <tr key={rec.id} className={`hover:bg-gray-50 ${rec.deleted_at ? 'opacity-60' : ''}`}>
+                                            <tr key={rec.id} className={`hover:bg-gray-50 ${rec.deleted_at ? 'opacity-60' : ''}`} style={getVisitorRowStyle(rec)}>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                     <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
                                                         {rec.deleted_at ? (
@@ -808,13 +841,28 @@ export default function Visitors() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
+                            <div className="flex justify-between items-center gap-4 mb-6">
                                 <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Ziyaretçi Düzenle' : 'Yeni Ziyaretçi'}</h2>
-                                <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, highlight_color: option.value })}
+                                                className={`w-6 h-6 rounded-full border-2 transition ${formData.highlight_color === option.value ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                                                style={{ backgroundColor: option.color }}
+                                                title={option.label}
+                                                aria-label={option.label}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
                                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
-                                </button>
+                                    </button>
+                                </div>
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-4">

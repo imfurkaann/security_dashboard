@@ -88,6 +88,7 @@ export interface VisitorRecord {
     gate?: string | null;
     phone: string | null;
     notes: string | null;
+    highlight_color?: string;
     subcontractor_worker?: boolean;
     for_electric_station?: boolean;
     daily_guest?: boolean;
@@ -203,6 +204,7 @@ export interface VisitorFormData {
     children_count: string | number;
     phone: string;
     notes: string;
+    highlight_color: string;
     subcontractor_worker: boolean;
     for_electric_station: boolean;
     daily_guest: boolean;
