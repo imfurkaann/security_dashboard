@@ -46,6 +46,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.subcontractor_worker,
                 vr.for_electric_station,
                 vr.daily_guest,
+                vr.entry_tag,
+                vr.exit_tag,
                 vr.entry_date,
                 vr.entry_time,
                 vr.exit_date,
@@ -82,6 +84,8 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             subcontractor_worker: row.subcontractor_worker,
             for_electric_station: row.for_electric_station,
             daily_guest: row.daily_guest,
+            entry_tag: row.entry_tag,
+            exit_tag: row.exit_tag,
             entry_date: row.entry_date,
             entry_time: row.entry_time,
             exit_date: row.exit_date,
@@ -111,7 +115,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
@@ -196,12 +200,12 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
                 person_count, children_count, gate, phone, notes, subcontractor_worker, for_electric_station, daily_guest,
-                entry_by, entry_date, entry_time, status, send_whatsapp
+                entry_tag, exit_tag, entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
                 CURRENT_DATE, 
-                COALESCE($15::time, CURRENT_TIME), 
-                'inside', $16
+                COALESCE($17::time, CURRENT_TIME), 
+                'inside', $18
             )
             RETURNING entry_date, entry_time
         `;
@@ -221,6 +225,8 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             Boolean(subcontractor_worker),
             Boolean(for_electric_station),
             Boolean(daily_guest),
+            Boolean(entry_tag),
+            Boolean(exit_tag),
             personnel_id,
             entry_time || null,  // entry_time boşsa null, CURRENT_TIME kullanılacak
             sendWhatsApp
@@ -296,7 +302,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_time, exit_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, exit_time } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -358,6 +364,8 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         if (subcontractor_worker !== undefined) { updates.push(`subcontractor_worker = $${idx++}`); params.push(Boolean(subcontractor_worker)); }
         if (for_electric_station !== undefined) { updates.push(`for_electric_station = $${idx++}`); params.push(Boolean(for_electric_station)); }
         if (daily_guest !== undefined) { updates.push(`daily_guest = $${idx++}`); params.push(Boolean(daily_guest)); }
+        if (entry_tag !== undefined) { updates.push(`entry_tag = $${idx++}`); params.push(Boolean(entry_tag)); }
+        if (exit_tag !== undefined) { updates.push(`exit_tag = $${idx++}`); params.push(Boolean(exit_tag)); }
         if (phone !== undefined) {
             updates.push(`phone = $${idx++}`);
             params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
