@@ -723,7 +723,7 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
 
     records.forEach((record) => {
         // Etiket: her kayıt için tek değer
-        // Öncelik: Günübirlik Misafir -> Şarj İstasyonu -> Taşeron İşçi
+        // Öncelik: Günübirlik Misafir -> Şarj İstasyonu -> Taşeron İşçi -> Giriş -> Çıkış
         let tag = '';
         if (record.daily_guest) {
             tag = 'Günübirlik Misafir';
@@ -731,6 +731,10 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
             tag = 'Şarj İstasyonu';
         } else if (record.subcontractor_worker) {
             tag = 'Taşeron İşçi';
+        } else if (record.entry_tag) {
+            tag = 'Giriş';
+        } else if (record.exit_tag) {
+            tag = 'Çıkış';
         }
 
         const row = worksheet.addRow({

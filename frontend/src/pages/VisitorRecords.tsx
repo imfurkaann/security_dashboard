@@ -14,6 +14,16 @@ const normalizeSearchText = (value: string | null | undefined): string => {
     return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
 };
 
+const getVisitorTags = (record: VisitorRecord): string[] => {
+    const tags: string[] = [];
+    if (record.subcontractor_worker) tags.push('Taşeron İşçi');
+    if (record.for_electric_station) tags.push('Şarj İstasyonu');
+    if (record.daily_guest) tags.push('Günübirlik Misafir');
+    if (record.entry_tag) tags.push('Giriş');
+    if (record.exit_tag) tags.push('Çıkış');
+    return tags;
+};
+
 export default function VisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -127,6 +137,12 @@ export default function VisitorRecords() {
                 return false;
             }
             if (filters.visitor_tag === 'daily_guest' && !record.daily_guest) {
+                return false;
+            }
+            if (filters.visitor_tag === 'entry_tag' && !record.entry_tag) {
+                return false;
+            }
+            if (filters.visitor_tag === 'exit_tag' && !record.exit_tag) {
                 return false;
             }
 
@@ -433,6 +449,8 @@ export default function VisitorRecords() {
                                 <option value="subcontractor">Taşeron İşçi</option>
                                 <option value="electric">Şarj İstasyonu</option>
                                 <option value="daily_guest">Günübirlik Misafir</option>
+                                <option value="entry_tag">Giriş</option>
+                                <option value="exit_tag">Çıkış</option>
                             </select>
                         </div>
 
@@ -537,18 +555,20 @@ export default function VisitorRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[2360px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[2520px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                                <th className="w-[105px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
                                                 <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                                 <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                                 <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
-                                                <th className="w-[105px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                                 <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                <th className="w-[190px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiket</th>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
                                                 <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
                                                 <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                                 <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
@@ -560,6 +580,12 @@ export default function VisitorRecords() {
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                     <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-500">-</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
@@ -570,15 +596,6 @@ export default function VisitorRecords() {
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{record.visiting_person || '-'}</div>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.children_count ?? '-'}</div>
-                                                    </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
@@ -593,6 +610,15 @@ export default function VisitorRecords() {
                                                         ) : (
                                                             <span className="text-gray-400">-</span>
                                                         )}
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{getVisitorTags(record).join(', ') || '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
+                                                    </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.children_count ?? '-'}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{record.phone || '-'}</div>

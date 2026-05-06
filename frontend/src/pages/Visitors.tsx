@@ -14,6 +14,16 @@ const normalizeSearchText = (value: string | null | undefined): string => {
     return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
 };
 
+const getVisitorTags = (record: VisitorRecord): string[] => {
+    const tags: string[] = [];
+    if (record.subcontractor_worker) tags.push('Taşeron İşçi');
+    if (record.for_electric_station) tags.push('Şarj İstasyonu');
+    if (record.daily_guest) tags.push('Günübirlik Misafir');
+    if (record.entry_tag) tags.push('Giriş');
+    if (record.exit_tag) tags.push('Çıkış');
+    return tags;
+};
+
 // Initial form state
 const INITIAL_FORM_DATA: VisitorFormData = {
     vehicle_plate: '',
@@ -27,6 +37,8 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     subcontractor_worker: false,
     for_electric_station: false,
     daily_guest: false,
+    entry_tag: false,
+    exit_tag: false,
     send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
@@ -143,6 +155,8 @@ export default function Visitors() {
             subcontractor_worker: rec.subcontractor_worker ?? false,
             for_electric_station: rec.for_electric_station ?? false,
             daily_guest: rec.daily_guest ?? false,
+            entry_tag: rec.entry_tag ?? false,
+            exit_tag: rec.exit_tag ?? false,
             send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
             entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
             exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
@@ -165,7 +179,9 @@ export default function Visitors() {
         subcontractor_worker: !!formData.subcontractor_worker,
         for_electric_station: !!formData.for_electric_station,
         daily_guest: !!formData.daily_guest,
-        send_whatsapp: !!formData.send_whatsapp,  // WhatsApp bildirimi
+        entry_tag: !!formData.entry_tag,
+        exit_tag: !!formData.exit_tag,
+        send_whatsapp: true,  // WhatsApp modalı her yeni kayıtta otomatik açılsın
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
     }), [formData]);
@@ -313,6 +329,8 @@ export default function Visitors() {
         subcontractorCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.subcontractor_worker).length,
         electricStationCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.for_electric_station).length,
         dailyGuestCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.daily_guest).length,
+        entryTagCount: nonDeletedRecords.filter(r => r.entry_tag).length,
+        exitTagCount: nonDeletedRecords.filter(r => r.exit_tag).length,
     }), [nonDeletedRecords]);
 
     const visitorVehicleCount = useMemo(() => {
@@ -376,6 +394,8 @@ export default function Visitors() {
                 if (filter === 'subcontractor') return r.status === 'inside' && r.subcontractor_worker;
                 if (filter === 'electric') return r.status === 'inside' && r.for_electric_station;
                 if (filter === 'daily_guest') return r.status === 'inside' && r.daily_guest;
+                if (filter === 'entry_tag') return Boolean(r.entry_tag);
+                if (filter === 'exit_tag') return Boolean(r.exit_tag);
                 if (filter === 'deleted') return true;
                 return true;
             })();
@@ -563,6 +583,12 @@ export default function Visitors() {
                             <button onClick={() => setFilter('daily_guest')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'daily_guest' ? 'bg-cyan-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Günübirlik Misafir ({stats.dailyGuestCount})
                             </button>
+                            <button onClick={() => setFilter('entry_tag')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'entry_tag' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Giriş ({stats.entryTagCount})
+                            </button>
+                            <button onClick={() => setFilter('exit_tag')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'exit_tag' ? 'bg-rose-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                                Çıkış ({stats.exitTagCount})
+                            </button>
                             <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
@@ -632,7 +658,7 @@ export default function Visitors() {
                     ) : (
                         <div ref={tableScrollRef} className="overflow-x-hidden overflow-y-auto pb-2">
                             <div>
-                                <table className="w-full min-w-[1800px] table-auto divide-y divide-gray-200">
+                                <table className="w-full min-w-[2000px] table-auto divide-y divide-gray-200">
                                     <thead className="bg-gray-50 sticky top-0 z-10">
                                         <tr>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
@@ -641,10 +667,11 @@ export default function Visitors() {
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiket</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
+                                            <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
                                             <th className="px-6 py-3 whitespace-nowrap w-[260px] text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                             <th className="px-6 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
@@ -713,14 +740,6 @@ export default function Visitors() {
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{rec.person_count ?? '-'}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">{rec.children_count ?? 0}</div>
-                                                </td>
-
-                                                <td className="px-6 py-4 whitespace-nowrap">
                                                     <div className="text-sm text-gray-900">{formatDate(rec.entry_date)}</div>
                                                     <div className="text-xs text-gray-500">{formatTime(rec.entry_time)}</div>
                                                 </td>
@@ -734,6 +753,18 @@ export default function Visitors() {
                                                     ) : (
                                                         <span className="text-sm text-gray-400">-</span>
                                                     )}
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{getVisitorTags(rec).join(', ') || '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{rec.person_count ?? '-'}</div>
+                                                </td>
+
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-900">{rec.children_count ?? 0}</div>
                                                 </td>
 
                                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -871,12 +902,14 @@ export default function Visitors() {
                                             <input type="checkbox" checked={!!formData.daily_guest} onChange={(e) => setFormData({ ...formData, daily_guest: e.target.checked })} className="mr-2" />
                                             <span className="text-sm">Günübirlik Misafir</span>
                                         </label>
-                                        {!isEditing && (
-                                            <label className="inline-flex items-center">
-                                                <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
-                                                <span className="text-sm text-green-700 font-medium">WhatsApp Bildirimi Gönder</span>
-                                            </label>
-                                        )}
+                                        <label className="inline-flex items-center">
+                                            <input type="checkbox" checked={!!formData.entry_tag} onChange={(e) => setFormData({ ...formData, entry_tag: e.target.checked })} className="mr-2" />
+                                            <span className="text-sm">Giriş</span>
+                                        </label>
+                                        <label className="inline-flex items-center">
+                                            <input type="checkbox" checked={!!formData.exit_tag} onChange={(e) => setFormData({ ...formData, exit_tag: e.target.checked })} className="mr-2" />
+                                            <span className="text-sm">Çıkış</span>
+                                        </label>
                                     </div>
                                 </div>
 
