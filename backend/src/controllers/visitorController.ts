@@ -9,6 +9,16 @@ import { createVisitorRecordMessage, createVisitorExitMessage } from '../service
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
 
+const VISITOR_HIGHLIGHT_COLORS = ['none', 'rose', 'amber', 'emerald', 'sky', 'violet', 'orange', 'pink', 'brown'] as const;
+
+const normalizeVisitorHighlightColor = (value: unknown): string => {
+    if (typeof value !== 'string') return 'none';
+    const normalized = value.trim().toLowerCase();
+    return VISITOR_HIGHLIGHT_COLORS.includes(normalized as (typeof VISITOR_HIGHLIGHT_COLORS)[number])
+        ? normalized
+        : 'none';
+};
+
 const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
     if (value === null || value === undefined) return null;
 
@@ -43,6 +53,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.gate,
                 vr.phone,
                 vr.notes,
+                vr.highlight_color,
                 vr.subcontractor_worker,
                 vr.for_electric_station,
                 vr.daily_guest,
@@ -81,6 +92,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             gate: row.gate,
             phone: row.phone,
             notes: decodeStoredHtmlEntities(row.notes),
+            highlight_color: row.highlight_color || 'none',
             subcontractor_worker: row.subcontractor_worker,
             for_electric_station: row.for_electric_station,
             daily_guest: row.daily_guest,
@@ -115,7 +127,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, highlight_color } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
@@ -184,6 +196,8 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             childrenCountValue = Number(children_count);
         }
 
+        const normalizedHighlightColor = normalizeVisitorHighlightColor(highlight_color);
+
         const id = uuidv4();
 
         // Kullanıcı doğrulama
@@ -199,13 +213,13 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         const insertQuery = `
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
-                person_count, children_count, gate, phone, notes, subcontractor_worker, for_electric_station, daily_guest,
+                person_count, children_count, gate, phone, notes, highlight_color, subcontractor_worker, for_electric_station, daily_guest,
                 entry_tag, exit_tag, entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
                 CURRENT_DATE, 
-                COALESCE($17::time, CURRENT_TIME), 
-                'inside', $18
+                COALESCE($18::time, CURRENT_TIME), 
+                'inside', $19
             )
             RETURNING entry_date, entry_time
         `;
@@ -222,6 +236,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             gate,
             normalizedPhone,
             sanitizedNotes,
+            normalizedHighlightColor,
             Boolean(subcontractor_worker),
             Boolean(for_electric_station),
             Boolean(daily_guest),
@@ -302,7 +317,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, exit_time } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, exit_time, highlight_color } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -366,6 +381,7 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         if (daily_guest !== undefined) { updates.push(`daily_guest = $${idx++}`); params.push(Boolean(daily_guest)); }
         if (entry_tag !== undefined) { updates.push(`entry_tag = $${idx++}`); params.push(Boolean(entry_tag)); }
         if (exit_tag !== undefined) { updates.push(`exit_tag = $${idx++}`); params.push(Boolean(exit_tag)); }
+        if (highlight_color !== undefined) { updates.push(`highlight_color = $${idx++}`); params.push(normalizeVisitorHighlightColor(highlight_color)); }
         if (phone !== undefined) {
             updates.push(`phone = $${idx++}`);
             params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);

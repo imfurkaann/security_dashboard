@@ -25,6 +25,24 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     return tags;
 };
 
+const VISITOR_ROW_BG_COLORS: Record<string, string> = {
+    none: '',
+    rose: '#fb7185',
+    amber: '#fbbf24',
+    emerald: '#6ee7b7',
+    sky: '#7dd3fc',
+    violet: '#a78bfa',
+    orange: '#fdba74',
+    pink: '#f472b6',
+    brown: '#d4a373',
+};
+
+const getVisitorRowStyle = (record: VisitorRecord): { backgroundColor: string } | undefined => {
+    const color = VISITOR_ROW_BG_COLORS[record.highlight_color || 'none'];
+    if (!color) return undefined;
+    return { backgroundColor: color };
+};
+
 export default function AdminVisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -564,7 +582,7 @@ export default function AdminVisitorRecords() {
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
-                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`} style={getVisitorRowStyle(record)}>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-500">-</div>
                                                     </td>
