@@ -7,6 +7,18 @@ import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
+// Tag options for dropdowns
+const VISITOR_TAGS_OPTIONS = [
+    { id: 'subcontractor_worker', label: 'Taşeron İşçi' },
+    { id: 'for_electric_station', label: 'Şarj İstasyonu' },
+    { id: 'daily_guest', label: 'Günübirlik Misafir' },
+    { id: 'entry_tag', label: 'Giriş' },
+    { id: 'exit_tag', label: 'Çıkış' },
+    { id: 'tour_entry', label: 'Tur Giriş' },
+    { id: 'tour_exit', label: 'Tur Çıkış' },
+    { id: 'guide', label: 'Rehber' },
+];
+
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
 
@@ -21,6 +33,9 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.daily_guest) tags.push('Günübirlik Misafir');
     if (record.entry_tag) tags.push('Giriş');
     if (record.exit_tag) tags.push('Çıkış');
+    if (record.tour_entry) tags.push('Tur Giriş');
+    if (record.tour_exit) tags.push('Tur Çıkış');
+    if (record.guide) tags.push('Rehber');
     return tags;
 };
 
@@ -70,6 +85,9 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     daily_guest: false,
     entry_tag: false,
     exit_tag: false,
+    tour_entry: false,
+    tour_exit: false,
+    guide: false,
     send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
@@ -96,6 +114,7 @@ export default function Visitors() {
     const [formData, setFormData] = useState<VisitorFormData>(INITIAL_FORM_DATA);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
+    const [openTagsDropdown, setOpenTagsDropdown] = useState(false);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
@@ -164,11 +183,13 @@ export default function Visitors() {
         setFormData(INITIAL_FORM_DATA);
         setIsEditing(false);
         setEditingId(null);
+        setOpenTagsDropdown(false);
     }, []);
 
     // Open modal for new record
     const openModalForNew = useCallback(() => {
         resetForm();
+        setOpenTagsDropdown(false);
         setShowModal(true);
     }, [resetForm]);
 
@@ -189,12 +210,16 @@ export default function Visitors() {
             daily_guest: rec.daily_guest ?? false,
             entry_tag: rec.entry_tag ?? false,
             exit_tag: rec.exit_tag ?? false,
+            tour_entry: rec.tour_entry ?? false,
+            tour_exit: rec.tour_exit ?? false,
+            guide: rec.guide ?? false,
             send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
             entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
             exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
         });
         setIsEditing(true);
         setEditingId(rec.id);
+        setOpenTagsDropdown(false);
         setShowModal(true);
     }, []);
 
@@ -214,6 +239,9 @@ export default function Visitors() {
         daily_guest: !!formData.daily_guest,
         entry_tag: !!formData.entry_tag,
         exit_tag: !!formData.exit_tag,
+        tour_entry: !!formData.tour_entry,
+        tour_exit: !!formData.tour_exit,
+        guide: !!formData.guide,
         send_whatsapp: !!formData.send_whatsapp,  // WhatsApp modalı her yeni kayıtta otomatik açılsın (kullanıcının seçimine göre)
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
@@ -362,8 +390,8 @@ export default function Visitors() {
         subcontractorCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.subcontractor_worker).length,
         electricStationCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.for_electric_station).length,
         dailyGuestCount: nonDeletedRecords.filter(r => r.status === 'inside' && r.daily_guest).length,
-        entryTagCount: nonDeletedRecords.filter(r => r.entry_tag).length,
-        exitTagCount: nonDeletedRecords.filter(r => r.exit_tag).length,
+        entryTagCount: nonDeletedRecords.filter(r => r.entry_tag || r.tour_entry).length,
+        exitTagCount: nonDeletedRecords.filter(r => r.exit_tag || r.tour_exit).length,
     }), [nonDeletedRecords]);
 
     const visitorVehicleCount = useMemo(() => {
@@ -427,8 +455,8 @@ export default function Visitors() {
                 if (filter === 'subcontractor') return r.status === 'inside' && r.subcontractor_worker;
                 if (filter === 'electric') return r.status === 'inside' && r.for_electric_station;
                 if (filter === 'daily_guest') return r.status === 'inside' && r.daily_guest;
-                if (filter === 'entry_tag') return Boolean(r.entry_tag);
-                if (filter === 'exit_tag') return Boolean(r.exit_tag);
+                if (filter === 'entry_tag') return Boolean(r.entry_tag || r.tour_entry);
+                if (filter === 'exit_tag') return Boolean(r.exit_tag || r.tour_exit);
                 if (filter === 'deleted') return true;
                 return true;
             })();
@@ -934,31 +962,53 @@ export default function Visitors() {
                                         </div>
                                     )}
 
-                                    <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>
-                                        <textarea value={formData.notes || ''} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={3} placeholder="Notlar..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    {/* Tags Dropdown and Description in a grid */}
+                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Tags Dropdown */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setOpenTagsDropdown(!openTagsDropdown)}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
+                                                >
+                                                    <span className="text-sm">
+                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                    </span>
+                                                    <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                    </svg>
+                                                </button>
+                                                {openTagsDropdown && (
+                                                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                                        {VISITOR_TAGS_OPTIONS.map((option) => (
+                                                            <label key={option.id} className="flex items-center px-4 py-2 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!formData[option.id as keyof VisitorFormData]}
+                                                                    onChange={(e) => {
+                                                                        setFormData({ ...formData, [option.id]: e.target.checked });
+                                                                    }}
+                                                                    className="mr-3 w-4 h-4 cursor-pointer"
+                                                                />
+                                                                <span className="text-sm text-gray-700">{option.label}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Description / Notes */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>
+                                            <textarea value={formData.notes || ''} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={3} placeholder="Notlar..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-6 md:col-span-2 pt-2">
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.subcontractor_worker} onChange={(e) => setFormData({ ...formData, subcontractor_worker: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Taşeron İşçi</span>
-                                        </label>
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.for_electric_station} onChange={(e) => setFormData({ ...formData, for_electric_station: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Şarj İstasyonu</span>
-                                        </label>
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.daily_guest} onChange={(e) => setFormData({ ...formData, daily_guest: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Günübirlik Misafir</span>
-                                        </label>
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.entry_tag} onChange={(e) => setFormData({ ...formData, entry_tag: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Giriş</span>
-                                        </label>
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.exit_tag} onChange={(e) => setFormData({ ...formData, exit_tag: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">Çıkış</span>
-                                        </label>
+
+                                    {/* WhatsApp Checkbox */}
+                                    <div className="md:col-span-2 flex items-center gap-3">
                                         <label className="inline-flex items-center">
                                             <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
                                             <span className="text-sm">WhatsApp Mesajı Gönder</span>

@@ -22,6 +22,9 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.daily_guest) tags.push('Günübirlik Misafir');
     if (record.entry_tag) tags.push('Giriş');
     if (record.exit_tag) tags.push('Çıkış');
+    if (record.tour_entry) tags.push('Tur Giriş');
+    if (record.tour_exit) tags.push('Tur Çıkış');
+    if (record.guide) tags.push('Rehber');
     return tags;
 };
 
@@ -169,6 +172,15 @@ export default function AdminVisitorRecords() {
                 return false;
             }
             if (filters.visitor_tag === 'exit_tag' && !record.exit_tag) {
+                return false;
+            }
+            if (filters.visitor_tag === 'tour_entry' && !record.tour_entry) {
+                return false;
+            }
+            if (filters.visitor_tag === 'tour_exit' && !record.tour_exit) {
+                return false;
+            }
+            if (filters.visitor_tag === 'guide' && !record.guide) {
                 return false;
             }
 
@@ -455,6 +467,9 @@ export default function AdminVisitorRecords() {
                                 <option value="daily_guest">Günübirlik Misafir</option>
                                 <option value="entry_tag">Giriş</option>
                                 <option value="exit_tag">Çıkış</option>
+                                <option value="tour_entry">Tur Giriş</option>
+                                <option value="tour_exit">Tur Çıkış</option>
+                                <option value="guide">Rehber</option>
                             </select>
                         </div>
 
