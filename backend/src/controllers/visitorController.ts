@@ -59,6 +59,9 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.daily_guest,
                 vr.entry_tag,
                 vr.exit_tag,
+                vr.tour_entry,
+                vr.tour_exit,
+                vr.guide,
                 vr.entry_date,
                 vr.entry_time,
                 vr.exit_date,
@@ -98,6 +101,9 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             daily_guest: row.daily_guest,
             entry_tag: row.entry_tag,
             exit_tag: row.exit_tag,
+            tour_entry: row.tour_entry,
+            tour_exit: row.tour_exit,
+            guide: row.guide,
             entry_date: row.entry_date,
             entry_time: row.entry_time,
             exit_date: row.exit_date,
@@ -127,7 +133,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, highlight_color } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, guide, entry_time, highlight_color } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
@@ -214,12 +220,12 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             INSERT INTO visitor_records (
                 id, vehicle_plate, full_name, company_name, visiting_person,
                 person_count, children_count, gate, phone, notes, highlight_color, subcontractor_worker, for_electric_station, daily_guest,
-                entry_tag, exit_tag, entry_by, entry_date, entry_time, status, send_whatsapp
+                entry_tag, exit_tag, tour_entry, tour_exit, guide, entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 
                 CURRENT_DATE, 
-                COALESCE($18::time, CURRENT_TIME), 
-                'inside', $19
+                COALESCE($21::time, CURRENT_TIME), 
+                'inside', $22
             )
             RETURNING entry_date, entry_time
         `;
@@ -242,6 +248,9 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             Boolean(daily_guest),
             Boolean(entry_tag),
             Boolean(exit_tag),
+            Boolean(tour_entry),
+            Boolean(tour_exit),
+            Boolean(guide),
             personnel_id,
             entry_time || null,  // entry_time boşsa null, CURRENT_TIME kullanılacak
             sendWhatsApp
@@ -317,7 +326,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, entry_time, exit_time, highlight_color } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, guide, entry_time, exit_time, highlight_color } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -381,6 +390,9 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         if (daily_guest !== undefined) { updates.push(`daily_guest = $${idx++}`); params.push(Boolean(daily_guest)); }
         if (entry_tag !== undefined) { updates.push(`entry_tag = $${idx++}`); params.push(Boolean(entry_tag)); }
         if (exit_tag !== undefined) { updates.push(`exit_tag = $${idx++}`); params.push(Boolean(exit_tag)); }
+        if (tour_entry !== undefined) { updates.push(`tour_entry = $${idx++}`); params.push(Boolean(tour_entry)); }
+        if (tour_exit !== undefined) { updates.push(`tour_exit = $${idx++}`); params.push(Boolean(tour_exit)); }
+        if (guide !== undefined) { updates.push(`guide = $${idx++}`); params.push(Boolean(guide)); }
         if (highlight_color !== undefined) { updates.push(`highlight_color = $${idx++}`); params.push(normalizeVisitorHighlightColor(highlight_color)); }
         if (phone !== undefined) {
             updates.push(`phone = $${idx++}`);

@@ -94,6 +94,9 @@ export interface VisitorRecord {
     daily_guest?: boolean;
     entry_tag?: boolean;
     exit_tag?: boolean;
+    tour_entry?: boolean;
+    tour_exit?: boolean;
+    guide?: boolean;
     entry_date: string | null;
     entry_time: string | null;
     exit_date: string | null;
@@ -210,6 +213,9 @@ export interface VisitorFormData {
     daily_guest: boolean;
     entry_tag: boolean;
     exit_tag: boolean;
+    tour_entry: boolean;
+    tour_exit: boolean;
+    guide: boolean;
     send_whatsapp?: boolean;  // WhatsApp bildirimi (opsiyonel, sadece yeni kayıtlarda)
     entry_time?: string;  // Giriş saati (HH:MM formatında)
     exit_time?: string;  // Çıkış saati (HH:MM formatında)
