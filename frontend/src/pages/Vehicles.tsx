@@ -18,7 +18,7 @@ const INITIAL_FORM_DATA: VehicleFormData = {
 };
 
 export default function Vehicles() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
     const [managers, setManagers] = useState<Manager[]>([]);

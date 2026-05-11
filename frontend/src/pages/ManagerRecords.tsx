@@ -7,6 +7,8 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 
 const { RangePicker } = DatePicker;
 
@@ -17,6 +19,7 @@ const normalizeSearchText = (value: string | null | undefined): string => {
 export default function ManagerRecords() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isExporting, setIsExporting] = useState(false);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
@@ -146,6 +149,161 @@ export default function ManagerRecords() {
             }));
     }, [filteredRecords]);
 
+    const handleDownloadRecords = useCallback(async () => {
+        // Race condition guard
+        if (isExporting) {
+            return;
+        }
+
+        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+
+        if (exportableRecords.length === 0) {
+            alert('İndirilecek kayıt bulunamadı.');
+            return;
+        }
+
+        setIsExporting(true);
+
+        try {
+            const exportGroupsMap = new Map<string, ManagerRecord[]>();
+
+            exportableRecords.forEach((record) => {
+                const dayKey = dayjs(record.entry_date).format('YYYY-MM-DD');
+                if (!exportGroupsMap.has(dayKey)) {
+                    exportGroupsMap.set(dayKey, []);
+                }
+                exportGroupsMap.get(dayKey)!.push(record);
+            });
+
+            const exportGroups = Array.from(exportGroupsMap.entries())
+                .sort((a, b) => b[0].localeCompare(a[0]))
+                .map(([dayKey, items]) => ({
+                    dayKey,
+                    dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
+                    records: [...items].sort((a, b) => {
+                        const dateCompare = (a.entry_date || '').localeCompare(b.entry_date || '');
+                        if (dateCompare !== 0) return dateCompare;
+                        return (a.entry_time || '').localeCompare(b.entry_time || '');
+                    })
+                }));
+
+            const headerRow = [
+                'Müdür Adı',
+                'Kapı',
+                'Giriş Tarihi',
+                'Giriş Saati',
+                'Çıkış Tarihi',
+                'Çıkış Saati',
+                'Durum',
+                'Giriş Yapan',
+                'Çıkış Yapan',
+                'Açıklama'
+            ];
+
+            const worksheetColumnWidths = [18, 12, 14, 12, 14, 12, 12, 16, 16, 32];
+
+            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
+
+            for (const dayGroup of exportGroups) {
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet('Müdür Kayıtları');
+
+                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
+
+                const header = worksheet.addRow(headerRow);
+                header.height = 24;
+                header.eachCell((cell) => {
+                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF1D4ED8' }
+                    };
+                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+                    };
+                });
+
+                dayGroup.records.forEach((record) => {
+                    const row = worksheet.addRow([
+                        record.manager || '-',
+                        record.gate || '-',
+                        formatDate(record.entry_date),
+                        formatTime(record.entry_time),
+                        record.exit_date ? formatDate(record.exit_date) : '-',
+                        record.exit_time ? formatTime(record.exit_time) : '-',
+                        record.status || '-',
+                        record.entry_by || '-',
+                        record.exit_by || '-',
+                        record.notes || '-'
+                    ]);
+
+                    row.eachCell((cell) => {
+                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+                        };
+                    });
+                });
+
+                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
+                const fileName = `Mudir_Kayitlari_${formattedDayForFileName}.xlsx`;
+                const workbookBuffer = await workbook.xlsx.writeBuffer();
+                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
+            }
+
+            // Helper function to trigger download with proper cleanup
+            const triggerDownload = (blob: Blob, fileName: string) => {
+                return new Promise<void>((resolve) => {
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    link.style.display = 'none';
+                    document.body.appendChild(link);
+                    link.click();
+                    
+                    // Delayed cleanup to ensure download starts
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                        resolve();
+                    }, 500);
+                });
+            };
+
+            if (dayFiles.length === 1) {
+                const [singleFile] = dayFiles;
+                const blob = new Blob([singleFile.data], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                await triggerDownload(blob, singleFile.fileName);
+                return;
+            }
+
+            const zip = new JSZip();
+            dayFiles.forEach((file) => {
+                zip.file(file.fileName, file.data);
+            });
+
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
+            await triggerDownload(zipBlob, `Mudir_Kayitlari_Toplu_${timestamp}.zip`);
+        } catch (error) {
+            console.error('Export hatası:', error);
+            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [filteredRecords, isExporting]);
+
     // Clear all filters
     const clearFilters = () => {
         setFilters({
@@ -256,6 +414,28 @@ export default function ManagerRecords() {
                                 <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
+                        <button
+                            onClick={handleDownloadRecords}
+                            disabled={isExporting || loading || filteredRecords.length === 0}
+                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isExporting ? (
+                                <>
+                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    İndiriliyor...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Kayıt İndir
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </header>

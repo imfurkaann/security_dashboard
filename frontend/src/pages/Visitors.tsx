@@ -94,7 +94,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
 };
 
 export default function Visitors() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);

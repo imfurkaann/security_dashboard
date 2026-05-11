@@ -24,7 +24,7 @@ interface FireAlarm {
 type FilterType = 'today' | 'active' | 'resolved' | 'deleted';
 
 export default function FireAlarms() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [records, setRecords] = useState<FireAlarm[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
