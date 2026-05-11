@@ -196,6 +196,29 @@ const waitForSocketOpen = async (waSocket: WASocket, timeoutMs: number): Promise
     });
 };
 
+const resolvePendingConnection = async (timeoutMs: number): Promise<WASocket> => {
+    if (connectingPromise) {
+        return withTimeout(connectingPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
+    }
+
+    if (warmupPromise) {
+        const warmupSocket = await withTimeout(warmupPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
+
+        if (isSocketOpen) {
+            return warmupSocket;
+        }
+
+        await waitForSocketOpen(warmupSocket, timeoutMs);
+        socket = warmupSocket;
+        return warmupSocket;
+    }
+
+    const createdSocket = await createConnection();
+    socket = createdSocket;
+    await waitForSocketOpen(createdSocket, timeoutMs);
+    return createdSocket;
+};
+
 const createConnection = async (): Promise<WASocket> => {
     const sessionPath = getSessionPath();
     fs.mkdirSync(sessionPath, { recursive: true });
@@ -224,6 +247,7 @@ const createConnection = async (): Promise<WASocket> => {
         if (connection === 'open') {
             isSocketOpen = true;
             lastQrPayload = null;
+            warmupPromise = null;
             console.log('WhatsApp bağlantısı açıldı.');
             return;
         }
@@ -335,24 +359,15 @@ const ensureConnection = async (timeoutMs: number = CONNECTION_TIMEOUT_MS): Prom
         return socket;
     }
 
-    // connectingPromise mevcutsa, bekle
-    if (connectingPromise) {
-        return withTimeout(connectingPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
+    const pendingConnection = resolvePendingConnection(timeoutMs);
+
+    connectingPromise = pendingConnection;
+
+    try {
+        return await withTimeout(pendingConnection, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
+    } finally {
+        connectingPromise = null;
     }
-
-    // Yeni connection oluştur
-    connectingPromise = (async () => {
-        try {
-            const createdSocket = await createConnection();
-            socket = createdSocket;
-            await waitForSocketOpen(createdSocket, CONNECTION_TIMEOUT_MS);
-            return createdSocket;
-        } finally {
-            connectingPromise = null;
-        }
-    })();
-
-    return withTimeout(connectingPromise, timeoutMs, 'WhatsApp bağlantısı zaman aşımına uğradı.');
 };
 
 export const getWhatsAppConnectionStatus = (): WhatsAppConnectionStatus => ({

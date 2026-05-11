@@ -35,7 +35,7 @@ interface WeeklyRankingCelebration {
 }
 
 export default function EquipmentCheck() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 12000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
     const [gates, setGates] = useState<GateInfo[]>([]);
     const [selectedGate, setSelectedGate] = useState('');
