@@ -94,10 +94,9 @@ const getLogoutExportBaseDir = (): string => {
         return dockerExportRoot;
     }
 
-    if (process.platform === 'win32') {
-        return path.join(os.homedir(), 'Desktop', 'Guvenlik_Kayitlari');
-    }
-
+    // Do not default to the user's Desktop to avoid creating folders on developer machines.
+    // Default to a project-local `daily_exports` directory unless `DAILY_EXPORT_BASE_DIR` is set
+    // or the Docker export root exists.
     return path.resolve(process.cwd(), 'daily_exports');
 };
 
