@@ -310,12 +310,16 @@ export const adminLogout = async (req: Request, res: Response): Promise<void> =>
         console.log(`Admin logout: ${adminId} from IP: ${clientIp}`);
 
         try {
-            console.log(`[Admin Logout] Kullanıcı ${adminId} için günlük kayıtlar export ediliyor...`);
-            const exportResult = await generateLogoutExport(adminId);
-            if (exportResult.success) {
-                console.log(`[Admin Logout] Export başarılı: ${exportResult.exportPath}`);
+            if (process.env.LOGOUT_EXPORT_ENABLED === 'true') {
+                console.log(`[Admin Logout] Kullanıcı ${adminId} için günlük kayıtlar export ediliyor...`);
+                const exportResult = await generateLogoutExport(adminId);
+                if (exportResult.success) {
+                    console.log(`[Admin Logout] Export başarılı: ${exportResult.exportPath}`);
+                } else {
+                    console.error(`[Admin Logout] Export hatası: ${exportResult.error}`);
+                }
             } else {
-                console.error(`[Admin Logout] Export hatası: ${exportResult.error}`);
+                console.log('[Admin Logout] Günlük export devre dışı bırakıldı (LOGOUT_EXPORT_ENABLED!=true)');
             }
         } catch (error) {
             console.error('[Admin Logout] Export sırasında hata:', error);

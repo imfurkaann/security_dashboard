@@ -336,18 +336,24 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     const clientIp = getClientIp(req);
 
     if (userId) {
-        // Önce günlük kayıtları masaüstüne export et
-        try {
-            console.log(`[Logout] Kullanıcı ${userId} için günlük kayıtlar export ediliyor...`);
-            const exportResult = await generateLogoutExport(userId);
-            if (exportResult.success) {
-                console.log(`[Logout] Export başarılı: ${exportResult.exportPath}`);
-            } else {
-                console.error(`[Logout] Export hatası: ${exportResult.error}`);
+        // Logout export can be toggled via environment variable LOGOUT_EXPORT_ENABLED
+        // Set LOGOUT_EXPORT_ENABLED=true to enable; default is disabled for now.
+        if (process.env.LOGOUT_EXPORT_ENABLED === 'true') {
+            // Önce günlük kayıtları masaüstüne export et
+            try {
+                console.log(`[Logout] Kullanıcı ${userId} için günlük kayıtlar export ediliyor...`);
+                const exportResult = await generateLogoutExport(userId);
+                if (exportResult.success) {
+                    console.log(`[Logout] Export başarılı: ${exportResult.exportPath}`);
+                } else {
+                    console.error(`[Logout] Export hatası: ${exportResult.error}`);
+                }
+            } catch (error) {
+                console.error('[Logout] Export sırasında hata:', error);
+                // Export hatası çıkışı engellememelidir
             }
-        } catch (error) {
-            console.error('[Logout] Export sırasında hata:', error);
-            // Export hatası çıkışı engellememelidir
+        } else {
+            console.log('[Logout] Günlük export devre dışı bırakıldı (LOGOUT_EXPORT_ENABLED!=true)');
         }
 
         await logLogout(userId, clientIp);
