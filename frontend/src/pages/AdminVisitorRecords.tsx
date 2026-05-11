@@ -274,9 +274,9 @@ export default function AdminVisitorRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = a.entry_date.localeCompare(b.entry_date);
+                        const dateCompare = (a.entry_date ?? '').localeCompare(b.entry_date ?? '');
                         if (dateCompare !== 0) return dateCompare;
-                        return a.entry_time.localeCompare(b.entry_time);
+                        return (a.entry_time ?? '').localeCompare(b.entry_time ?? '');
                     })
                 }));
 

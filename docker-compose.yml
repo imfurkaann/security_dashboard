@@ -58,7 +58,7 @@ services:
       - ./database/migrations:/app/migrations:ro
       - ./ERISIM_BILGILERI.txt:/app/ERISIM_BILGILERI.txt:ro
       # Çıkış yaparken günlük export klasörü - Masaüstüne kayıt
-      - ${USERPROFILE}/Desktop/Guvenlik_Kayitlari:/app/daily_exports
+     # - ${USERPROFILE}/Desktop/Guvenlik_Kayitlari:/app/daily_exports
     ports:
       - "5000:5000"
     depends_on:

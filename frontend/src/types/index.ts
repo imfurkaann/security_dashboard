@@ -104,6 +104,10 @@ export interface VisitorRecord {
     status: 'inside' | 'exited';
     entry_by: string | null;  // Girişi kaydeden personel
     exit_by: string | null;  // Çıkışı kaydeden personel
+    // Compatibility fields sometimes used in UI/export
+    number_of_people?: number | null;
+    entry_by_name?: string | null;
+    exit_by_name?: string | null;
     deleted_at?: string | null;
     created_at: string | null;
 }
