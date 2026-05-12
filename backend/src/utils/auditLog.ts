@@ -1,9 +1,11 @@
 /**
  * Audit Log Service
  * GÜVENLİK: Tüm kritik veritabanı işlemlerini kaydeder
+ * 
+ * DURUM: Audit logging şu anda DEAKTIF durumdadır.
+ * Herhangi bir log kaydı tutulmamaktadır.
  */
 import pool from '../config/database';
-import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Audit log action türleri
@@ -28,38 +30,13 @@ export interface AuditLogEntry {
 /**
  * Audit log kaydı oluştur
  * GÜVENLİK: Bu fonksiyon asenkron olarak çalışır, ana işlemi bloklamamalı
+ * 
+ * DEAKTIF DURUM: Audit logging şu anda devre dışı bırakılmıştır.
+ * Herhangi bir log kaydı tutulmamaktadır.
  */
 export const createAuditLog = async (entry: AuditLogEntry): Promise<void> => {
-    try {
-        const id = uuidv4();
-
-        // Hassas verileri maskeleme
-        const sanitizedOldValues = maskSensitiveData(entry.oldValues);
-        const sanitizedNewValues = maskSensitiveData(entry.newValues);
-
-        // Schema'ya uygun kolon isimleri: changed_by, changed_at
-        await pool.query(
-            `INSERT INTO audit_log (
-                id, table_name, record_id, action, 
-                old_values, new_values, changed_by, 
-                ip_address, changed_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-            [
-                id,
-                entry.tableName,
-                entry.recordId,
-                entry.action,
-                sanitizedOldValues ? JSON.stringify(sanitizedOldValues) : null,
-                sanitizedNewValues ? JSON.stringify(sanitizedNewValues) : null,
-                entry.performedBy,
-                entry.ipAddress
-            ]
-        );
-    } catch (error) {
-        // Audit log hatası ana işlemi durdurmak
-        // Sadece konsola yaz ve devam et
-        console.error('Audit log kayıt hatası:', error instanceof Error ? error.message : error);
-    }
+    // Audit logging deaktif - veri tabanına yazma yapılmaz
+    return;
 };
 
 /**
@@ -166,56 +143,26 @@ export const logDataChange = async (
 
 /**
  * Belirli bir kayıt için audit geçmişini getir
+ * DEAKTIF: Audit logging devre dışı olduğundan her zaman boş array döner
  */
 export const getAuditHistory = async (
     tableName: string,
     recordId: string
 ): Promise<AuditLogEntry[]> => {
-    const result = await pool.query(
-        `SELECT 
-            table_name as "tableName",
-            record_id as "recordId",
-            action,
-            old_values as "oldValues",
-            new_values as "newValues",
-            changed_by as "performedBy",
-            ip_address as "ipAddress",
-            changed_at as "createdAt"
-        FROM audit_log 
-        WHERE table_name = $1 AND record_id = $2 
-        ORDER BY changed_at DESC
-        LIMIT 100`,
-        [tableName, recordId]
-    );
-
-    return result.rows;
+    // Audit logging deaktif - geçmiş yoktur
+    return [];
 };
 
 /**
  * Belirli bir kullanıcının son aktivitelerini getir
+ * DEAKTIF: Audit logging devre dışı olduğundan her zaman boş array döner
  */
 export const getUserActivity = async (
     userId: string,
     limit: number = 50
 ): Promise<AuditLogEntry[]> => {
-    const result = await pool.query(
-        `SELECT 
-            table_name as "tableName",
-            record_id as "recordId",
-            action,
-            old_values as "oldValues",
-            new_values as "newValues",
-            changed_by as "performedBy",
-            ip_address as "ipAddress",
-            changed_at as "createdAt"
-        FROM audit_log 
-        WHERE changed_by = $1 
-        ORDER BY changed_at DESC
-        LIMIT $2`,
-        [userId, limit]
-    );
-
-    return result.rows;
+    // Audit logging deaktif - aktivite yoktur
+    return [];
 };
 
 export default {

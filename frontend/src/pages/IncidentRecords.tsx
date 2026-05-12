@@ -8,6 +8,7 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import JSZip from 'jszip';
 
 const { RangePicker } = DatePicker;
 
@@ -22,6 +23,7 @@ interface IncidentRecord {
     shift_label: string | null;
     report_content: string | null;
     report_date: string;
+    gate?: string | null;
     status: string;
     created_at: string;
     incident_time: string;
@@ -36,6 +38,7 @@ export default function IncidentRecords() {
     const [loading, setLoading] = useState(true);
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedReport, setSelectedReport] = useState<IncidentRecord | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
     const navigate = useNavigate();
 
     const fetchData = useCallback(async () => {
@@ -53,6 +56,18 @@ export default function IncidentRecords() {
     const [reportedBy, setReportedBy] = useState('');
     const [dateStart, setDateStart] = useState('');
     const [dateEnd, setDateEnd] = useState('');
+    const [selectedGate, setSelectedGate] = useState('');
+
+    // Get unique gates from records
+    const uniqueGates = useMemo(() => {
+        const gates = new Set<string>();
+        records.forEach(record => {
+            if (record.gate) {
+                gates.add(record.gate);
+            }
+        });
+        return Array.from(gates).sort();
+    }, [records]);
 
     useEffect(() => {
         void fetchData();
@@ -68,6 +83,7 @@ export default function IncidentRecords() {
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
             if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
+            if (selectedGate && record.gate !== selectedGate) return false;
 
             // Date filtering - dayjs ile yerel tarihe çevir
             if (dateStart && dateEnd) {
@@ -77,7 +93,7 @@ export default function IncidentRecords() {
 
             return true;
         });
-    }, [records, reportedBy, dateStart, dateEnd]);
+    }, [records, reportedBy, selectedGate, dateStart, dateEnd]);
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -108,6 +124,7 @@ export default function IncidentRecords() {
         setReportedBy('');
         setDateStart('');
         setDateEnd('');
+        setSelectedGate('');
     };
 
     // Open report modal
@@ -115,6 +132,46 @@ export default function IncidentRecords() {
         setSelectedReport(record);
         setShowReportModal(true);
     };
+
+    // Export handler
+    const handleDownloadRecords = useCallback(async () => {
+        if (isExporting) return;
+
+        if (filteredRecords.length === 0) {
+            alert('İndirilecek rapor bulunamadı.');
+            return;
+        }
+
+        setIsExporting(true);
+
+        try {
+            // Backend'e filtrelenmiş kayıtları gönder
+            const res = await api.post('/incidents/records/export', 
+                { records: filteredRecords },
+                { responseType: 'blob' }
+            );
+
+            // ZIP dosyasını indir
+            const blob = new Blob([res.data], { type: 'application/zip' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Vardiya_Raporlari_Export.zip';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }, 500);
+        } catch (error) {
+            console.error('Export hatası:', error);
+            alert('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [filteredRecords, isExporting]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -136,6 +193,28 @@ export default function IncidentRecords() {
                                 <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
+                        <button
+                            onClick={handleDownloadRecords}
+                            disabled={isExporting || loading || filteredRecords.length === 0}
+                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                            {isExporting ? (
+                                <>
+                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    İndiriliyor...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Rapor İndir
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </header>
@@ -153,8 +232,8 @@ export default function IncidentRecords() {
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-                        <div className="xl:col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Raporu Kaydeden</label>
                             <input
                                 type="text"
@@ -165,7 +244,23 @@ export default function IncidentRecords() {
                             />
                         </div>
 
-                        <div className="xl:col-span-2">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
+                            <select
+                                value={selectedGate}
+                                onChange={(e) => setSelectedGate(e.target.value)}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                                <option value="">Tümü</option>
+                                {uniqueGates.map((gate) => (
+                                    <option key={gate} value={gate}>
+                                        {gate}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="lg:col-span-2">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Rapor Tarihi</label>
                             <RangePicker
                                 value={[
@@ -217,11 +312,12 @@ export default function IncidentRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1150px] table-auto divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1300px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vardiya</th>
+                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                                 <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
@@ -237,8 +333,11 @@ export default function IncidentRecords() {
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{record.shift_label || '-'}</div>
                                                     </td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    </td>
                                                     <td className="px-4 py-3">
-                                                        <div className="text-sm text-gray-900 max-w-[520px] truncate">{record.description}</div>
+                                                        <div className="text-sm text-gray-900 max-w-[400px] truncate">{record.description}</div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{record.reported_by}</div>
@@ -292,9 +391,13 @@ export default function IncidentRecords() {
                                     <label className="block text-sm font-medium text-gray-500 mb-1">Vardiya</label>
                                     <p className="text-gray-900">{selectedReport.shift_label || '-'}</p>
                                 </div>
-                                <div className="col-span-2">
+                                <div>
                                     <label className="block text-sm font-medium text-gray-500 mb-1">Raporu Kaydeden</label>
                                     <p className="text-gray-900">{selectedReport.reported_by}</p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-500 mb-1">Kapı</label>
+                                    <p className="text-gray-900">{(selectedReport as any).gate || '-'}</p>
                                 </div>
                             </div>
 

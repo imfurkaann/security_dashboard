@@ -4,9 +4,9 @@ import * as path from 'path';
 
 /**
  * HTML içeriğini Word dosyasına çevirir ve hiyerarşik klasör yapısına kaydeder.
- * Yapı: reports/Yil-Ay/Gun/rapor_vardiya.docx
+ * Yapı: reports/Yil-Ay/Gun/Kapı/rapor_vardiya.docx
  */
-export async function createWordFromHtml(htmlContent: string, shiftLabel: string, reporterName?: string): Promise<string> {
+export async function createWordFromHtml(htmlContent: string, shiftLabel: string, reporterName?: string, gate?: string | null): Promise<string> {
     try {
         const plainText = htmlToPlainText(htmlContent);
         const now = new Date();
@@ -17,10 +17,14 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
         const monthName = monthNames[now.getMonth()];
         const monthFolderName = `${year}-${monthName}`;
         const dayFolderName = String(now.getDate()).padStart(2, '0');
+        
+        // Kapı klasörü (eğer gate varsa kullan, yoksa 'Belirsiz')
+        const gateFolderName = gate || 'Belirsiz';
+        const safeGateFolderName = gateFolderName.replace(/\//g, '-'); // Dosya yolunda / karakteri olmaz
 
         // 2. Klasör yolunu oluştur
         const reportsBaseDir = path.join(process.cwd(), 'reports');
-        const targetDir = path.join(reportsBaseDir, monthFolderName, dayFolderName);
+        const targetDir = path.join(reportsBaseDir, monthFolderName, dayFolderName, safeGateFolderName);
 
         // 3. Klasörleri oluştur (İzin hatasını önlemek için recursive: true)
         if (!fs.existsSync(targetDir)) {
@@ -62,6 +66,16 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
                             children: [
                                 new TextRun({
                                     text: `Rapor Yazan: ${reporterName}`,
+                                    bold: true,
+                                }),
+                            ],
+                        }),
+                    ] : []),
+                    ...(gate ? [
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: `Kapı: ${gate}`,
                                     bold: true,
                                 }),
                             ],

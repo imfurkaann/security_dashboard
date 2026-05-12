@@ -37,6 +37,7 @@ export default function AdminIncidentRecords() {
     const [loading, setLoading] = useState(true);
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedReport, setSelectedReport] = useState<IncidentRecord | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
     const navigate = useNavigate();
 
     const fetchData = useCallback(async () => {
@@ -123,6 +124,51 @@ export default function AdminIncidentRecords() {
         setShowReportModal(true);
     };
 
+    // Export handler
+    const handleDownloadRecords = useCallback(async () => {
+        if (isExporting) return;
+
+        if (filteredRecords.length === 0) {
+            alert('İndirilecek rapor bulunamadı.');
+            return;
+        }
+
+        setIsExporting(true);
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const res = await axios.post(
+                `${API_URL}/incidents/records/export`,
+                { records: filteredRecords },
+                {
+                    headers: {
+                        Authorization: `Bearer ${adminToken}`
+                    },
+                    responseType: 'blob'
+                }
+            );
+
+            const blob = new Blob([res.data], { type: 'application/zip' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'Vardiya_Raporlari_Export.zip';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            setTimeout(() => {
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            }, 500);
+        } catch (error) {
+            console.error('Export hatası:', error);
+            alert('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+        } finally {
+            setIsExporting(false);
+        }
+    }, [filteredRecords, isExporting]);
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
@@ -143,6 +189,28 @@ export default function AdminIncidentRecords() {
                                 <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
+                        <button
+                            onClick={handleDownloadRecords}
+                            disabled={isExporting || loading || filteredRecords.length === 0}
+                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                            {isExporting ? (
+                                <>
+                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    İndiriliyor...
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Rapor İndir
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </header>
