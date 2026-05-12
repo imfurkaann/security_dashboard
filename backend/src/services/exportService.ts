@@ -540,7 +540,10 @@ export async function generateLogoutExport(userId: string): Promise<{ success: b
             for (const record of incidentsResult.rows) {
                 if (record.report_file_path && fs.existsSync(record.report_file_path)) {
                     const shiftLabel = record.shift_label ? record.shift_label.replace(/:/g, '-') : '00-08';
-                    const destPath = path.join(vardiyaDir, `${shiftLabel}_${fileDateStr}.docx`);
+                    const gateFolderName = (record.gate || 'Belirsiz').replace(/[\\/]/g, '-');
+                    const gateDir = path.join(vardiyaDir, gateFolderName);
+                    fs.mkdirSync(gateDir, { recursive: true });
+                    const destPath = path.join(gateDir, `rapor_${shiftLabel}.docx`);
                     fs.copyFileSync(record.report_file_path, destPath);
                     vardiyaCount++;
                 }
@@ -1066,6 +1069,7 @@ export async function generateExportZip(
             if (options.reports.incidents) {
                 const result = await client.query(
                     `SELECT i.*, i.report_file_path,
+                                                        i.gate,
                             p.first_name || ' ' || p.last_name as personnel_name
                      FROM incidents i
                      LEFT JOIN personnel p ON i.recorded_by = p.id
@@ -1084,11 +1088,12 @@ export async function generateExportZip(
                             if (fs.existsSync(wordFilePath)) {
                                 // Vardiya bilgisini al ve dosya adı oluştur
                                 const shiftLabel = record.shift_label ? record.shift_label.replace(/:/g, '-') : '00-08';
-                                const fileName = `${shiftLabel}_${fileDateStr}.docx`;
+                                const gateFolderName = (record.gate || 'Belirsiz').replace(/[\\/]/g, '-');
+                                const fileName = `rapor_${shiftLabel}.docx`;
 
-                                // Word dosyasını ZIP'e ekle
+                                // Word dosyasını ZIP'e ekle: yıl/ay/gün/Vardiya_Raporları/kapı/rapor_16-00-00-00.docx
                                 archive.file(wordFilePath, {
-                                    name: `${folderPath}/Vardiya_Raporlari/${fileName}`
+                                    name: `${folderPath}/Vardiya_Raporlari/${gateFolderName}/${fileName}`
                                 });
                                 writtenCounts.incidents += 1;
                             } else {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getIncidentRecords, createIncidentRecord, updateIncidentStatus, createShiftReport, getShiftReport, updateShiftReport } from '../controllers/incidentController';
+import { getIncidentRecords, createIncidentRecord, updateIncidentStatus, createShiftReport, getShiftReport, updateShiftReport, exportIncidentRecordsAsWord } from '../controllers/incidentController';
 import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
@@ -9,6 +9,9 @@ router.use(authMiddleware);
 
 // Tüm rapor kayıtlarını getir
 router.get('/records', getIncidentRecords);
+
+// Raporları dışa aktar
+router.post('/records/export', exportIncidentRecordsAsWord);
 
 // Yeni rapor kaydı oluştur
 router.post('/records', createIncidentRecord);
