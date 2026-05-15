@@ -444,9 +444,7 @@ export default function FireAlarms() {
                             <button onClick={() => setFilter('active')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'active' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Aktif Alarmlar ({stats.activeAlarms})
                             </button>
-                            <button onClick={() => setFilter('resolved')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'resolved' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                                Çözülen Alarmlar ({nonDeletedRecords.filter(r => r.resolved).length})
-                            </button>
+                            {/* "Çözülen Alarmlar" tab removed as requested */}
                             <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
@@ -486,30 +484,33 @@ export default function FireAlarms() {
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                     <td className="px-3 lg:px-4 py-4 text-sm align-top">
                                                         <div className="flex items-center gap-2 whitespace-nowrap">
-                                                            <ActionButton
-                                                                onClick={() => openModalForEdit(record)}
-                                                                variant="primary"
-                                                                disabled={Boolean(record.deleted_at)}
-                                                                className="shrink-0"
-                                                            >
-                                                                Düzenle
-                                                            </ActionButton>
-                                                            {!record.resolved && !record.deleted_at && (
                                                                 <ActionButton
-                                                                    onClick={() => openResolveModal(record.id)}
-                                                                    variant="success"
+                                                                    onClick={() => openModalForEdit(record)}
+                                                                    variant="primary"
+                                                                    disabled={Boolean(record.deleted_at)}
                                                                     className="shrink-0"
                                                                 >
-                                                                    Çözümle
+                                                                    Düzenle
                                                                 </ActionButton>
-                                                            )}
-                                                            {record.deleted_at ? (
-                                                                <ActionButton onClick={() => handleRestore(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
-                                                            ) : record.resolved ? (
-                                                                <ActionButton onClick={() => handleUndoResolve(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
-                                                            ) : (
-                                                                <ActionButton onClick={() => handleDelete(record.id)} variant="danger" className="shrink-0">Sil</ActionButton>
-                                                            )}
+                                                                {!record.resolved && !record.deleted_at && (
+                                                                    <ActionButton
+                                                                        onClick={() => openResolveModal(record.id)}
+                                                                        variant="success"
+                                                                        className="shrink-0"
+                                                                    >
+                                                                        Çözümle
+                                                                    </ActionButton>
+                                                                )}
+                                                                {record.deleted_at ? (
+                                                                    <ActionButton onClick={() => handleRestore(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                                ) : (
+                                                                    <>
+                                                                        {record.resolved && (
+                                                                            <ActionButton onClick={() => handleUndoResolve(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                                        )}
+                                                                        <ActionButton onClick={() => handleDelete(record.id)} variant="danger" className="shrink-0">Sil</ActionButton>
+                                                                    </>
+                                                                )}
                                                         </div>
                                                     </td>
                                                     <td className="px-3 lg:px-4 py-4 align-top whitespace-nowrap">
