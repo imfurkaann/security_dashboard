@@ -51,6 +51,9 @@ const getVisitorRowStyle = (record: VisitorRecord): { backgroundColor: string } 
 export default function AdminVisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
     const [isExporting, setIsExporting] = useState(false);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
@@ -58,25 +61,7 @@ export default function AdminVisitorRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
-
-            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true`, config);
-            setRecords(res.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Filter states
+    // Filter states (moved before fetchData so callbacks can reference it)
     const [filters, setFilters] = useState({
         full_name: '',
         company_name: '',
@@ -94,8 +79,52 @@ export default function AdminVisitorRecords() {
         exitDateEnd: ''
     });
 
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        // If filters are applied, load full dataset to support client-side filtering
+        const anyFilterApplied = Object.values(filters).some((v) => v !== '' && v !== 'all');
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+
+            if (anyFilterApplied) {
+                // load unlimited set for filtering
+                const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&unlimited=true`, config);
+                setRecords(res.data || []);
+                setHasMore(false);
+                return;
+            }
+
+            // Paginated fetch for normal browsing to avoid heavy payloads
+            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`, config);
+            const fetched: VisitorRecord[] = res.data || [];
+
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            // If fetched less than page size, no more pages
+            setHasMore(fetched.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [filters]);
+
+    
+
     useEffect(() => {
-        void fetchData();
+        // initial load
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
@@ -187,30 +216,20 @@ export default function AdminVisitorRecords() {
                 return false;
             }
 
-            // Entry date range filter - dayjs ile yerel tarihe çevir
-            const entryDateOnly = record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '';
-            if (filters.entryDateStart && entryDateOnly) {
-                if (entryDateOnly < filters.entryDateStart) {
-                    return false;
-                }
-            }
-            if (filters.entryDateEnd && entryDateOnly) {
-                if (entryDateOnly > filters.entryDateEnd) {
-                    return false;
-                }
+            // Entry date range filter - inclusive dayjs comparison
+            if (filters.entryDateStart && filters.entryDateEnd) {
+                const d = dayjs(record.entry_date);
+                const start = dayjs(filters.entryDateStart).startOf('day');
+                const end = dayjs(filters.entryDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
-            // Exit date range filter - dayjs ile yerel tarihe çevir
-            const exitDateOnly = record.exit_date ? dayjs(record.exit_date).format('YYYY-MM-DD') : '';
-            if (filters.exitDateStart && exitDateOnly) {
-                if (exitDateOnly < filters.exitDateStart) {
-                    return false;
-                }
-            }
-            if (filters.exitDateEnd && exitDateOnly) {
-                if (exitDateOnly > filters.exitDateEnd) {
-                    return false;
-                }
+            // Exit date range filter - inclusive
+            if (filters.exitDateStart && filters.exitDateEnd && record.exit_date) {
+                const d = dayjs(record.exit_date);
+                const start = dayjs(filters.exitDateStart).startOf('day');
+                const end = dayjs(filters.exitDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -243,21 +262,60 @@ export default function AdminVisitorRecords() {
     }, [filteredRecords]);
 
     const handleDownloadRecords = useCallback(async () => {
-        // Race condition guard
-        if (isExporting) {
+        if (isExporting) return;
+
+        const entryRangeSelected = !!(filters.entryDateStart || filters.entryDateEnd);
+        const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
+
+        if (!entryRangeSelected && !exitRangeSelected) {
+            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'entry' | 'exit' = 'entry';
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (entryRangeSelected) {
+            filterBy = 'entry';
+            rangeStart = filters.entryDateStart || filters.entryDateEnd || null;
+            rangeEnd = filters.entryDateEnd || filters.entryDateStart || null;
+        } else {
+            filterBy = 'exit';
+            rangeStart = filters.exitDateStart || filters.exitDateEnd || null;
+            rangeEnd = filters.exitDateEnd || filters.exitDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = { headers: { Authorization: `Bearer ${adminToken}` } };
+            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&unlimited=true`, config);
+            const allRecords: VisitorRecord[] = res.data || [];
+
+            const start = dayjs(rangeStart).startOf('day');
+            const end = dayjs(rangeEnd).endOf('day');
+
+            const exportableRecords = allRecords
+                .filter((record) => {
+                    const dateValue = filterBy === 'entry' ? record.entry_date : record.exit_date;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                })
+                .filter(record => !record.deleted_at);
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, VisitorRecord[]>();
 
             exportableRecords.forEach((record) => {
@@ -366,7 +424,6 @@ export default function AdminVisitorRecords() {
                 dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
             }
 
-            // Helper function to trigger download with proper cleanup
             const triggerDownload = (blob: Blob, fileName: string) => {
                 return new Promise<void>((resolve) => {
                     const url = window.URL.createObjectURL(blob);
@@ -376,8 +433,6 @@ export default function AdminVisitorRecords() {
                     link.style.display = 'none';
                     document.body.appendChild(link);
                     link.click();
-                    
-                    // Delayed cleanup to ensure download starts
                     setTimeout(() => {
                         document.body.removeChild(link);
                         window.URL.revokeObjectURL(url);
@@ -475,6 +530,44 @@ export default function AdminVisitorRecords() {
             resizeObserver.disconnect();
         };
     }, [filteredRecords.length, loading]);
+
+    // Infinite scroll: load more when scrolling near bottom (container + window fallback)
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300; // px from bottom to trigger
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;

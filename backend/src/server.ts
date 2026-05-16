@@ -104,11 +104,13 @@ app.use(cors({
     maxAge: 86400 // 24 saat önbellekleme
 }));
 
-// GÜVENLİK: Request logging (audit trail)
+// GÜVENLİK: Request logging (audit trail) - include originalUrl to capture query string for debugging
 app.use((req: Request, _res: Response, next: NextFunction) => {
     const timestamp = new Date().toISOString();
     const ip = req.ip || req.socket.remoteAddress;
-    console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${ip}`);
+    // Use originalUrl to include query string (useful for debugging pagination requests)
+    const fullUrl = (req as any).originalUrl || req.path;
+    console.log(`[${timestamp}] ${req.method} ${fullUrl} - IP: ${ip}`);
     next();
 });
 

@@ -27,21 +27,6 @@ export default function VehicleRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const [recordsRes, vehiclesRes] = await Promise.all([
-                api.get('/vehicles/records?includeDeleted=true'),
-                api.get('/vehicles')
-            ]);
-            setRecords(recordsRes.data || []);
-            setVehicles(vehiclesRes.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
     // Filter states
     const [filters, setFilters] = useState({
         vehicle_plate: '',
@@ -57,15 +42,86 @@ export default function VehicleRecords() {
         returnDateEnd: ''
     });
 
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        const anyFilterApplied = Object.values(filters).some((value) => value !== '' && value !== 'all');
+
+        try {
+            const [recordsRes, vehiclesRes] = await Promise.all([
+                anyFilterApplied
+                    ? api.get('/vehicles/records?includeDeleted=true&unlimited=true')
+                    : api.get(`/vehicles/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`),
+                api.get('/vehicles')
+            ]);
+
+            const fetchedRecords = recordsRes.data || [];
+
+            if (append) {
+                setRecords(prev => [...prev, ...fetchedRecords]);
+            } else {
+                setRecords(fetchedRecords);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetchedRecords.length === PAGE_SIZE);
+            setVehicles(vehiclesRes.data || []);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [filters]);
+
     useEffect(() => {
-        void fetchData();
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['vehicles'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
         enabled: true,
     });
+
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -168,16 +224,56 @@ export default function VehicleRecords() {
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        const givenRangeSelected = !!(filters.givenDateStart || filters.givenDateEnd);
+        const returnRangeSelected = !!(filters.returnDateStart || filters.returnDateEnd);
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (!givenRangeSelected && !returnRangeSelected) {
+            alert('Lütfen teslim veya iade tarih aralığı seçin.');
+            return;
+        }
+
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'given' | 'return' = 'given';
+
+        if (givenRangeSelected) {
+            filterBy = 'given';
+            rangeStart = filters.givenDateStart || filters.givenDateEnd || null;
+            rangeEnd = filters.givenDateEnd || filters.givenDateStart || null;
+        } else {
+            filterBy = 'return';
+            rangeStart = filters.returnDateStart || filters.returnDateEnd || null;
+            rangeEnd = filters.returnDateEnd || filters.returnDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            const res = await api.get('/vehicles/records?includeDeleted=true&unlimited=true');
+            const allRecords: VehicleUsage[] = res.data || [];
+
+            const exportableRecords = allRecords
+                .filter((record) => {
+                    const dateValue = filterBy === 'given' ? record.given_date : record.return_date;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    const start = dayjs(rangeStart).startOf('day');
+                    const end = dayjs(rangeEnd).endOf('day');
+                    // Use millisecond-level inclusive comparison to ensure end date is included
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                })
+                .filter(record => !record.deleted_at);
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, VehicleUsage[]>();
 
             exportableRecords.forEach((record) => {
@@ -327,7 +423,7 @@ export default function VehicleRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, filters.vehicle_plate, isExporting]);
+    }, [filters, isExporting]);
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {

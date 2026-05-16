@@ -42,6 +42,9 @@ export default function FireAlarmRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
     // Filter states
     const [alarmNumber, setAlarmNumber] = useState('');
     const [location, setLocation] = useState('');
@@ -55,25 +58,57 @@ export default function FireAlarmRecords() {
     const [resolutionDateStart, setResolutionDateStart] = useState('');
     const [resolutionDateEnd, setResolutionDateEnd] = useState('');
 
-    const fetchData = useCallback(async () => {
+    const anyFilterApplied = useMemo(() => {
+        return (
+            alarmNumber !== '' ||
+            location !== '' ||
+            recordedBy !== '' ||
+            resolvedBy !== '' ||
+            status !== 'all' ||
+            gateFilter !== 'all' ||
+            falseAlarmFilter !== 'all' ||
+            alarmDateStart !== '' ||
+            alarmDateEnd !== '' ||
+            resolutionDateStart !== '' ||
+            resolutionDateEnd !== ''
+        );
+    }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
+
+    const fetchData = useCallback(async (offset = 0, append = false) => {
         const fetchId = ++latestFetchId.current;
         try {
-            const res = await api.get(`/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`);
+            let res;
+            if (anyFilterApplied) {
+                res = await api.get(`/fire-alarms/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`);
+            } else {
+                res = await api.get(`/fire-alarms/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`);
+            }
+
             if (fetchId !== latestFetchId.current) return;
-            setRecords(res.data?.data || []);
+
+            const fetched = res.data?.data || [];
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
         } catch (error) {
             if (fetchId !== latestFetchId.current) return;
             console.error('Veriler yüklenemedi:', error);
         } finally {
             if (fetchId !== latestFetchId.current) return;
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, []);
+    }, [anyFilterApplied]);
 
     // Fetch all records + periodic refresh to keep list in sync
     useEffect(() => {
-        fetchData();
-        const refreshInterval = window.setInterval(fetchData, 15000);
+        setLoading(true);
+        void fetchData(0, false);
+        const refreshInterval = window.setInterval(() => void fetchData(0, false), 15000);
         return () => window.clearInterval(refreshInterval);
     }, [fetchData]);
 
@@ -84,14 +119,9 @@ export default function FireAlarmRecords() {
     });
 
     useEffect(() => {
-        const handleFocus = () => {
-            fetchData();
-        };
-
+        const handleFocus = () => void fetchData(0, false);
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                fetchData();
-            }
+            if (document.visibilityState === 'visible') void fetchData(0, false);
         };
 
         window.addEventListener('focus', handleFocus);
@@ -102,6 +132,44 @@ export default function FireAlarmRecords() {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [fetchData]);
+
+    // Infinite scroll: load more when near bottom
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -117,16 +185,20 @@ export default function FireAlarmRecords() {
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
-            // Alarm date filtering - dayjs ile yerel tarihe çevir
+            // Alarm date filtering - use inclusive dayjs comparison
             if (alarmDateStart && alarmDateEnd) {
-                const alarmDate = dayjs(record.alarm_time).format('YYYY-MM-DD');
-                if (alarmDate < alarmDateStart || alarmDate > alarmDateEnd) return false;
+                const d = dayjs(record.alarm_time);
+                const start = dayjs(alarmDateStart).startOf('day');
+                const end = dayjs(alarmDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
-            // Resolution date filtering - dayjs ile yerel tarihe çevir
+            // Resolution date filtering - inclusive comparison
             if (resolutionDateStart && resolutionDateEnd && record.resolution_time) {
-                const resolutionDate = dayjs(record.resolution_time).format('YYYY-MM-DD');
-                if (resolutionDate < resolutionDateStart || resolutionDate > resolutionDateEnd) return false;
+                const d = dayjs(record.resolution_time);
+                const start = dayjs(resolutionDateStart).startOf('day');
+                const end = dayjs(resolutionDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -159,14 +231,54 @@ export default function FireAlarmRecords() {
     const handleDownloadRecords = useCallback(async () => {
         if (isExporting) return;
 
-        const exportableRecords = filteredRecords.filter(r => !r.deleted_at);
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        const alarmRangeSelected = !!(alarmDateStart || alarmDateEnd);
+        const resolutionRangeSelected = !!(resolutionDateStart || resolutionDateEnd);
+
+        if (!alarmRangeSelected && !resolutionRangeSelected) {
+            alert('Lütfen alarm veya çözümleme tarih aralığı seçin.');
+            return;
+        }
+
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'alarm' | 'resolution' = 'alarm';
+
+        if (alarmRangeSelected) {
+            filterBy = 'alarm';
+            rangeStart = alarmDateStart || alarmDateEnd || null;
+            rangeEnd = alarmDateEnd || alarmDateStart || null;
+        } else {
+            filterBy = 'resolution';
+            rangeStart = resolutionDateStart || resolutionDateEnd || null;
+            rangeEnd = resolutionDateEnd || resolutionDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
         try {
+            const res = await api.get('/fire-alarms/records?includeDeleted=true&unlimited=true');
+            const allRecords: FireAlarmRecord[] = res.data?.data || [];
+
+            const exportableRecords = allRecords
+                .filter(r => !r.deleted_at)
+                .filter((record) => {
+                    const dateValue = filterBy === 'alarm' ? record.alarm_time : record.resolution_time;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    const start = dayjs(rangeStart).startOf('day');
+                    const end = dayjs(rangeEnd).endOf('day');
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                });
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, FireAlarmRecord[]>();
             exportableRecords.forEach((record) => {
                 const dayKey = dayjs(record.alarm_time).format('YYYY-MM-DD');

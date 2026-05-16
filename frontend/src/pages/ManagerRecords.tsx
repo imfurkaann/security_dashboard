@@ -26,18 +26,6 @@ export default function ManagerRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const res = await api.get('/managers/records?includeDeleted=true');
-            setRecords(res.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    // Filter states
     const [filters, setFilters] = useState({
         manager_name: '',
         entry_by: '',
@@ -50,15 +38,84 @@ export default function ManagerRecords() {
         gate: 'all'
     });
 
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        const anyFilterApplied = Object.values(filters).some((value) => value !== '' && value !== 'all');
+
+        try {
+            const res = await api.get(
+                anyFilterApplied
+                    ? '/managers/records?includeDeleted=true&unlimited=true'
+                    : `/managers/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`
+            );
+
+            const fetchedRecords = res.data || [];
+
+            if (append) {
+                setRecords(prev => [...prev, ...fetchedRecords]);
+            } else {
+                setRecords(fetchedRecords);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetchedRecords.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [filters]);
+
     useEffect(() => {
-        void fetchData();
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['managers'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
         enabled: true,
     });
+
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -155,16 +212,56 @@ export default function ManagerRecords() {
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        const entryRangeSelected = !!(filters.entryDateStart || filters.entryDateEnd);
+        const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (!entryRangeSelected && !exitRangeSelected) {
+            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
+            return;
+        }
+
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'entry' | 'exit' = 'entry';
+
+        if (entryRangeSelected) {
+            filterBy = 'entry';
+            rangeStart = filters.entryDateStart || filters.entryDateEnd || null;
+            rangeEnd = filters.entryDateEnd || filters.entryDateStart || null;
+        } else {
+            filterBy = 'exit';
+            rangeStart = filters.exitDateStart || filters.exitDateEnd || null;
+            rangeEnd = filters.exitDateEnd || filters.exitDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            const res = await api.get('/managers/records?includeDeleted=true&unlimited=true');
+            const allRecords: ManagerRecord[] = res.data || [];
+
+            const exportableRecords = allRecords
+                .filter((record) => {
+                    const dateValue = filterBy === 'entry' ? record.entry_date : record.exit_date;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    const start = dayjs(rangeStart).startOf('day');
+                    const end = dayjs(rangeEnd).endOf('day');
+                    // Normalize to day boundaries and compare inclusively to ensure the end date is included
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                })
+                .filter(record => !record.deleted_at);
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, ManagerRecord[]>();
 
             exportableRecords.forEach((record) => {
@@ -302,7 +399,7 @@ export default function ManagerRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [filters, isExporting]);
 
     // Clear all filters
     const clearFilters = () => {

@@ -28,27 +28,7 @@ export default function AdminVehicleRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
-
-            const [recordsRes, vehiclesRes] = await Promise.all([
-                axios.get(`${API_URL}/vehicles/records?includeDeleted=true`, config),
-                axios.get(`${API_URL}/vehicles`, config)
-            ]);
-            setRecords(recordsRes.data || []);
-            setVehicles(vehiclesRes.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -65,9 +45,107 @@ export default function AdminVehicleRecords() {
         returnDateEnd: ''
     });
 
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+
+    // Check if any filter is active (for deciding unlimited fetch)
+    const anyFilterApplied = useMemo(() => {
+        return filters.vehicle_plate !== '' ||
+            filters.manager !== '' ||
+            filters.destination !== '' ||
+            filters.given_by !== '' ||
+            filters.returned_by !== '' ||
+            filters.status !== 'all' ||
+            filters.gate !== 'all' ||
+            filters.givenDateStart !== '' ||
+            filters.givenDateEnd !== '' ||
+            filters.returnDateStart !== '' ||
+            filters.returnDateEnd !== '';
+    }, [filters]);
+
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+
+            let recordsRes;
+            if (anyFilterApplied) {
+                recordsRes = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, config);
+            } else {
+                recordsRes = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, config);
+            }
+
+            // Fetch vehicles list once if empty
+            let vehiclesRes = null;
+            if (vehicles.length === 0) {
+                vehiclesRes = await axios.get(`${API_URL}/vehicles`, config);
+            }
+
+            const fetched = recordsRes.data || [];
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            if (vehiclesRes) setVehicles(vehiclesRes.data || []);
+
+            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [anyFilterApplied, vehicles.length]);
+
     useEffect(() => {
-        void fetchData();
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
+
+    // Infinite scroll: load more on scroll near bottom
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     useRealtimeRefetch({
         topics: ['vehicles'],
@@ -123,32 +201,20 @@ export default function AdminVehicleRecords() {
                 return false;
             }
 
-            // Given date range filter - dayjs ile yerel tarihe çevir
-            const givenDateOnly = record.given_date ? dayjs(record.given_date).format('YYYY-MM-DD') : '';
-            if (filters.givenDateStart && givenDateOnly) {
-                if (givenDateOnly < filters.givenDateStart) {
-                    return false;
-                }
+            // Given date range filter - inclusive dayjs comparison
+            if (filters.givenDateStart && filters.givenDateEnd) {
+                const d = dayjs(record.given_date);
+                const start = dayjs(filters.givenDateStart).startOf('day');
+                const end = dayjs(filters.givenDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
-            if (filters.givenDateEnd && givenDateOnly) {
-                if (givenDateOnly > filters.givenDateEnd) {
-                    return false;
-                }
-            }
-
-            // Return date range filter - dayjs ile yerel tarihe çevir
-            const returnDateOnly = record.return_date ? dayjs(record.return_date).format('YYYY-MM-DD') : '';
-            if (filters.returnDateStart && returnDateOnly) {
-                if (returnDateOnly < filters.returnDateStart) {
-                    return false;
-                }
-            }
-
-            if (filters.returnDateEnd && returnDateOnly) {
-                if (returnDateOnly > filters.returnDateEnd) {
-                    return false;
-                }
+            // Return date range filter - inclusive
+            if (filters.returnDateStart && filters.returnDateEnd && record.return_date) {
+                const d = dayjs(record.return_date);
+                const start = dayjs(filters.returnDateStart).startOf('day');
+                const end = dayjs(filters.returnDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -196,21 +262,60 @@ export default function AdminVehicleRecords() {
     }, [filteredRecords]);
 
     const handleDownloadRecords = useCallback(async () => {
-        // Race condition guard: don't allow concurrent exports
-        if (isExporting) {
+        if (isExporting) return;
+
+        const givenRangeSelected = !!(filters.givenDateStart || filters.givenDateEnd);
+        const returnRangeSelected = !!(filters.returnDateStart || filters.returnDateEnd);
+
+        if (!givenRangeSelected && !returnRangeSelected) {
+            alert('Lütfen teslim veya iade tarih aralığı seçin.');
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'given' | 'return' = 'given';
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (givenRangeSelected) {
+            filterBy = 'given';
+            rangeStart = filters.givenDateStart || filters.givenDateEnd || null;
+            rangeEnd = filters.givenDateEnd || filters.givenDateStart || null;
+        } else {
+            filterBy = 'return';
+            rangeStart = filters.returnDateStart || filters.returnDateEnd || null;
+            rangeEnd = filters.returnDateEnd || filters.returnDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            const adminToken = localStorage.getItem('adminToken');
+            const config = { headers: { Authorization: `Bearer ${adminToken}` } };
+            const res = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&unlimited=true`, config);
+            const allRecords: VehicleUsage[] = res.data || [];
+
+            const start = dayjs(rangeStart).startOf('day');
+            const end = dayjs(rangeEnd).endOf('day');
+
+            const exportableRecords = allRecords
+                .filter((record) => {
+                    const dateValue = filterBy === 'given' ? record.given_date : record.return_date;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                })
+                .filter(record => !record.deleted_at);
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, VehicleUsage[]>();
 
             exportableRecords.forEach((record) => {

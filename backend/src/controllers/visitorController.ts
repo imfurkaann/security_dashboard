@@ -41,6 +41,16 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
         const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
         const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
 
+        const unlimited = req.query.unlimited === 'true';
+
+        // Pagination support: optional numeric `limit` and `offset` query params
+        const reqLimit = Number(req.query.limit ?? 1000);
+        const reqOffset = Number(req.query.offset ?? 0);
+        const safeLimit = Number.isFinite(reqLimit) && reqLimit > 0 ? Math.min(reqLimit, 10000) : 1000;
+        const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
+
+        const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+
         const query = `
             SELECT 
                 vr.id,
@@ -80,7 +90,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN personnel px ON vr.exit_by = px.id
             ${deletedAtFilter}
             ORDER BY vr.entry_date DESC, vr.entry_time DESC
-            LIMIT 1000
+            ${limitClause}
         `;
         const result = await pool.query(query);
 

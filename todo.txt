@@ -5,4 +5,6 @@ tüm proje genel olarak tekrardan güvenlik önlemleri ve hatalı kısımları d
 port düzenlemesi dinamikleştirilecek. port değşince fronten oromatik o porta bağlancak
 KAYIT GÜNCELLME MESJAI GÖNDERİLMELİDİR
 
-telefon daha okunaklı yazılacak 
+telefon okunaklı yazılacak 
+veriler oknmayabiliyor tablolar iç içe girebiliyo rsayfaları incele ve düzenle.
+grafik sayfaları tekrardan ayaranacak
