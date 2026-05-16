@@ -9,6 +9,7 @@ import timezone from 'dayjs/plugin/timezone';
 import localizedFormat from 'dayjs/plugin/localizedFormat';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import isBetween from 'dayjs/plugin/isBetween';
 
 // Plugin'leri yükle
 dayjs.extend(utc);
@@ -16,6 +17,7 @@ dayjs.extend(timezone);
 dayjs.extend(localizedFormat);
 dayjs.extend(relativeTime);
 dayjs.extend(customParseFormat);
+dayjs.extend(isBetween);
 
 // Varsayılan timezone ve locale ayarla
 dayjs.tz.setDefault('Europe/Istanbul');

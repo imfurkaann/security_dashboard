@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -35,36 +36,91 @@ interface IncidentRecord {
 export default function AdminIncidentRecords() {
     const [records, setRecords] = useState<IncidentRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+    const tableScrollRef = useRef<HTMLDivElement | null>(null);
+    const bottomScrollRef = useRef<HTMLDivElement | null>(null);
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedReport, setSelectedReport] = useState<IncidentRecord | null>(null);
     const [isExporting, setIsExporting] = useState(false);
     const navigate = useNavigate();
 
-    const fetchData = useCallback(async () => {
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
-            const res = await axios.get(`${API_URL}/incidents/records`, config);
-            setRecords(res.data?.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    
 
     // Filter states
     const [reportedBy, setReportedBy] = useState('');
     const [dateStart, setDateStart] = useState('');
     const [dateEnd, setDateEnd] = useState('');
 
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        try {
+            const anyFilterApplied = Boolean(reportedBy || dateStart || dateEnd);
+            const adminToken = localStorage.getItem('adminToken');
+            const config = {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            };
+
+            let res;
+            if (anyFilterApplied) {
+                res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, config);
+            } else {
+                res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, config);
+            }
+
+            const fetched: IncidentRecord[] = res.data?.data || [];
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [reportedBy, dateStart, dateEnd]);
+
     useEffect(() => {
         void fetchData();
     }, [fetchData]);
+
+    // Infinite scroll: container + window fallback
+    useEffect(() => {
+        const onContainerScroll = (e: Event) => {
+            const node = tableScrollRef.current;
+            if (!node || loadingMore || loading || !hasMore) return;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < 300) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        const onWindowScroll = () => {
+            if (loadingMore || loading || !hasMore) return;
+            const threshold = 300;
+            const scrolledToBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - threshold;
+            if (scrolledToBottom) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        const node = tableScrollRef.current;
+        if (node) node.addEventListener('scroll', onContainerScroll);
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            if (node) node.removeEventListener('scroll', onContainerScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, loading, hasMore, records.length]);
 
     useRealtimeRefetch({
         topics: ['incidents'],
@@ -72,15 +128,18 @@ export default function AdminIncidentRecords() {
         enabled: true,
     });
 
-    // Filtered records
+    // Filtered records (inclusive date range)
     const filteredRecords = useMemo(() => {
         return records.filter(record => {
             if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
 
-            // Date filtering - dayjs ile yerel tarihe çevir
             if (dateStart && dateEnd) {
-                const recordDate = record.report_date ? dayjs(record.report_date).format('YYYY-MM-DD') : dayjs(record.created_at).format('YYYY-MM-DD');
-                if (recordDate < dateStart || recordDate > dateEnd) return false;
+                const dateValue = record.report_date || record.created_at;
+                if (!dateValue) return false;
+                const d = dayjs(dateValue);
+                const start = dayjs(dateStart).startOf('day');
+                const end = dayjs(dateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -128,8 +187,8 @@ export default function AdminIncidentRecords() {
     const handleDownloadRecords = useCallback(async () => {
         if (isExporting) return;
 
-        if (filteredRecords.length === 0) {
-            alert('İndirilecek rapor bulunamadı.');
+        if (!dateStart || !dateEnd) {
+            alert('Lütfen bir tarih aralığı seçin.');
             return;
         }
 
@@ -137,22 +196,41 @@ export default function AdminIncidentRecords() {
 
         try {
             const adminToken = localStorage.getItem('adminToken');
-            const res = await axios.post(
-                `${API_URL}/incidents/records/export`,
-                { records: filteredRecords },
-                {
-                    headers: {
-                        Authorization: `Bearer ${adminToken}`
-                    },
-                    responseType: 'blob'
+            const res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&unlimited=true`, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
                 }
-            );
+            });
 
-            const blob = new Blob([res.data], { type: 'application/zip' });
+            const allRecords: IncidentRecord[] = res.data?.data || [];
+
+            const start = dayjs(dateStart).startOf('day');
+            const end = dayjs(dateEnd).endOf('day');
+
+            const exportable = allRecords.filter(r => {
+                const dateValue = r.report_date || r.created_at;
+                if (!dateValue) return false;
+                const d = dayjs(dateValue);
+                return d.isBetween(start, end, 'millisecond', '[]');
+            });
+
+            if (exportable.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
+                return;
+            }
+
+            const exportRes = await axios.post(`${API_URL}/incidents/records/export`, { records: exportable }, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                },
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([exportRes.data], { type: 'application/zip' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = 'Vardiya_Raporlari_Export.zip';
+            link.download = `Olay_Raporlari_${dateStart}_${dateEnd}.zip`;
             link.style.display = 'none';
             document.body.appendChild(link);
             link.click();
@@ -167,7 +245,7 @@ export default function AdminIncidentRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [dateStart, dateEnd, isExporting]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -285,7 +363,7 @@ export default function AdminIncidentRecords() {
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div ref={tableScrollRef} className="h-full min-h-0 overflow-x-auto overflow-y-auto">
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">

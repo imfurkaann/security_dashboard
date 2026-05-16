@@ -57,16 +57,9 @@ export default function VisitorRecords() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
-    const fetchData = useCallback(async () => {
-        try {
-            const res = await api.get('/visitors/records?includeDeleted=true');
-            setRecords(res.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -86,14 +79,84 @@ export default function VisitorRecords() {
         exitDateEnd: ''
     });
 
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        // If any client-side filter applied, fetch full set to allow filtering
+        const anyFilterApplied = Object.values(filters).some((v) => v !== '' && v !== 'all');
+
+        try {
+            if (anyFilterApplied) {
+                const res = await api.get('/visitors/records?includeDeleted=true&unlimited=true');
+                setRecords(res.data || []);
+                setHasMore(false);
+                return;
+            }
+
+            const res = await api.get(`/visitors/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`);
+            const fetched = res.data || [];
+
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            setHasMore(fetched.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [filters]);
+
+
     useEffect(() => {
-        void fetchData();
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['visitors'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
     });
+
+    // Infinite scroll: load more on scroll near bottom (like admin view)
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300; // px from bottom to trigger
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+        // Also listen to window scroll as a fallback when the page itself scrolls
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400; // px from bottom
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -260,16 +323,57 @@ export default function VisitorRecords() {
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        // Require user to select a date range (either entry or exit)
+        const entryRangeSelected = !!(filters.entryDateStart || filters.entryDateEnd);
+        const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (!entryRangeSelected && !exitRangeSelected) {
+            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
+            return;
+        }
+
+        // Prefer entry date range when both are present
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'entry' | 'exit' = 'entry';
+
+        if (entryRangeSelected) {
+            filterBy = 'entry';
+            rangeStart = filters.entryDateStart || filters.entryDateEnd || null;
+            rangeEnd = filters.entryDateEnd || filters.entryDateStart || null;
+        } else {
+            filterBy = 'exit';
+            rangeStart = filters.exitDateStart || filters.exitDateEnd || null;
+            rangeEnd = filters.exitDateEnd || filters.exitDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            // Fetch full dataset from backend, then filter client-side by selected date field
+            const res = await api.get('/visitors/records?includeDeleted=true&unlimited=true');
+            const allRecords: VisitorRecord[] = res.data || [];
+
+            const exportableRecords = allRecords.filter((r) => {
+                const dateValue = filterBy === 'entry' ? r.entry_date : r.exit_date;
+                if (!dateValue) return false;
+                const d = dayjs(dateValue);
+                const start = dayjs(rangeStart!);
+                const end = dayjs(rangeEnd!);
+                return d.isBetween(start, end, 'day', '[]'); // inclusive
+            }).filter(r => !r.deleted_at);
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                setIsExporting(false);
+                return;
+            }
+
             const exportGroupsMap = new Map<string, VisitorRecord[]>();
 
             exportableRecords.forEach((record) => {
@@ -420,7 +524,7 @@ export default function VisitorRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [filteredRecords, isExporting, filters]);
 
     const handleDeleteRecord = async (id: string) => {
         if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;

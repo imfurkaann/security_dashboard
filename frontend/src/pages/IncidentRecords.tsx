@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from 'antd';
 import dayjs from '../utils/dayjsConfig';
@@ -41,16 +41,12 @@ export default function IncidentRecords() {
     const [isExporting, setIsExporting] = useState(false);
     const navigate = useNavigate();
 
-    const fetchData = useCallback(async () => {
-        try {
-            const res = await api.get('/incidents/records');
-            setRecords(res.data?.data || []);
-        } catch (error) {
-            console.error('Veriler yüklenemedi:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const tableScrollRef = useRef<HTMLDivElement>(null);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+
+    
 
     // Filter states
     const [reportedBy, setReportedBy] = useState('');
@@ -69,9 +65,80 @@ export default function IncidentRecords() {
         return Array.from(gates).sort();
     }, [records]);
 
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        try {
+            const anyFilterApplied = (
+                reportedBy !== '' ||
+                dateStart !== '' ||
+                dateEnd !== '' ||
+                selectedGate !== ''
+            );
+
+            let res;
+            if (anyFilterApplied) {
+                res = await api.get(`/incidents/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`);
+            } else {
+                res = await api.get(`/incidents/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`);
+            }
+
+            const fetched = res.data?.data || [];
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+        } catch (error) {
+            console.error('Veriler yüklenemedi:', error);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [reportedBy, dateStart, dateEnd, selectedGate]);
+
     useEffect(() => {
-        void fetchData();
+        setLoading(true);
+        void fetchData(0, false);
     }, [fetchData]);
+
+    // Infinite scroll: load more on scroll near bottom
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     useRealtimeRefetch({
         topics: ['incidents'],
@@ -85,10 +152,14 @@ export default function IncidentRecords() {
             if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
             if (selectedGate && record.gate !== selectedGate) return false;
 
-            // Date filtering - dayjs ile yerel tarihe çevir
+            // Date filtering - inclusive dayjs comparison
             if (dateStart && dateEnd) {
-                const recordDate = record.report_date ? dayjs(record.report_date).format('YYYY-MM-DD') : dayjs(record.created_at).format('YYYY-MM-DD');
-                if (recordDate < dateStart || recordDate > dateEnd) return false;
+                const dateStr = record.report_date || record.created_at;
+                if (!dateStr) return false;
+                const d = dayjs(dateStr);
+                const start = dayjs(dateStart).startOf('day');
+                const end = dayjs(dateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -133,26 +204,39 @@ export default function IncidentRecords() {
         setShowReportModal(true);
     };
 
-    // Export handler
+    // Export handler: require date range, fetch full dataset, filter inclusively, then POST to backend export
     const handleDownloadRecords = useCallback(async () => {
         if (isExporting) return;
 
-        if (filteredRecords.length === 0) {
-            alert('İndirilecek rapor bulunamadı.');
+        if (!dateStart || !dateEnd) {
+            alert('Lütfen bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            // Backend'e filtrelenmiş kayıtları gönder
-            const res = await api.post('/incidents/records/export', 
-                { records: filteredRecords },
-                { responseType: 'blob' }
-            );
+            const res = await api.get('/incidents/records?includeDeleted=true&unlimited=true');
+            const allRecords: IncidentRecord[] = res.data?.data || [];
 
-            // ZIP dosyasını indir
-            const blob = new Blob([res.data], { type: 'application/zip' });
+            const start = dayjs(dateStart).startOf('day');
+            const end = dayjs(dateEnd).endOf('day');
+
+            const exportableRecords = allRecords.filter((record) => {
+                const dateStr = record.report_date || record.created_at;
+                if (!dateStr) return false;
+                const d = dayjs(dateStr);
+                return d.isBetween(start, end, 'millisecond', '[]');
+            });
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
+                return;
+            }
+
+            const exportRes = await api.post('/incidents/records/export', { records: exportableRecords }, { responseType: 'blob' });
+
+            const blob = new Blob([exportRes.data], { type: 'application/zip' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -171,7 +255,7 @@ export default function IncidentRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [dateStart, dateEnd, isExporting]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -305,7 +389,7 @@ export default function IncidentRecords() {
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
                     ) : (
-                        <div className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div ref={tableScrollRef} className="h-full min-h-0 overflow-x-auto overflow-y-auto">
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">

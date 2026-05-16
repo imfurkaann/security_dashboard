@@ -35,6 +35,9 @@ interface FireAlarmRecord {
 export default function AdminFireAlarmRecords() {
     const [records, setRecords] = useState<FireAlarmRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
     const [isExporting, setIsExporting] = useState(false);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
@@ -56,28 +59,47 @@ export default function AdminFireAlarmRecords() {
     const [resolutionDateStart, setResolutionDateStart] = useState('');
     const [resolutionDateEnd, setResolutionDateEnd] = useState('');
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (offset = 0, append = false) => {
         const fetchId = ++latestFetchId.current;
         try {
+            const anyFilterApplied = Boolean(alarmNumber || location || recordedBy || resolvedBy || status !== 'all' || gateFilter !== 'all' || falseAlarmFilter !== 'all' || alarmDateStart || alarmDateEnd || resolutionDateStart || resolutionDateEnd);
             const token = localStorage.getItem('adminToken');
-            const res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            let res;
+            if (anyFilterApplied) {
+                res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            } else {
+                res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            }
+
             if (fetchId !== latestFetchId.current) return;
-            setRecords(res.data?.data || []);
+
+            const fetched = res.data?.data || [];
+            if (append) {
+                setRecords(prev => [...prev, ...fetched]);
+            } else {
+                setRecords(fetched);
+            }
+
+            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
         } catch (error) {
             if (fetchId !== latestFetchId.current) return;
             console.error('Veriler yuklenemedi:', error);
         } finally {
             if (fetchId !== latestFetchId.current) return;
             setLoading(false);
+            setLoadingMore(false);
         }
-    }, []);
+    }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
 
-    // Fetch all records + periodic refresh to keep list in sync
+    // Fetch records (paginated) + periodic refresh to keep list in sync
     useEffect(() => {
-        fetchData();
-        const refreshInterval = window.setInterval(fetchData, 15000);
+        setLoading(true);
+        void fetchData(0, false);
+        const refreshInterval = window.setInterval(() => void fetchData(0, false), 15000);
         return () => window.clearInterval(refreshInterval);
     }, [fetchData]);
 
@@ -121,16 +143,20 @@ export default function AdminFireAlarmRecords() {
             if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
             if (falseAlarmFilter === 'false' && record.false_alarm) return false;
 
-            // Alarm date filtering
+            // Alarm date filtering - inclusive
             if (alarmDateStart && alarmDateEnd) {
-                const alarmDate = dayjs(record.alarm_time).format('YYYY-MM-DD');
-                if (alarmDate < alarmDateStart || alarmDate > alarmDateEnd) return false;
+                const d = dayjs(record.alarm_time);
+                const start = dayjs(alarmDateStart).startOf('day');
+                const end = dayjs(alarmDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
-            // Resolution date filtering
+            // Resolution date filtering - inclusive
             if (resolutionDateStart && resolutionDateEnd && record.resolution_time) {
-                const resolutionDate = dayjs(record.resolution_time).format('YYYY-MM-DD');
-                if (resolutionDate < resolutionDateStart || resolutionDate > resolutionDateEnd) return false;
+                const d = dayjs(record.resolution_time);
+                const start = dayjs(resolutionDateStart).startOf('day');
+                const end = dayjs(resolutionDateEnd).endOf('day');
+                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
             }
 
             return true;
@@ -161,21 +187,61 @@ export default function AdminFireAlarmRecords() {
     }, [filteredRecords]);
 
     const handleDownloadRecords = useCallback(async () => {
-        // Race condition guard
-        if (isExporting) {
+        if (isExporting) return;
+
+        const alarmRangeSelected = !!(alarmDateStart || alarmDateEnd);
+        const resolutionRangeSelected = !!(resolutionDateStart || resolutionDateEnd);
+
+        if (!alarmRangeSelected && !resolutionRangeSelected) {
+            alert('Lütfen alarm veya çözüm tarih aralığı seçin.');
             return;
         }
 
-        const exportableRecords = filteredRecords.filter(record => !record.deleted_at);
+        let rangeStart: string | null = null;
+        let rangeEnd: string | null = null;
+        let filterBy: 'alarm' | 'resolution' = 'alarm';
 
-        if (exportableRecords.length === 0) {
-            alert('İndirilecek kayıt bulunamadı.');
+        if (alarmRangeSelected) {
+            filterBy = 'alarm';
+            rangeStart = alarmDateStart || alarmDateEnd || null;
+            rangeEnd = alarmDateEnd || alarmDateStart || null;
+        } else {
+            filterBy = 'resolution';
+            rangeStart = resolutionDateStart || resolutionDateEnd || null;
+            rangeEnd = resolutionDateEnd || resolutionDateStart || null;
+        }
+
+        if (!rangeStart || !rangeEnd) {
+            alert('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
+            const token = localStorage.getItem('adminToken');
+            const res = await axios.get(`${API_URL}/fire-alarms/records?includeDeleted=true&unlimited=true`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const allRecords: FireAlarmRecord[] = res.data?.data || [];
+
+            const start = dayjs(rangeStart).startOf('day');
+            const end = dayjs(rangeEnd).endOf('day');
+
+            const exportableRecords = allRecords
+                .filter(record => !record.deleted_at)
+                .filter((record) => {
+                    const dateValue = filterBy === 'alarm' ? record.alarm_time : record.resolution_time;
+                    if (!dateValue) return false;
+                    const d = dayjs(dateValue);
+                    return d.isBetween(start, end, 'millisecond', '[]');
+                });
+
+            if (exportableRecords.length === 0) {
+                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                return;
+            }
+
             const exportGroupsMap = new Map<string, FireAlarmRecord[]>();
 
             exportableRecords.forEach((record) => {
@@ -272,7 +338,6 @@ export default function AdminFireAlarmRecords() {
                 dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
             }
 
-            // Helper function to trigger download with proper cleanup
             const triggerDownload = (blob: Blob, fileName: string) => {
                 return new Promise<void>((resolve) => {
                     const url = window.URL.createObjectURL(blob);
@@ -282,8 +347,6 @@ export default function AdminFireAlarmRecords() {
                     link.style.display = 'none';
                     document.body.appendChild(link);
                     link.click();
-                    
-                    // Delayed cleanup to ensure download starts
                     setTimeout(() => {
                         document.body.removeChild(link);
                         window.URL.revokeObjectURL(url);
@@ -315,7 +378,7 @@ export default function AdminFireAlarmRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd, isExporting]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -404,6 +467,44 @@ export default function AdminFireAlarmRecords() {
             resizeObserver.disconnect();
         };
     }, [filteredRecords.length, loading]);
+
+    // Infinite scroll: load more when scrolling near bottom (container + window fallback)
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300; // px from bottom to trigger
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(records.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, records.length]);
 
     const syncBottomScroll = () => {
         const tableNode = tableScrollRef.current;

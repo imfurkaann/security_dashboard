@@ -74,6 +74,14 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
         const includeDeleted = req.query.includeDeleted === 'true';
         const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
         const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
+        const unlimited = req.query.unlimited === 'true';
+
+        const reqLimit = Number(req.query.limit ?? 1000);
+        const reqOffset = Number(req.query.offset ?? 0);
+        const safeLimit = Number.isFinite(reqLimit) && reqLimit > 0 ? Math.min(reqLimit, 10000) : 1000;
+        const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
+
+        const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 
         const query = `
             SELECT 
@@ -105,7 +113,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN personnel pr ON vr.returned_by = pr.id
             ${deletedAtFilter}
             ORDER BY vr.given_date DESC, vr.given_time DESC
-            LIMIT 1000
+            ${limitClause}
         `;
         const result = await pool.query(query);
 
