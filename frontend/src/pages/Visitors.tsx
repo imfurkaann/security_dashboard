@@ -16,7 +16,8 @@ const VISITOR_TAGS_OPTIONS = [
     { id: 'exit_tag', label: 'Çıkış' },
     { id: 'tour_entry', label: 'Tur Giriş' },
     { id: 'tour_exit', label: 'Tur Çıkış' },
-    { id: 'guide', label: 'Rehber' },
+    { id: 'meeting', label: 'Görüşme' },
+    { id: 'delivery', label: 'Teslimat' },
 ];
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
@@ -35,7 +36,8 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.exit_tag) tags.push('Çıkış');
     if (record.tour_entry) tags.push('Tur Giriş');
     if (record.tour_exit) tags.push('Tur Çıkış');
-    if (record.guide) tags.push('Rehber');
+    if (record.meeting) tags.push('Görüşme');
+    if (record.delivery) tags.push('Teslimat');
     return tags;
 };
 
@@ -87,7 +89,8 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     exit_tag: false,
     tour_entry: false,
     tour_exit: false,
-    guide: false,
+    meeting: false,
+    delivery: false,
     send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
@@ -212,7 +215,8 @@ export default function Visitors() {
             exit_tag: rec.exit_tag ?? false,
             tour_entry: rec.tour_entry ?? false,
             tour_exit: rec.tour_exit ?? false,
-            guide: rec.guide ?? false,
+            meeting: rec.meeting ?? false,
+            delivery: rec.delivery ?? false,
             send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
             entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
             exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
@@ -241,7 +245,8 @@ export default function Visitors() {
         exit_tag: !!formData.exit_tag,
         tour_entry: !!formData.tour_entry,
         tour_exit: !!formData.tour_exit,
-        guide: !!formData.guide,
+        meeting: !!formData.meeting,
+        delivery: !!formData.delivery,
         send_whatsapp: !!formData.send_whatsapp,  // WhatsApp modalı her yeni kayıtta otomatik açılsın (kullanıcının seçimine göre)
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
@@ -974,7 +979,7 @@ export default function Visitors() {
                                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
                                                 >
                                                     <span className="text-sm">
-                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.meeting && 'Görüşme', formData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
                                                     </span>
                                                     <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
