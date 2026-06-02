@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
@@ -54,7 +54,9 @@ export default function Sgk() {
     const [isMobilePreview, setIsMobilePreview] = useState(false);
     const [imageZoom, setImageZoom] = useState(1);
     const [zoomOrigin, setZoomOrigin] = useState('50% 50%');
+    const location = useLocation();
     const navigate = useNavigate();
+    const isAdminView = location.pathname.startsWith('/admin/');
 
     const getRecordFiles = useCallback((record: SgkRecord | null): SgkFileMeta[] => {
         if (!record) return [];
@@ -676,7 +678,7 @@ export default function Sgk() {
                                 {filteredRecords.map((record) => (
                                     <div key={record.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition w-full">
                                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm min-w-0">
+                                            <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm min-w-0 ${isAdminView ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Ad Soyad</span>
                                                     <span className="font-normal text-gray-900 break-words">{record.full_name}</span>
@@ -689,6 +691,12 @@ export default function Sgk() {
                                                     <span className="text-gray-600 block mb-1">Yüklenme Tarihi</span>
                                                     <span className="font-normal text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
+                                                {isAdminView && (
+                                                    <div>
+                                                        <span className="text-gray-600 block mb-1">Kaydeden</span>
+                                                        <span className="font-normal text-gray-900 break-words">{record.personnel || '-'}</span>
+                                                    </div>
+                                                )}
                                                 <div>
                                                     <span className="text-gray-600 block mb-1">Dosya</span>
                                                     <span className="font-normal text-gray-900">{record.file_count || record.files?.length || 0} adet</span>

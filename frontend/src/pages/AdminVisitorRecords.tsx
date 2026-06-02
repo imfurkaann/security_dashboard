@@ -10,6 +10,7 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { API_URL } from '../constants';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import ActionButton from '../components/ActionButton';
 
 const { RangePicker } = DatePicker;
 
@@ -48,6 +49,83 @@ const getVisitorRowStyle = (record: VisitorRecord): { backgroundColor: string } 
     return { backgroundColor: color };
 };
 
+type VisitorEditTagKey =
+    | 'subcontractor_worker'
+    | 'for_electric_station'
+    | 'daily_guest'
+    | 'entry_tag'
+    | 'exit_tag'
+    | 'tour_entry'
+    | 'tour_exit'
+    | 'guide';
+
+type VisitorEditFormData = {
+    vehicle_plate: string;
+    full_name: string;
+    company_name: string;
+    visiting_person: string;
+    person_count: string;
+    children_count: string;
+    phone: string;
+    notes: string;
+    highlight_color: string;
+    subcontractor_worker: boolean;
+    for_electric_station: boolean;
+    daily_guest: boolean;
+    entry_tag: boolean;
+    exit_tag: boolean;
+    tour_entry: boolean;
+    tour_exit: boolean;
+    guide: boolean;
+    entry_time: string;
+    exit_time: string;
+};
+
+const VISITOR_EDIT_TAGS: Array<{ key: VisitorEditTagKey; label: string }> = [
+    { key: 'subcontractor_worker', label: 'Taşeron İşçi' },
+    { key: 'for_electric_station', label: 'Şarj İstasyonu' },
+    { key: 'daily_guest', label: 'Günübirlik Misafir' },
+    { key: 'entry_tag', label: 'Giriş' },
+    { key: 'exit_tag', label: 'Çıkış' },
+    { key: 'tour_entry', label: 'Tur Giriş' },
+    { key: 'tour_exit', label: 'Tur Çıkış' },
+    { key: 'guide', label: 'Rehber' }
+];
+
+const VISITOR_HIGHLIGHT_OPTIONS = [
+    { value: 'none', label: 'Varsayılan', color: '#f3f4f6' },
+    { value: 'rose', label: 'Gül Kırmızısı', color: '#e11d48' },
+    { value: 'amber', label: 'Sarı', color: '#d97706' },
+    { value: 'emerald', label: 'Yeşil', color: '#059669' },
+    { value: 'sky', label: 'Mavi', color: '#0284c7' },
+    { value: 'violet', label: 'Mor', color: '#7c3aed' },
+    { value: 'orange', label: 'Turuncu', color: '#ea580c' },
+    { value: 'pink', label: 'Pembe', color: '#db2777' },
+    { value: 'brown', label: 'Kahverengi', color: '#92400e' }
+];
+
+const createVisitorEditFormData = (record: VisitorRecord | null): VisitorEditFormData => ({
+    vehicle_plate: record?.vehicle_plate || '',
+    full_name: record?.full_name || '',
+    company_name: record?.company_name || '',
+    visiting_person: record?.visiting_person || '',
+    person_count: record?.person_count !== null && record?.person_count !== undefined ? String(record.person_count) : '',
+    children_count: record?.children_count !== null && record?.children_count !== undefined ? String(record.children_count) : '0',
+    phone: record?.phone || '',
+    notes: record?.notes || '',
+    highlight_color: record?.highlight_color || 'none',
+    subcontractor_worker: record?.subcontractor_worker ?? false,
+    for_electric_station: record?.for_electric_station ?? false,
+    daily_guest: record?.daily_guest ?? false,
+    entry_tag: record?.entry_tag ?? false,
+    exit_tag: record?.exit_tag ?? false,
+    tour_entry: record?.tour_entry ?? false,
+    tour_exit: record?.tour_exit ?? false,
+    guide: record?.guide ?? false,
+    entry_time: record?.entry_time || '',
+    exit_time: record?.exit_time || ''
+});
+
 export default function AdminVisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,6 +134,10 @@ export default function AdminVisitorRecords() {
     const PAGE_SIZE = 200;
     const [isExporting, setIsExporting] = useState(false);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingRecord, setEditingRecord] = useState<VisitorRecord | null>(null);
+    const [editFormData, setEditFormData] = useState<VisitorEditFormData>(createVisitorEditFormData(null));
+    const [savingEdit, setSavingEdit] = useState(false);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -131,6 +213,122 @@ export default function AdminVisitorRecords() {
         topics: ['visitors'],
         onMutation: fetchData,
     });
+
+    const openEditModal = useCallback((record: VisitorRecord) => {
+        setEditingRecord(record);
+        setEditFormData(createVisitorEditFormData(record));
+        setShowEditModal(true);
+    }, []);
+
+    const closeEditModal = useCallback(() => {
+        setShowEditModal(false);
+        setEditingRecord(null);
+        setEditFormData(createVisitorEditFormData(null));
+        setSavingEdit(false);
+    }, []);
+
+    const handleSaveEdit = useCallback(async () => {
+        if (!editingRecord) return;
+
+        if (!editFormData.full_name.trim()) {
+            alert('İsim Soyisim zorunludur');
+            return;
+        }
+
+        try {
+            setSavingEdit(true);
+            const adminToken = localStorage.getItem('adminToken');
+            const payload = {
+                vehicle_plate: editFormData.vehicle_plate.trim() || null,
+                full_name: editFormData.full_name.trim(),
+                company_name: editFormData.company_name.trim() || null,
+                visiting_person: editFormData.visiting_person.trim() || null,
+                person_count: editFormData.person_count.trim() === '' ? null : Number(editFormData.person_count),
+                children_count: editFormData.children_count.trim() === '' ? null : Number(editFormData.children_count),
+                phone: editFormData.phone.trim() || null,
+                notes: editFormData.notes.trim() || null,
+                subcontractor_worker: editFormData.subcontractor_worker,
+                for_electric_station: editFormData.for_electric_station,
+                daily_guest: editFormData.daily_guest,
+                entry_tag: editFormData.entry_tag,
+                exit_tag: editFormData.exit_tag,
+                tour_entry: editFormData.tour_entry,
+                tour_exit: editFormData.tour_exit,
+                guide: editFormData.guide,
+                entry_time: editFormData.entry_time.trim() || null,
+                exit_time: editFormData.exit_time.trim() || null,
+                highlight_color: editFormData.highlight_color || 'none'
+            };
+
+            await axios.put(`${API_URL}/visitors/records/${editingRecord.id}`, payload, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            });
+
+            setRecords((prev) => prev.map((record) => (
+                record.id === editingRecord.id
+                    ? {
+                        ...record,
+                        ...payload,
+                        person_count: payload.person_count === null ? 1 : Number(payload.person_count),
+                        children_count: payload.children_count === null ? 0 : Number(payload.children_count)
+                    }
+                    : record
+            )));
+
+            closeEditModal();
+        } catch (error) {
+            console.error('Kayıt güncellenemedi:', error);
+            alert((error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Kayıt güncellenirken bir hata oluştu');
+        } finally {
+            setSavingEdit(false);
+        }
+    }, [closeEditModal, editFormData, editingRecord]);
+
+    const handleDeleteRecord = useCallback(async (id: string) => {
+        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.delete(`${API_URL}/visitors/records/${id}`, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            });
+
+            setRecords((prev) => prev.map((record) => (
+                record.id === id
+                    ? { ...record, deleted_at: new Date().toISOString() }
+                    : record
+            )));
+        } catch (error) {
+            console.error('Kayıt silinemedi:', error);
+            alert('Kayıt silinirken bir hata oluştu');
+        }
+    }, []);
+
+    const handleRestoreRecord = useCallback(async (id: string) => {
+        if (!confirm('Bu kaydı geri almak istediğinize emin misiniz?')) return;
+
+        try {
+            const adminToken = localStorage.getItem('adminToken');
+            await axios.post(`${API_URL}/visitors/records/${id}/restore`, {}, {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`
+                }
+            });
+
+            setRecords((prev) => prev.map((record) => (
+                record.id === id
+                    ? { ...record, deleted_at: null }
+                    : record
+            )));
+        } catch (error) {
+            console.error('Kayıt geri alınamadı:', error);
+            alert('Kayıt geri alınırken bir hata oluştu');
+        }
+    }, []);
 
     // Filtered records
     const filteredRecords = useMemo(() => {
@@ -886,7 +1084,21 @@ export default function AdminVisitorRecords() {
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`} style={getVisitorRowStyle(record)}>
                                                     <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-500">-</div>
+                                                        <div className="flex items-center gap-2 whitespace-nowrap">
+                                                            <ActionButton
+                                                                onClick={() => openEditModal(record)}
+                                                                variant="primary"
+                                                                disabled={Boolean(record.deleted_at)}
+                                                                title={record.deleted_at ? 'Silinmiş kayıt düzenlenemez' : 'Düzenle'}
+                                                            >
+                                                                Düzenle
+                                                            </ActionButton>
+                                                            {record.deleted_at ? (
+                                                                <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success" title="Geri Al">Geri Al</ActionButton>
+                                                            ) : (
+                                                                <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm text-gray-900">{record.gate || '-'}</div>
@@ -959,6 +1171,218 @@ export default function AdminVisitorRecords() {
                     <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
                 </div>
             </div>
+
+            {showEditModal && editingRecord && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center gap-4 mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">Ziyaretçi Düzenle</h2>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setEditFormData((prev) => ({ ...prev, highlight_color: option.value }))}
+                                                className={`w-6 h-6 rounded-full border-2 transition ${editFormData.highlight_color === option.value ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                                                style={{ backgroundColor: option.color }}
+                                                title={option.label}
+                                                aria-label={option.label}
+                                                disabled={savingEdit}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={closeEditModal}
+                                        className="text-gray-400 hover:text-gray-600"
+                                        disabled={savingEdit}
+                                    >
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <form onSubmit={(e) => { e.preventDefault(); void handleSaveEdit(); }} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">İsim Soyisim</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.full_name}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, full_name: e.target.value }))}
+                                        placeholder="Ziyaretçinin adı soyadı"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Firma Adı</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.company_name}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, company_name: e.target.value }))}
+                                        placeholder="Firma adı"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Araç Plaka</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.vehicle_plate}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, vehicle_plate: e.target.value }))}
+                                        placeholder="TR 34 XXX 34"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Ziyaret Edilen</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.visiting_person}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, visiting_person: e.target.value }))}
+                                        placeholder="İsim veya departman"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Kişi Sayısı</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={editFormData.person_count}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, person_count: e.target.value }))}
+                                        placeholder="1"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çocuk Sayısı</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={editFormData.children_count}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, children_count: e.target.value }))}
+                                        placeholder="0"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
+                                    <input
+                                        type="text"
+                                        value={editFormData.phone}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, phone: e.target.value }))}
+                                        placeholder="05xx..."
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
+                                    <input
+                                        type="time"
+                                        value={editFormData.entry_time}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, entry_time: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
+                                    <input
+                                        type="time"
+                                        value={editFormData.exit_time}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, exit_time: e.target.value }))}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
+                                    <div className="relative rounded-lg border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent bg-white">
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditFormData((prev) => ({ ...prev }))}
+                                            className="w-full px-4 py-2 border-0 rounded-lg text-left bg-white hover:bg-gray-50 flex justify-between items-center"
+                                            disabled={savingEdit}
+                                        >
+                                            <span className="text-sm">
+                                                {[editFormData.subcontractor_worker && 'Taşeron İşçi', editFormData.for_electric_station && 'Şarj İstasyonu', editFormData.daily_guest && 'Günübirlik Misafir', editFormData.entry_tag && 'Giriş', editFormData.exit_tag && 'Çıkış', editFormData.tour_entry && 'Tur Giriş', editFormData.tour_exit && 'Tur Çıkış', editFormData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                            </span>
+                                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                            </svg>
+                                        </button>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-4 pt-2 bg-white rounded-b-lg">
+                                        {VISITOR_EDIT_TAGS.map((tag) => (
+                                            <label key={tag.key} className="flex items-center gap-2 text-sm text-gray-700">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editFormData[tag.key]}
+                                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, [tag.key]: e.target.checked }))}
+                                                    disabled={savingEdit}
+                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span>{tag.label}</span>
+                                            </label>
+                                        ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama</label>
+                                    <textarea
+                                        value={editFormData.notes}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                                        rows={3}
+                                        placeholder="Notlar..."
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={savingEdit}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="submit"
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={savingEdit}
+                                >
+                                    {savingEdit ? 'Kaydediliyor...' : 'Güncelle'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={closeEditModal}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={savingEdit}
+                                >
+                                    İptal
+                                </button>
+                            </div>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {textPreview && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
