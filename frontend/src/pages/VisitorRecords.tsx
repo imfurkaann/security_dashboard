@@ -25,7 +25,8 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.exit_tag) tags.push('Çıkış');
     if (record.tour_entry) tags.push('Tur Giriş');
     if (record.tour_exit) tags.push('Tur Çıkış');
-    if (record.guide) tags.push('Rehber');
+    if (record.meeting) tags.push('Görüşme');
+    if (record.delivery) tags.push('Teslimat');
     return tags;
 };
 
@@ -238,7 +239,10 @@ export default function VisitorRecords() {
             if (filters.visitor_tag === 'tour_exit' && !record.tour_exit) {
                 return false;
             }
-            if (filters.visitor_tag === 'guide' && !record.guide) {
+            if (filters.visitor_tag === 'meeting' && !record.meeting) {
+                return false;
+            }
+            if (filters.visitor_tag === 'delivery' && !record.delivery) {
                 return false;
             }
 
@@ -780,7 +784,8 @@ export default function VisitorRecords() {
                                 <option value="exit_tag">Çıkış</option>
                                 <option value="tour_entry">Tur Giriş</option>
                                 <option value="tour_exit">Tur Çıkış</option>
-                                <option value="guide">Rehber</option>
+                                <option value="meeting">Görüşme</option>
+                                <option value="delivery">Teslimat</option>
                             </select>
                         </div>
 

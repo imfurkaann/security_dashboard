@@ -74,6 +74,8 @@ export const createVisitorRecordMessage = (data: {
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
     dailyGuest?: boolean;
+    meeting?: boolean;
+    delivery?: boolean;
     notes?: string;
 }): string => {
     // Mesaj satırlarını dinamik olarak oluştur
@@ -129,6 +131,12 @@ export const createVisitorRecordMessage = (data: {
     }
     if (data.dailyGuest) {
         specialTags.push('Günübirlik Misafir');
+    }
+    if (data.meeting) {
+        specialTags.push('Görüşme');
+    }
+    if (data.delivery) {
+        specialTags.push('Teslimat');
     }
     if (specialTags.length > 0) {
         lines.push(`Etiket: ${specialTags.join(', ')}`);

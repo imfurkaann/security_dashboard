@@ -27,7 +27,8 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.exit_tag) tags.push('Çıkış');
     if (record.tour_entry) tags.push('Tur Giriş');
     if (record.tour_exit) tags.push('Tur Çıkış');
-    if (record.guide) tags.push('Rehber');
+    if (record.meeting) tags.push('Görüşme');
+    if (record.delivery) tags.push('Teslimat');
     return tags;
 };
 
@@ -57,7 +58,8 @@ type VisitorEditTagKey =
     | 'exit_tag'
     | 'tour_entry'
     | 'tour_exit'
-    | 'guide';
+    | 'meeting'
+    | 'delivery';
 
 type VisitorEditFormData = {
     vehicle_plate: string;
@@ -76,7 +78,8 @@ type VisitorEditFormData = {
     exit_tag: boolean;
     tour_entry: boolean;
     tour_exit: boolean;
-    guide: boolean;
+    meeting: boolean;
+    delivery: boolean;
     entry_time: string;
     exit_time: string;
 };
@@ -89,7 +92,8 @@ const VISITOR_EDIT_TAGS: Array<{ key: VisitorEditTagKey; label: string }> = [
     { key: 'exit_tag', label: 'Çıkış' },
     { key: 'tour_entry', label: 'Tur Giriş' },
     { key: 'tour_exit', label: 'Tur Çıkış' },
-    { key: 'guide', label: 'Rehber' }
+    { key: 'meeting', label: 'Görüşme' },
+    { key: 'delivery', label: 'Teslimat' }
 ];
 
 const VISITOR_HIGHLIGHT_OPTIONS = [
@@ -121,7 +125,8 @@ const createVisitorEditFormData = (record: VisitorRecord | null): VisitorEditFor
     exit_tag: record?.exit_tag ?? false,
     tour_entry: record?.tour_entry ?? false,
     tour_exit: record?.tour_exit ?? false,
-    guide: record?.guide ?? false,
+    meeting: record?.meeting ?? false,
+    delivery: record?.delivery ?? false,
     entry_time: record?.entry_time || '',
     exit_time: record?.exit_time || ''
 });
@@ -137,6 +142,7 @@ export default function AdminVisitorRecords() {
     const [showEditModal, setShowEditModal] = useState(false);
     const [editingRecord, setEditingRecord] = useState<VisitorRecord | null>(null);
     const [editFormData, setEditFormData] = useState<VisitorEditFormData>(createVisitorEditFormData(null));
+    const [openTagsDropdown, setOpenTagsDropdown] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
@@ -224,6 +230,7 @@ export default function AdminVisitorRecords() {
         setShowEditModal(false);
         setEditingRecord(null);
         setEditFormData(createVisitorEditFormData(null));
+        setOpenTagsDropdown(false);
         setSavingEdit(false);
     }, []);
 
@@ -254,7 +261,8 @@ export default function AdminVisitorRecords() {
                 exit_tag: editFormData.exit_tag,
                 tour_entry: editFormData.tour_entry,
                 tour_exit: editFormData.tour_exit,
-                guide: editFormData.guide,
+                meeting: editFormData.meeting,
+                delivery: editFormData.delivery,
                 entry_time: editFormData.entry_time.trim() || null,
                 exit_time: editFormData.exit_time.trim() || null,
                 highlight_color: editFormData.highlight_color || 'none'
@@ -410,7 +418,10 @@ export default function AdminVisitorRecords() {
             if (filters.visitor_tag === 'tour_exit' && !record.tour_exit) {
                 return false;
             }
-            if (filters.visitor_tag === 'guide' && !record.guide) {
+            if (filters.visitor_tag === 'meeting' && !record.meeting) {
+                return false;
+            }
+            if (filters.visitor_tag === 'delivery' && !record.delivery) {
                 return false;
             }
 
@@ -954,7 +965,8 @@ export default function AdminVisitorRecords() {
                                 <option value="exit_tag">Çıkış</option>
                                 <option value="tour_entry">Tur Giriş</option>
                                 <option value="tour_exit">Tur Çıkış</option>
-                                <option value="guide">Rehber</option>
+                                <option value="meeting">Görüşme</option>
+                                <option value="delivery">Teslimat</option>
                             </select>
                         </div>
 
@@ -1193,12 +1205,7 @@ export default function AdminVisitorRecords() {
                                             />
                                         ))}
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={closeEditModal}
-                                        className="text-gray-400 hover:text-gray-600"
-                                        disabled={savingEdit}
-                                    >
+                                    <button onClick={closeEditModal} className="text-gray-400 hover:text-gray-600" type="button" disabled={savingEdit}>
                                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                         </svg>
@@ -1208,177 +1215,118 @@ export default function AdminVisitorRecords() {
 
                             <form onSubmit={(e) => { e.preventDefault(); void handleSaveEdit(); }} className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">İsim Soyisim</label>
-                                    <input
-                                        type="text"
-                                        value={editFormData.full_name}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, full_name: e.target.value }))}
-                                        placeholder="Ziyaretçinin adı soyadı"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ad Soyad</label>
+                                        <input value={editFormData.full_name || ''} onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })} placeholder="Ziyaretçinin adı soyadı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Firma Adı</label>
-                                    <input
-                                        type="text"
-                                        value={editFormData.company_name}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, company_name: e.target.value }))}
-                                        placeholder="Firma adı"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Plaka</label>
+                                        <input value={editFormData.vehicle_plate || ''} onChange={(e) => setEditFormData({ ...editFormData, vehicle_plate: e.target.value })} placeholder="TR 34 XXX 34" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Araç Plaka</label>
-                                    <input
-                                        type="text"
-                                        value={editFormData.vehicle_plate}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, vehicle_plate: e.target.value }))}
-                                        placeholder="TR 34 XXX 34"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Firma</label>
+                                        <input value={editFormData.company_name || ''} onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })} placeholder="Firma adı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Ziyaret Edilen</label>
-                                    <input
-                                        type="text"
-                                        value={editFormData.visiting_person}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, visiting_person: e.target.value }))}
-                                        placeholder="İsim veya departman"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ziyaret Edilen</label>
+                                        <input value={editFormData.visiting_person || ''} onChange={(e) => setEditFormData({ ...editFormData, visiting_person: e.target.value })} placeholder="İsim veya departman" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Kişi Sayısı</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={editFormData.person_count}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, person_count: e.target.value }))}
-                                        placeholder="1"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Kişi Sayısı</label>
+                                        <input type="number" value={editFormData.person_count || ''} onChange={(e) => setEditFormData({ ...editFormData, person_count: e.target.value })} placeholder="1" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çocuk Sayısı</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={editFormData.children_count}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, children_count: e.target.value }))}
-                                        placeholder="0"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çocuk Sayısı</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={editFormData.children_count ?? ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, children_count: e.target.value })}
+                                            placeholder="0"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
-                                    <input
-                                        type="text"
-                                        value={editFormData.phone}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, phone: e.target.value }))}
-                                        placeholder="05xx..."
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
+                                        <input value={editFormData.phone || ''} onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })} placeholder="05xx..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
-                                    <input
-                                        type="time"
-                                        value={editFormData.entry_time}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, entry_time: e.target.value }))}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
+                                        <input
+                                            type="time"
+                                            value={editFormData.entry_time || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, entry_time: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Boş bırakırsanız mevcut saat kullanılır</p>
+                                    </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
-                                    <input
-                                        type="time"
-                                        value={editFormData.exit_time}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, exit_time: e.target.value }))}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
-                                </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
+                                        <input
+                                            type="time"
+                                            value={editFormData.exit_time || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, exit_time: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Çıkış kaydı için saat belirtebilirsiniz</p>
+                                    </div>
 
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
-                                    <div className="relative rounded-lg border border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent bg-white">
-                                        <button
-                                            type="button"
-                                            onClick={() => setEditFormData((prev) => ({ ...prev }))}
-                                            className="w-full px-4 py-2 border-0 rounded-lg text-left bg-white hover:bg-gray-50 flex justify-between items-center"
-                                            disabled={savingEdit}
-                                        >
-                                            <span className="text-sm">
-                                                {[editFormData.subcontractor_worker && 'Taşeron İşçi', editFormData.for_electric_station && 'Şarj İstasyonu', editFormData.daily_guest && 'Günübirlik Misafir', editFormData.entry_tag && 'Giriş', editFormData.exit_tag && 'Çıkış', editFormData.tour_entry && 'Tur Giriş', editFormData.tour_exit && 'Tur Çıkış', editFormData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
-                                            </span>
-                                            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                            </svg>
-                                        </button>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pb-4 pt-2 bg-white rounded-b-lg">
-                                        {VISITOR_EDIT_TAGS.map((tag) => (
-                                            <label key={tag.key} className="flex items-center gap-2 text-sm text-gray-700">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={editFormData[tag.key]}
-                                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, [tag.key]: e.target.checked }))}
-                                                    disabled={savingEdit}
-                                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                                />
-                                                <span>{tag.label}</span>
-                                            </label>
-                                        ))}
+                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setOpenTagsDropdown(!openTagsDropdown)}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
+                                                >
+                                                    <span className="text-sm">
+                                                        {[editFormData.subcontractor_worker && 'Taşeron İşçi', editFormData.for_electric_station && 'Şarj İstasyonu', editFormData.daily_guest && 'Günübirlik Misafir', editFormData.entry_tag && 'Giriş', editFormData.exit_tag && 'Çıkış', editFormData.tour_entry && 'Tur Giriş', editFormData.tour_exit && 'Tur Çıkış', editFormData.meeting && 'Görüşme', editFormData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                    </span>
+                                                    <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                    </svg>
+                                                </button>
+                                                {openTagsDropdown && (
+                                                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                                        {VISITOR_EDIT_TAGS.map((option) => (
+                                                            <label key={option.key} className="flex items-center px-4 py-2 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!editFormData[option.key]}
+                                                                    onChange={(e) => {
+                                                                        setEditFormData({ ...editFormData, [option.key]: e.target.checked });
+                                                                    }}
+                                                                    className="mr-3 w-4 h-4 cursor-pointer"
+                                                                />
+                                                                <span className="text-sm text-gray-700">{option.label}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>
+                                            <textarea value={editFormData.notes || ''} onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })} rows={3} placeholder="Notlar..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama</label>
-                                    <textarea
-                                        value={editFormData.notes}
-                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                                        rows={3}
-                                        placeholder="Notlar..."
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        disabled={savingEdit}
-                                    />
+                                <div className="flex gap-3 pt-4">
+                                    <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">Güncelle</button>
+                                    <button type="button" onClick={closeEditModal} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
                                 </div>
-                            </div>
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="submit"
-                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={savingEdit}
-                                >
-                                    {savingEdit ? 'Kaydediliyor...' : 'Güncelle'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={closeEditModal}
-                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={savingEdit}
-                                >
-                                    İptal
-                                </button>
-                            </div>
-                        </form>
+                            </form>
                         </div>
                     </div>
                 </div>
