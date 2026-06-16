@@ -340,14 +340,14 @@ export default function ManagerRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block w-full truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block w-full truncate whitespace-nowrap overflow-hidden"
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -380,12 +380,33 @@ export default function ManagerRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncBottomScroll = () => {
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
-
         if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
         tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
     };
 
     return (
@@ -601,7 +622,8 @@ export default function ManagerRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
@@ -609,54 +631,54 @@ export default function ManagerRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1530px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1000px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="w-[200px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="w-[175px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                <th className="w-[175px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                                <th className="w-[240px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                <th className="w-[190px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                <th className="w-[190px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
-                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[170px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                <th className="w-[80px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[130px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                <th className="w-[130px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900">{record.manager || '-'}</div>
-                                                        {record.manager_title && <div className="text-xs text-gray-500">{record.manager_title}</div>}
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs font-bold text-gray-900">{record.manager || '-'}</div>
+                                                        {record.manager_title && <div className="text-[10px] text-gray-500 mt-0.5">{record.manager_title}</div>}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
-                                                        <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.entry_date)}</div>
+                                                        <div className="text-[10px] text-gray-500 mt-0.5">{formatTime(record.entry_time)}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
                                                         {record.exit_date ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
-                                                                <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.exit_date)}</div>
+                                                                <div className="text-[10px] text-gray-500 mt-0.5">{formatTime(record.exit_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-gray-400">-</span>
+                                                            <span className="text-gray-400 text-xs">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-3 py-2.5 align-top">
                                                         {renderPreviewText(record.notes, 'Açıklama')}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.entry_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.entry_by || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.exit_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.exit_by || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <span className={`px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                                                             {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
                                                         </span>
                                                     </td>

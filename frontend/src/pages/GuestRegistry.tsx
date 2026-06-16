@@ -30,10 +30,40 @@ export default function GuestRegistry() {
     const [searchText, setSearchText] = useState('');
     const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
     const [debouncedSearchText, setDebouncedSearchText] = useState('');
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
 
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 100;
+
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
+        tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
+    };
 
     const columns = schema.columns;
 
@@ -248,11 +278,36 @@ export default function GuestRegistry() {
         return record.row_data?.[columnKey];
     };
 
+    const renderCellValue = (value: unknown, column: GuestRegistryColumn) => {
+        const formatted = formatCellValue(value, column.type);
+        const text = formatted === '-' ? '-' : String(formatted);
+
+        if (text === '-' || text.length <= 30) {
+            return <span className="text-xs text-gray-700 select-all">{text}</span>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title: column.label, value: text })}
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[200px] truncate whitespace-nowrap overflow-hidden select-text"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
     useEffect(() => {
         const updateScrollbarWidth = () => {
-            const tableWidth = tableScrollRef.current?.scrollWidth ?? 0;
-            const barWidth = bottomScrollRef.current?.clientWidth ?? 0;
-            setScrollbarSpacerWidth(Math.max(tableWidth, barWidth + 1));
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
+            const barClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            const normalizedWidth = Math.max(
+                tableScrollWidth - tableClientWidth + barClientWidth,
+                barClientWidth + 1
+            );
+            setScrollbarSpacerWidth(normalizedWidth);
         };
 
         updateScrollbarWidth();
@@ -267,14 +322,6 @@ export default function GuestRegistry() {
             resizeObserver.disconnect();
         };
     }, [records.length, columns.length, loading]);
-
-    const syncBottomScroll = () => {
-        const tableNode = tableScrollRef.current;
-        const barNode = bottomScrollRef.current;
-
-        if (!tableNode || !barNode) return;
-        tableNode.scrollLeft = barNode.scrollLeft;
-    };
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -300,9 +347,24 @@ export default function GuestRegistry() {
                             <button
                                 onClick={onUploadClick}
                                 disabled={uploading}
-                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto"
+                                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm w-full sm:w-auto animate-fadeIn"
                             >
-                                {uploading ? 'Yukleniyor...' : 'Dosya Yukle'}
+                                {uploading ? (
+                                    <>
+                                        <svg className="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Yükleniyor...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                        </svg>
+                                        Excel Yükle
+                                    </>
+                                )}
                             </button>
                             <input
                                 ref={fileInputRef}
@@ -316,66 +378,101 @@ export default function GuestRegistry() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
-                <div className="text-sm text-gray-600">
-                    Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayıt
-                </div>
-
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 pb-16 flex flex-col gap-4 overflow-hidden">
                 {lastSummary && (
-                    <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                        Toplam satır: {lastSummary.totalRows} | Eklenen: {lastSummary.insertedRows} | Atlanan: {lastSummary.skippedRows} | Hatalı: {lastSummary.failedRows}
+                    <div className="mb-2 bg-emerald-50/50 border border-emerald-200/60 rounded-xl p-4 shadow-sm animate-fadeIn">
+                        <h3 className="text-xs font-semibold text-emerald-900 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Yükleme Özeti
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div className="bg-white/85 backdrop-blur border border-emerald-100 rounded-lg p-2.5 text-center shadow-xs">
+                                <span className="block text-[10px] font-semibold text-emerald-800 uppercase tracking-wider">Toplam Satır</span>
+                                <span className="block text-base font-bold text-emerald-950 mt-0.5">{lastSummary.totalRows}</span>
+                            </div>
+                            <div className="bg-white/85 backdrop-blur border border-emerald-100 rounded-lg p-2.5 text-center shadow-xs">
+                                <span className="block text-[10px] font-semibold text-emerald-800 uppercase tracking-wider">Eklenen</span>
+                                <span className="block text-base font-bold text-emerald-700 mt-0.5">{lastSummary.insertedRows}</span>
+                            </div>
+                            <div className="bg-white/85 backdrop-blur border border-emerald-100 rounded-lg p-2.5 text-center shadow-xs">
+                                <span className="block text-[10px] font-semibold text-emerald-800 uppercase tracking-wider">Atlanan</span>
+                                <span className="block text-base font-bold text-amber-700 mt-0.5">{lastSummary.skippedRows}</span>
+                            </div>
+                            <div className="bg-white/85 backdrop-blur border border-emerald-100 rounded-lg p-2.5 text-center shadow-xs">
+                                <span className="block text-[10px] font-semibold text-emerald-800 uppercase tracking-wider">Hatalı</span>
+                                <span className="block text-base font-bold text-red-700 mt-0.5">{lastSummary.failedRows}</span>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                <div className="w-full bg-white rounded-lg shadow-md p-4 sm:p-5 mb-2">
-                    <div className="flex justify-between items-center mb-3">
-                        <h2 className="text-base font-bold text-gray-900">Arama</h2>
-                        <button
-                            onClick={onReset}
-                            disabled={loading || uploading || !hasActiveFilters}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
-                        >
-                            Temizle
-                        </button>
+                <div className="w-full bg-white rounded-lg shadow-sm border border-gray-200 px-3 py-2.5 mb-1">
+                    <div className="flex justify-between items-center mb-2">
+                        <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Arama ve Filtreleme</h2>
+                        {hasActiveFilters && (
+                            <button
+                                onClick={onReset}
+                                disabled={loading || uploading}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:text-gray-400 disabled:cursor-not-allowed"
+                            >
+                                Temizle
+                            </button>
+                        )}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">Exceldeki tüm kolonlarda ara</label>
+                    <div className="grid grid-cols-1 gap-2">
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
                             <input
                                 type="text"
                                 value={searchText}
                                 onChange={(e) => setSearchText(e.target.value)}
-                                placeholder="Örn: Mustafa, Nektar, 201, FB..."
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="Excel kolonlarında ara (Örn: İsim, Oda No, Firma, Tarih vb...)"
+                                className="w-full pl-9 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition shadow-sm"
                             />
                         </div>
-                        <div className="text-xs text-gray-500">
-                            Arama; Excel satırındaki tüm kolon değerleri içinde çalışır.
+                        <div className="text-[10px] text-gray-500 ml-1">
+                            Arama; Excel satırındaki tüm kolon değerleri içinde çalışır ve otomatik olarak filtrelenir.
                         </div>
                     </div>
                 </div>
 
                 {existenceMessage && (
-                    <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${records.length > 0 ? 'border border-emerald-200 bg-emerald-50 text-emerald-800' : 'border border-red-200 bg-red-50 text-red-700'}`}>
+                    <div className={`mb-2 rounded-lg px-4 py-2 text-xs font-medium border ${records.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
                         {existenceMessage}
                     </div>
                 )}
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
+                <div className="text-xs text-gray-500 font-medium ml-1">
+                    Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayıt listeleniyor
+                </div>
+
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0 flex flex-col">
                     {loading ? (
-                        <div className="flex items-center justify-center py-12">
+                        <div className="flex items-center justify-center py-20 flex-1">
                             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
                         </div>
                     ) : records.length === 0 ? (
-                        <div className="text-center py-12 text-gray-500">Kayıt bulunamadı</div>
+                        <div className="text-center py-20 text-gray-500 flex-1 flex flex-col items-center justify-center gap-2">
+                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0V9a2 2 0 00-2-2H6a2 2 0 00-2 2v4.5m16 0h-1.5m-3 0h-3" />
+                            </svg>
+                            Kayıt bulunamadı
+                        </div>
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2 flex-1"
                             tabIndex={0}
                             role="region"
-                            aria-label="Misafir kayit tablosu"
+                            aria-label="Misafir kayıt tablosu"
                         >
                             <div className="min-h-full w-max min-w-full">
                                 <table className="table-auto divide-y divide-gray-200" style={{ width: 'max-content', minWidth: '100%' }}>
@@ -384,7 +481,7 @@ export default function GuestRegistry() {
                                             {columns.map((column) => (
                                                 <th
                                                     key={column.key}
-                                                    className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                                    className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider"
                                                 >
                                                     {column.label}
                                                 </th>
@@ -393,15 +490,15 @@ export default function GuestRegistry() {
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {records.map((record) => (
-                                            <tr key={record.id} className="hover:bg-gray-50">
+                                            <tr key={record.id} className="hover:bg-slate-50/70 transition-colors">
                                                 {columns.map((column) => {
                                                     const value = getRowCellValue(record, column.key);
                                                     return (
                                                         <td
                                                             key={column.key}
-                                                            className="px-4 py-3 whitespace-nowrap text-sm text-gray-700"
+                                                            className="px-3 py-2 whitespace-nowrap align-middle"
                                                         >
-                                                            {formatCellValue(value, column.type)}
+                                                            {renderCellValue(value, column)}
                                                         </td>
                                                     );
                                                 })}
@@ -411,7 +508,7 @@ export default function GuestRegistry() {
                                 </table>
                                 {loadingMore && (
                                     <div className="flex items-center justify-center py-4">
-                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
                                     </div>
                                 )}
                             </div>
@@ -425,6 +522,38 @@ export default function GuestRegistry() {
                     <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
                 </div>
             </div>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-scaleIn">
+                        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-400 hover:text-gray-600 transition"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
+                            <p className="text-xs text-gray-800 whitespace-pre-wrap break-words select-text">{textPreview.value}</p>
+                        </div>
+                        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs font-semibold transition"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

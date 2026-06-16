@@ -399,14 +399,14 @@ export default function FireAlarmRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -439,12 +439,33 @@ export default function FireAlarmRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncBottomScroll = () => {
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
-
         if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
         tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
     };
 
     return (
@@ -665,7 +686,8 @@ export default function FireAlarmRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
@@ -673,62 +695,62 @@ export default function FireAlarmRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1550px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1000px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözümleyen</th>
+                                                <th className="w-[90px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Konum</th>
+                                                <th className="w-[80px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="w-[90px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çözümleyen</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
-                                                        {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
+                                                    <td className="px-3 py-2.5 align-top">
+                                                        <div className="text-xs font-bold text-gray-900 break-words">{record.location}</div>
+                                                        {record.false_alarm && <span className="text-[10px] text-red-600 font-medium">Yanlış Alarm</span>}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                        <div className="text-[10px] text-gray-500 mt-0.5">{formatTime(record.alarm_time)}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
                                                         {record.resolution_time ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                                <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                                <div className="text-[10px] text-gray-500 mt-0.5">{formatTime(record.resolution_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-sm text-gray-400">-</span>
+                                                            <span className="text-xs text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="w-[250px] px-4 py-3 pr-6">
+                                                    <td className="px-3 py-2.5 align-top">
                                                         {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
                                                         {record.resolved ? (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-green-100 text-green-800">Çözüldü</span>
                                                         ) : (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-red-100 text-red-800">Aktif</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.recorded_by_name || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap align-top">
+                                                        <div className="text-xs text-gray-900">{record.resolved_by_name || '-'}</div>
                                                     </td>
                                                 </tr>
                                             ))}

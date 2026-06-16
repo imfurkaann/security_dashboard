@@ -7,6 +7,50 @@ import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
+
 // Initial form states
 const INITIAL_FORM_DATA: SgkFormData = {
     tc_no: '',
@@ -737,63 +781,73 @@ export default function Sgk() {
                     </div>
                 ) : filteredRecords.length > 0 ? (
                     <div className="bg-white rounded-lg shadow border border-gray-200 w-full flex-1 min-h-0 overflow-hidden">
-                        <div className="p-4 sm:p-5 h-full min-h-0 overflow-auto">
-                            <div className="space-y-3">
+                        <div className="p-3 sm:p-4 h-full min-h-0 overflow-auto">
+                            <div className="space-y-2">
                                 {filteredRecords.map((record) => (
-                                    <div key={record.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition w-full">
+                                    <div key={record.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition w-full">
                                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                                            <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm min-w-0 ${isAdminView ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+                                            <div className={`flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs min-w-0 ${isAdminView ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
                                                 <div>
-                                                    <span className="text-gray-600 block mb-1">Ad Soyad</span>
+                                                    <span className="text-gray-500 block text-[11px] font-semibold uppercase tracking-wider mb-0.5">Ad Soyad</span>
                                                     <span className="font-normal text-gray-900 break-words">{record.full_name}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-gray-600 block mb-1">Firma</span>
+                                                    <span className="text-gray-500 block text-[11px] font-semibold uppercase tracking-wider mb-0.5">Firma</span>
                                                     <span className="font-normal text-gray-900 break-words">{record.company_name || '-'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-gray-600 block mb-1">Yüklenme Tarihi</span>
+                                                    <span className="text-gray-500 block text-[11px] font-semibold uppercase tracking-wider mb-0.5">Yüklenme Tarihi</span>
                                                     <span className="font-normal text-gray-900">{formatDate(record.upload_date)}</span>
                                                 </div>
                                                 {isAdminView && (
                                                     <div>
-                                                        <span className="text-gray-600 block mb-1">Kaydeden</span>
+                                                        <span className="text-gray-500 block text-[11px] font-semibold uppercase tracking-wider mb-0.5">Kaydeden</span>
                                                         <span className="font-normal text-gray-900 break-words">{record.personnel || '-'}</span>
                                                     </div>
                                                 )}
                                                 <div>
-                                                    <span className="text-gray-600 block mb-1">Dosya</span>
+                                                    <span className="text-gray-500 block text-[11px] font-semibold uppercase tracking-wider mb-0.5">Dosya</span>
                                                     <span className="font-normal text-gray-900">{record.file_count || record.files?.length || 0} adet</span>
                                                 </div>
                                             </div>
                                             <div className="flex-shrink-0 flex flex-nowrap items-center gap-2 sm:gap-3 overflow-x-auto whitespace-nowrap">
-                                                <ActionButton
+                                                <CompactActionButton
                                                     onClick={() => handleEdit(record)}
                                                     variant="primary"
-                                                    className="shrink-0"
-                                                >
-                                                    Düzenle
-                                                </ActionButton>
-                                                <ActionButton
+                                                    label="Düzenle"
+                                                    icon={
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                        </svg>
+                                                    }
+                                                />
+                                                <CompactActionButton
                                                     onClick={() => handlePreview(record)}
                                                     variant="success"
-                                                    className="shrink-0"
-                                                >
-                                                    Görüntüle
-                                                </ActionButton>
-                                                <ActionButton
+                                                    label="Görüntüle"
+                                                    icon={
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                    }
+                                                />
+                                                <CompactActionButton
                                                     onClick={() => handleDelete(record)}
                                                     variant="danger"
-                                                    className="shrink-0"
-                                                >
-                                                    Sil
-                                                </ActionButton>
+                                                    label="Sil"
+                                                    icon={
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                         {record.notes && (
-                                            <div className="mt-3 pt-3 border-t border-gray-200">
-                                                <span className="text-gray-600 text-sm">Not: </span>
-                                                <span className="text-gray-900 text-sm">{record.notes}</span>
+                                            <div className="mt-2 pt-2 border-t border-gray-200">
+                                                <span className="text-gray-500 font-semibold text-xs">Not: </span>
+                                                <span className="text-gray-900 text-xs">{record.notes}</span>
                                             </div>
                                         )}
                                     </div>

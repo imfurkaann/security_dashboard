@@ -2,10 +2,53 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import 'antd/dist/reset.css';
+
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateFireAlarmForm, isValidLength } from '../utils/validation';
-import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface FireAlarm {
@@ -357,14 +400,14 @@ export default function FireAlarms() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -394,11 +437,33 @@ export default function FireAlarms() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncBottomScroll = () => {
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
         if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
         tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
     };
 
     const dashboardCardBase = 'rounded-xl shadow-sm p-3 min-h-[92px] border';
@@ -485,92 +550,125 @@ export default function FireAlarms() {
                                 <p className="text-gray-500">Kayıt bulunmuyor</p>
                             </div>
                         ) : (
-                            <div ref={tableScrollRef} className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2">
+                            <div ref={tableScrollRef} onScroll={syncTableScroll} className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2">
                                 <div className="min-h-full">
-                                    <table className="w-full min-w-[1320px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1000px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
-                                                <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
-                                                <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="w-[110px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                                <th className="w-[170px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                <th className="w-[120px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
-                                                <th className="w-[120px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
-                                                <th className="w-[220px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                                <th className="w-[100px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="w-[150px] px-3 lg:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                <th className="w-[80px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[90px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Konum</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm Zamanı</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çözüm Zamanı</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="w-[90px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {filteredRecords.map(record => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                    <td className="px-3 lg:px-4 py-4 text-sm align-top">
+                                                    <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         <div className="flex items-center gap-2 whitespace-nowrap">
-                                                                <ActionButton
+                                                                <CompactActionButton
                                                                     onClick={() => openModalForEdit(record)}
                                                                     variant="primary"
                                                                     disabled={Boolean(record.deleted_at)}
-                                                                    className="shrink-0"
-                                                                >
-                                                                    Düzenle
-                                                                </ActionButton>
+                                                                    label="Düzenle"
+                                                                    icon={
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                        </svg>
+                                                                    }
+                                                                />
                                                                 {!record.resolved && !record.deleted_at && (
-                                                                    <ActionButton
+                                                                    <CompactActionButton
                                                                         onClick={() => openResolveModal(record.id)}
                                                                         variant="success"
-                                                                        className="shrink-0"
-                                                                    >
-                                                                        Çözümle
-                                                                    </ActionButton>
+                                                                        label="Çözümle"
+                                                                        icon={
+                                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                            </svg>
+                                                                        }
+                                                                    />
                                                                 )}
                                                                 {record.deleted_at ? (
-                                                                    <ActionButton onClick={() => handleRestore(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                                    <CompactActionButton
+                                                                        onClick={() => handleRestore(record.id)}
+                                                                        variant="success"
+                                                                        label="Geri Al"
+                                                                        icon={
+                                                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                            </svg>
+                                                                        }
+                                                                    />
                                                                 ) : (
                                                                     <>
                                                                         {record.resolved && (
-                                                                            <ActionButton onClick={() => handleUndoResolve(record.id)} variant="success" className="shrink-0">Geri Al</ActionButton>
+                                                                            <CompactActionButton
+                                                                                onClick={() => handleUndoResolve(record.id)}
+                                                                                variant="success"
+                                                                                label="Geri Al"
+                                                                                icon={
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                                                    </svg>
+                                                                                }
+                                                                            />
                                                                         )}
-                                                                        <ActionButton onClick={() => handleDelete(record.id)} variant="danger" className="shrink-0">Sil</ActionButton>
+                                                                        <CompactActionButton
+                                                                            onClick={() => handleDelete(record.id)}
+                                                                            variant="danger"
+                                                                            label="Sil"
+                                                                            icon={
+                                                                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                </svg>
+                                                                            }
+                                                                        />
                                                                     </>
                                                                 )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 align-top whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
-                                                        <div className="text-sm font-medium text-gray-900 break-words">{record.alarm_number || '-'}</div>
+                                                    <td className="px-3 py-2.5 align-top">
+                                                        <div className="text-xs font-medium text-gray-900 break-words">{record.alarm_number || '-'}</div>
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
-                                                        <div className="text-sm font-bold text-gray-900 break-words">{record.location}</div>
-                                                        {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlış Alarm</span>}
+                                                    <td className="px-3 py-2.5 align-top">
+                                                        <div className="text-xs font-bold text-gray-900 break-words">{record.location}</div>
+                                                        {record.false_alarm && <span className="text-[10px] text-red-600 font-medium">Yanlış Alarm</span>}
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                    <td className="px-3 py-2.5 align-top">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                        <div className="text-[10px] text-gray-600">{formatTime(record.alarm_time)}</div>
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
+                                                    <td className="px-3 py-2.5 align-top">
                                                         {record.resolution_time ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                                <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                                <div className="text-[10px] text-gray-600">{formatTime(record.resolution_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-sm text-gray-400">-</span>
+                                                            <span className="text-xs text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top w-[220px]">
+                                                    <td className="px-3 py-2.5 align-top">
                                                         {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top whitespace-normal">
+                                                    <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         {record.resolved ? (
-                                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
+                                                            <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-green-100 text-green-800">Çözüldü</span>
                                                         ) : (
-                                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                            <span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-3 lg:px-4 py-4 align-top">
-                                                        <div className="text-sm text-gray-900 break-words">{record.recorded_by_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 align-top">
+                                                        <div className="text-xs text-gray-900 break-words">{record.recorded_by_name || '-'}</div>
                                                     </td>
                                                 </tr>
                                             ))}
