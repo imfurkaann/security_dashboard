@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_URL } from '../constants';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
+import api from '../utils/api';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
@@ -46,14 +47,11 @@ export default function AdminManagePersonnel() {
 
     const fetchPersonnel = useCallback(async () => {
         try {
-            const token = localStorage.getItem('adminToken');
-            const response = await axios.get(`${API_URL}/personnel`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.get('/personnel');
             setPersonnel(response.data.data || []);
         } catch (error) {
             console.error('Error fetching personnel:', error);
-            alert('Personel verileri yüklenirken bir hata oluştu');
+            message.error('Personel verileri yüklenirken bir hata oluştu');
         } finally {
             setLoading(false);
         }
@@ -109,27 +107,26 @@ export default function AdminManagePersonnel() {
         e.preventDefault();
 
         if (!firstName.trim() || !lastName.trim() || !username.trim()) {
-            alert('Lütfen tüm zorunlu alanları doldurun');
+            message.warning('Lütfen tüm zorunlu alanları doldurun');
             return;
         }
 
         if (!editingPersonnel && !password.trim()) {
-            alert('Yeni personel için şifre gereklidir');
+            message.warning('Yeni personel için şifre gereklidir');
             return;
         }
 
         if (hasInvalidUsernameChars) {
-            alert('Kullanıcı adında Türkçe olmayan karakter kullanamazsınız');
+            message.warning('Kullanıcı adında Türkçe olmayan karakter kullanamazsınız');
             return;
         }
 
         if (shouldValidatePasswordMatch && passwordsDoNotMatch) {
-            alert('Girilen şifreler eşleşmiyor');
+            message.warning('Girilen şifreler eşleşmiyor');
             return;
         }
 
         try {
-            const token = localStorage.getItem('adminToken');
             const data: any = {
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
@@ -145,44 +142,42 @@ export default function AdminManagePersonnel() {
 
             if (editingPersonnel) {
                 // Update existing personnel
-                await axios.put(`${API_URL}/personnel/${editingPersonnel.id}`, data, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                alert('Personel başarıyla güncellendi');
+                await api.put(`/personnel/${editingPersonnel.id}`, data);
+                message.success('Personel başarıyla güncellendi');
             } else {
                 // Create new personnel
-                await axios.post(`${API_URL}/personnel`, data, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                alert('Personel başarıyla eklendi');
+                await api.post('/personnel', data);
+                message.success('Personel başarıyla eklendi');
             }
 
             closeModal();
-            fetchPersonnel();
+            void fetchPersonnel();
         } catch (error: any) {
             console.error('Error saving personnel:', error);
             const errorMessage = error.response?.data?.message || 'İşlem sırasında bir hata oluştu';
-            alert(errorMessage);
+            message.error(errorMessage);
         }
     };
 
     const handleDelete = async (id: string, fullName: string) => {
-        if (!confirm(`${fullName} kullanıcısını silmek istediğinizden emin misiniz?`)) {
-            return;
-        }
-
-        try {
-            const token = localStorage.getItem('adminToken');
-            await axios.delete(`${API_URL}/personnel/${id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            alert('Personel başarıyla silindi');
-            fetchPersonnel();
-        } catch (error: any) {
-            console.error('Error deleting personnel:', error);
-            const errorMessage = error.response?.data?.message || 'Silme işlemi sırasında bir hata oluştu';
-            alert(errorMessage);
-        }
+        Modal.confirm({
+            title: 'Personeli Sil',
+            content: `${fullName} kullanıcısını silmek istediğinizden emin misiniz?`,
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/personnel/${id}`);
+                    message.success('Personel başarıyla silindi');
+                    void fetchPersonnel();
+                } catch (error: any) {
+                    console.error('Error deleting personnel:', error);
+                    const errorMessage = error.response?.data?.message || 'Silme işlemi sırasında bir hata oluştu';
+                    message.error(errorMessage);
+                }
+            }
+        });
     };
 
     const getRoleBadge = (role: string) => {

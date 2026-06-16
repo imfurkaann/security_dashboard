@@ -1,16 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
-import axios from 'axios';
+import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
-import { API_URL } from '../constants';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import ActionButton from '../components/ActionButton';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
@@ -168,27 +166,38 @@ export default function AdminVisitorRecords() {
     });
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
-        // If filters are applied, load full dataset to support client-side filtering
-        const anyFilterApplied = Object.values(filters).some((v) => v !== '' && v !== 'all');
-
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
 
-            if (anyFilterApplied) {
-                // load unlimited set for filtering
-                const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&unlimited=true`, config);
-                setRecords(res.data || []);
-                setHasMore(false);
-                return;
-            }
+            if (filters.full_name) params.append('full_name', filters.full_name);
+            if (filters.company_name) params.append('company_name', filters.company_name);
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.visiting_person) params.append('visiting_person', filters.visiting_person);
+            if (filters.phone) params.append('phone', filters.phone);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
 
-            // Paginated fetch for normal browsing to avoid heavy payloads
-            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`, config);
+            if (filters.visitor_tag === 'subcontractor') params.append('subcontractor_worker', 'true');
+            if (filters.visitor_tag === 'electric') params.append('for_electric_station', 'true');
+            if (filters.visitor_tag === 'daily_guest') params.append('daily_guest', 'true');
+            if (filters.visitor_tag === 'entry_tag') params.append('entry_tag', 'true');
+            if (filters.visitor_tag === 'exit_tag') params.append('exit_tag', 'true');
+            if (filters.visitor_tag === 'tour_entry') params.append('tour_entry', 'true');
+            if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
+            if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
+            if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
+
+            const res = await api.get(`/visitors/records?${params.toString()}&_t=${Date.now()}`);
             const fetched: VisitorRecord[] = res.data || [];
 
             if (append) {
@@ -197,9 +206,9 @@ export default function AdminVisitorRecords() {
                 setRecords(fetched);
             }
 
-            // If fetched less than page size, no more pages
             setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
+            message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
             setLoading(false);
@@ -207,17 +216,14 @@ export default function AdminVisitorRecords() {
         }
     }, [filters]);
 
-    
-
     useEffect(() => {
-        // initial load
         setLoading(true);
         void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['visitors'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
     });
 
     const openEditModal = useCallback((record: VisitorRecord) => {
@@ -227,223 +233,67 @@ export default function AdminVisitorRecords() {
     }, []);
 
     const closeEditModal = useCallback(() => {
-        setShowEditModal(false);
         setEditingRecord(null);
-        setEditFormData(createVisitorEditFormData(null));
-        setOpenTagsDropdown(false);
-        setSavingEdit(false);
+        setShowEditModal(false);
     }, []);
 
-    const handleSaveEdit = useCallback(async () => {
+    const handleSaveEdit = async () => {
         if (!editingRecord) return;
 
-        if (!editFormData.full_name.trim()) {
-            alert('İsim Soyisim zorunludur');
-            return;
-        }
-
         try {
-            setSavingEdit(true);
-            const adminToken = localStorage.getItem('adminToken');
-            const payload = {
-                vehicle_plate: editFormData.vehicle_plate.trim() || null,
-                full_name: editFormData.full_name.trim(),
-                company_name: editFormData.company_name.trim() || null,
-                visiting_person: editFormData.visiting_person.trim() || null,
-                person_count: editFormData.person_count.trim() === '' ? null : Number(editFormData.person_count),
-                children_count: editFormData.children_count.trim() === '' ? null : Number(editFormData.children_count),
-                phone: editFormData.phone.trim() || null,
-                notes: editFormData.notes.trim() || null,
-                subcontractor_worker: editFormData.subcontractor_worker,
-                for_electric_station: editFormData.for_electric_station,
-                daily_guest: editFormData.daily_guest,
-                entry_tag: editFormData.entry_tag,
-                exit_tag: editFormData.exit_tag,
-                tour_entry: editFormData.tour_entry,
-                tour_exit: editFormData.tour_exit,
-                meeting: editFormData.meeting,
-                delivery: editFormData.delivery,
-                entry_time: editFormData.entry_time.trim() || null,
-                exit_time: editFormData.exit_time.trim() || null,
-                highlight_color: editFormData.highlight_color || 'none'
-            };
-
-            await axios.put(`${API_URL}/visitors/records/${editingRecord.id}`, payload, {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            });
-
-            setRecords((prev) => prev.map((record) => (
-                record.id === editingRecord.id
-                    ? {
-                        ...record,
-                        ...payload,
-                        person_count: payload.person_count === null ? 1 : Number(payload.person_count),
-                        children_count: payload.children_count === null ? 0 : Number(payload.children_count)
-                    }
-                    : record
-            )));
-
-            closeEditModal();
+            const response = await api.put(`/visitors/records/${editingRecord.id}`, editFormData);
+            if (response.data.success) {
+                message.success('Kayıt başarıyla güncellendi');
+                closeEditModal();
+                fetchData(0, false);
+            }
         } catch (error) {
             console.error('Kayıt güncellenemedi:', error);
-            alert((error as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Kayıt güncellenirken bir hata oluştu');
-        } finally {
-            setSavingEdit(false);
+            message.error('Kayıt güncellenirken bir hata oluştu');
         }
-    }, [closeEditModal, editFormData, editingRecord]);
+    };
 
     const handleDeleteRecord = useCallback(async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.delete(`${API_URL}/visitors/records/${id}`, {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/visitors/records/${id}`);
+                    setRecords(prev => prev.map(r => r.id === id ? { ...r, deleted_at: new Date().toISOString() } : r));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
                 }
-            });
-
-            setRecords((prev) => prev.map((record) => (
-                record.id === id
-                    ? { ...record, deleted_at: new Date().toISOString() }
-                    : record
-            )));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+            }
+        });
     }, []);
 
     const handleRestoreRecord = useCallback(async (id: string) => {
-        if (!confirm('Bu kaydı geri almak istediğinize emin misiniz?')) return;
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.post(`${API_URL}/visitors/records/${id}/restore`, {}, {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
+        Modal.confirm({
+            title: 'Kaydı Geri Al',
+            content: 'Bu kaydı geri almak istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/visitors/records/${id}/restore`, {});
+                    setRecords(prev => prev.map(r => r.id === id ? { ...r, deleted_at: null } : r));
+                    message.success('Kayıt geri alındı');
+                } catch (error) {
+                    console.error('Kayıt geri alınamadı:', error);
+                    message.error('Kayıt geri alınırken bir hata oluştu');
                 }
-            });
-
-            setRecords((prev) => prev.map((record) => (
-                record.id === id
-                    ? { ...record, deleted_at: null }
-                    : record
-            )));
-        } catch (error) {
-            console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
-        }
+            }
+        });
     }, []);
 
     // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            // Full name filter
-            if (filters.full_name && !normalizeSearchText(record.full_name).includes(normalizeSearchText(filters.full_name))) {
-                return false;
-            }
-
-            // Company name filter
-            if (filters.company_name && !normalizeSearchText(record.company_name).includes(normalizeSearchText(filters.company_name))) {
-                return false;
-            }
-
-            // Vehicle plate filter
-            if (filters.vehicle_plate && !normalizeSearchText(record.vehicle_plate).includes(normalizeSearchText(filters.vehicle_plate))) {
-                return false;
-            }
-
-            // Visiting person filter
-            if (filters.visiting_person && !normalizeSearchText(record.visiting_person).includes(normalizeSearchText(filters.visiting_person))) {
-                return false;
-            }
-
-            // Phone filter
-            if (filters.phone && (!record.phone || !record.phone.includes(filters.phone))) {
-                return false;
-            }
-
-            // Entry by filter
-            if (filters.entry_by && !normalizeSearchText(record.entry_by).includes(normalizeSearchText(filters.entry_by))) {
-                return false;
-            }
-
-            // Exit by filter
-            if (filters.exit_by && !normalizeSearchText(record.exit_by).includes(normalizeSearchText(filters.exit_by))) {
-                return false;
-            }
-
-            // Status filter
-            if (filters.status === 'deleted') {
-                if (!record.deleted_at) {
-                    return false;
-                }
-            } else if (filters.status === 'inside') {
-                if (record.status !== 'inside' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            } else if (filters.status === 'exited') {
-                if (record.status !== 'exited' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            }
-
-            // Gate filter
-            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
-                return false;
-            }
-
-            // Visitor tag filter
-            if (filters.visitor_tag === 'subcontractor' && !record.subcontractor_worker) {
-                return false;
-            }
-            if (filters.visitor_tag === 'electric' && !record.for_electric_station) {
-                return false;
-            }
-            if (filters.visitor_tag === 'daily_guest' && !record.daily_guest) {
-                return false;
-            }
-            if (filters.visitor_tag === 'entry_tag' && !record.entry_tag) {
-                return false;
-            }
-            if (filters.visitor_tag === 'exit_tag' && !record.exit_tag) {
-                return false;
-            }
-            if (filters.visitor_tag === 'tour_entry' && !record.tour_entry) {
-                return false;
-            }
-            if (filters.visitor_tag === 'tour_exit' && !record.tour_exit) {
-                return false;
-            }
-            if (filters.visitor_tag === 'meeting' && !record.meeting) {
-                return false;
-            }
-            if (filters.visitor_tag === 'delivery' && !record.delivery) {
-                return false;
-            }
-
-            // Entry date range filter - inclusive dayjs comparison
-            if (filters.entryDateStart && filters.entryDateEnd) {
-                const d = dayjs(record.entry_date);
-                const start = dayjs(filters.entryDateStart).startOf('day');
-                const end = dayjs(filters.entryDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            // Exit date range filter - inclusive
-            if (filters.exitDateStart && filters.exitDateEnd && record.exit_date) {
-                const d = dayjs(record.exit_date);
-                const start = dayjs(filters.exitDateStart).startOf('day');
-                const end = dayjs(filters.exitDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, filters]);
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -477,7 +327,7 @@ export default function AdminVisitorRecords() {
         const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
 
         if (!entryRangeSelected && !exitRangeSelected) {
-            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
+            message.warning('Lütfen giriş veya çıkış tarih aralığı seçin.');
             return;
         }
 
@@ -496,16 +346,43 @@ export default function AdminVisitorRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.warning('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = { headers: { Authorization: `Bearer ${adminToken}` } };
-            const res = await axios.get(`${API_URL}/visitors/records?includeDeleted=true&unlimited=true`, config);
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('unlimited', 'true');
+
+            if (filters.full_name) params.append('full_name', filters.full_name);
+            if (filters.company_name) params.append('company_name', filters.company_name);
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.visiting_person) params.append('visiting_person', filters.visiting_person);
+            if (filters.phone) params.append('phone', filters.phone);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+
+            if (filters.visitor_tag === 'subcontractor') params.append('subcontractor_worker', 'true');
+            if (filters.visitor_tag === 'electric') params.append('for_electric_station', 'true');
+            if (filters.visitor_tag === 'daily_guest') params.append('daily_guest', 'true');
+            if (filters.visitor_tag === 'entry_tag') params.append('entry_tag', 'true');
+            if (filters.visitor_tag === 'exit_tag') params.append('exit_tag', 'true');
+            if (filters.visitor_tag === 'tour_entry') params.append('tour_entry', 'true');
+            if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
+            if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
+            if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
+
+            const res = await api.get(`/visitors/records?${params.toString()}`);
             const allRecords: VisitorRecord[] = res.data || [];
 
             const start = dayjs(rangeStart).startOf('day');
@@ -521,7 +398,7 @@ export default function AdminVisitorRecords() {
                 .filter(record => !record.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -569,111 +446,42 @@ export default function AdminVisitorRecords() {
 
             const worksheetColumnWidths = [14, 14, 18, 18, 18, 14, 12, 14, 12, 20, 12, 12, 14, 14, 14, 14, 32];
 
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const dayGroup of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Ziyaretçi Kayıtları');
-
-                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FF1D4ED8' }
-                    };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                dayGroup.records.forEach((record) => {
-                    const row = worksheet.addRow([
-                        record.gate || '-',
-                        record.vehicle_plate || '-',
-                        record.full_name || '-',
-                        record.company_name || '-',
-                        record.visiting_person || '-',
-                        formatDate(record.entry_date),
-                        formatTime(record.entry_time),
-                        record.exit_date ? formatDate(record.exit_date) : '-',
-                        record.exit_time ? formatTime(record.exit_time) : '-',
-                        getVisitorTags(record).join(', ') || '-',
-                        record.person_count ?? '-',
-                        record.children_count ?? '-',
-                        record.phone || '-',
-                        record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
-                        record.entry_by || '-',
-                        record.exit_by || '-',
-                        record.notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
-                const fileName = `Ziyaretci_Kayitlari_${formattedDayForFileName}.xlsx`;
-                const workbookBuffer = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
-            }
-
-            const triggerDownload = (blob: Blob, fileName: string) => {
-                return new Promise<void>((resolve) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        resolve();
-                    }, 500);
-                });
-            };
-
-            if (dayFiles.length === 1) {
-                const [singleFile] = dayFiles;
-                const blob = new Blob([singleFile.data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                await triggerDownload(blob, singleFile.fileName);
-                return;
-            }
-
-            const zip = new JSZip();
-            dayFiles.forEach((file) => {
-                zip.file(file.fileName, file.data);
+            await exportRecordsToExcelAndZip<VisitorRecord>({
+                exportGroups,
+                headerRow,
+                columnWidths: worksheetColumnWidths,
+                mapRecordToRow: (record) => [
+                    record.gate || '-',
+                    record.vehicle_plate || '-',
+                    record.full_name || '-',
+                    record.company_name || '-',
+                    record.visiting_person || '-',
+                    formatDate(record.entry_date),
+                    formatTime(record.entry_time),
+                    record.exit_date ? formatDate(record.exit_date) : '-',
+                    record.exit_time ? formatTime(record.exit_time) : '-',
+                    getVisitorTags(record).join(', ') || '-',
+                    record.person_count ?? '-',
+                    record.children_count ?? '-',
+                    record.phone || '-',
+                    record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
+                    record.entry_by || '-',
+                    record.exit_by || '-',
+                    record.notes || '-'
+                ],
+                sheetName: 'Ziyaretçi Kayıtları',
+                filePrefix: 'Ziyaretci_Kayitlari_',
+                zipNamePrefix: 'Ziyaretci_Kayitlari'
             });
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
-            await triggerDownload(zipBlob, `Ziyaretci_Kayitlari_Toplu_${timestamp}.zip`);
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [filters, isExporting]);
 
     // Clear all filters
     const clearFilters = () => {

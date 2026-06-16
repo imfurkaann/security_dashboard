@@ -72,8 +72,6 @@ export const getManagers = async (_req: Request, res: Response): Promise<void> =
 export const getVehicleRecords = async (req: Request, res: Response): Promise<void> => {
     try {
         const includeDeleted = req.query.includeDeleted === 'true';
-        const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
-        const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
         const unlimited = req.query.unlimited === 'true';
 
         const reqLimit = Number(req.query.limit ?? 1000);
@@ -82,6 +80,77 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
         const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
 
         const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+
+        const filters: string[] = [];
+        const queryParams: any[] = [];
+        let paramIndex = 1;
+
+        if (!includeDeleted) {
+            filters.push(`vr.deleted_at IS NULL`);
+        }
+
+        // Apply query filters
+        if (req.query.vehicle_plate) {
+            filters.push(`v.plate = $${paramIndex++}`);
+            queryParams.push(req.query.vehicle_plate);
+        }
+
+        if (req.query.manager) {
+            filters.push(`(vr.manager_name ILIKE $${paramIndex} OR CONCAT(m.first_name, ' ', m.last_name) ILIKE $${paramIndex})`);
+            queryParams.push(`%${req.query.manager}%`);
+            paramIndex++;
+        }
+
+        if (req.query.destination) {
+            filters.push(`vr.destination ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.destination}%`);
+        }
+
+        if (req.query.given_by) {
+            filters.push(`CONCAT(pg.first_name, ' ', pg.last_name) ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.given_by}%`);
+        }
+
+        if (req.query.returned_by) {
+            filters.push(`CONCAT(pr.first_name, ' ', pr.last_name) ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.returned_by}%`);
+        }
+
+        if (req.query.status && req.query.status !== 'all') {
+            if (req.query.status === 'deleted') {
+                filters.push(`vr.deleted_at IS NOT NULL`);
+            } else {
+                filters.push(`vr.status = $${paramIndex++}`);
+                queryParams.push(req.query.status);
+            }
+        }
+
+        if (req.query.gate && req.query.gate !== 'all') {
+            filters.push(`vr.gate = $${paramIndex++}`);
+            queryParams.push(req.query.gate);
+        }
+
+        if (req.query.givenDateStart) {
+            filters.push(`vr.given_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.givenDateStart);
+        }
+
+        if (req.query.givenDateEnd) {
+            filters.push(`vr.given_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.givenDateEnd);
+        }
+
+        if (req.query.returnDateStart) {
+            filters.push(`vr.return_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.returnDateStart);
+        }
+
+        if (req.query.returnDateEnd) {
+            filters.push(`vr.return_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.returnDateEnd);
+        }
+
+        const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
         const query = `
             SELECT 
@@ -96,7 +165,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
                 vr.status,
                 vr.notes,
                 vr.created_at,
-                ${deletedAtSelect}
+                vr.deleted_at,
                 v.brand as vehicle_brand,
                 v.plate as vehicle_plate,
                 m.first_name as manager_first_name,
@@ -111,11 +180,11 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN managers m ON vr.manager_id = m.id
             INNER JOIN personnel pg ON vr.given_by = pg.id
             LEFT JOIN personnel pr ON vr.returned_by = pr.id
-            ${deletedAtFilter}
+            ${whereClause}
             ORDER BY vr.given_date DESC, vr.given_time DESC
             ${limitClause}
         `;
-        const result = await pool.query(query);
+        const result = await pool.query(query, queryParams);
 
         // Format the data
         const formattedData = result.rows.map(row => ({
@@ -238,109 +307,128 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Check if vehicle exists and is available
-        const vehicleCheck = await pool.query(
-            'SELECT status FROM vehicles WHERE id = $1 AND deleted_at IS NULL',
-            [vehicle_id]
-        );
+        const id = uuidv4();
+        const clientIp = getClientIp(req);
+        let resolvedManagerName = manager_name;
+        let givenDate = '';
+        let givenTimeFormatted = '';
+        let vehiclePlate = 'Bilinmeyen';
 
-        if (vehicleCheck.rows.length === 0) {
-            res.status(404).json({
-                success: false,
-                message: 'Araç bulunamadı'
-            });
-            return;
-        }
+        // Start transaction
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        let vehicleStatus = vehicleCheck.rows[0].status;
-
-        // Stale durumlari otomatik duzelt: aktif in_use kaydi yoksa araci available yap.
-        if (vehicleStatus !== 'available') {
-            const activeInUseRecord = await pool.query(
-                `SELECT 1
-                 FROM vehicle_records
-                 WHERE vehicle_id = $1
-                   AND deleted_at IS NULL
-                   AND status = 'in_use'
-                 LIMIT 1`,
+            // GÜVENLİK/CONCURRENCY: Lock the vehicle row to prevent duplicate active checkouts
+            const vehicleCheck = await client.query(
+                'SELECT status, plate FROM vehicles WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
                 [vehicle_id]
             );
 
-            if (activeInUseRecord.rows.length === 0) {
-                await pool.query(
-                    'UPDATE vehicles SET status = $1 WHERE id = $2',
-                    ['available', vehicle_id]
-                );
-                vehicleStatus = 'available';
-            }
-        }
-
-        if (vehicleStatus !== 'available') {
-            res.status(400).json({
-                success: false,
-                message: 'Araç kullanımda, müsait değil'
-            });
-            return;
-        }
-
-        // Check if manager exists and get name (only if manager_id is provided)
-        let resolvedManagerName = manager_name;
-        if (manager_id) {
-            const managerCheck = await pool.query(
-                'SELECT id, first_name, last_name FROM managers WHERE id = $1 AND deleted_at IS NULL AND is_active = true',
-                [manager_id]
-            );
-
-            if (managerCheck.rows.length === 0) {
+            if (vehicleCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
                 res.status(404).json({
                     success: false,
-                    message: 'Müdür bulunamadı'
+                    message: 'Araç bulunamadı'
                 });
                 return;
             }
 
-            // Auto-populate manager_name if manager_id is provided
-            const manager = managerCheck.rows[0];
-            resolvedManagerName = `${manager.first_name} ${manager.last_name}`;
+            let vehicleStatus = vehicleCheck.rows[0].status;
+            vehiclePlate = vehicleCheck.rows[0].plate || 'Bilinmeyen';
+
+            // Stale durumlari otomatik duzelt
+            if (vehicleStatus !== 'available') {
+                const activeInUseRecord = await client.query(
+                    `SELECT 1
+                     FROM vehicle_records
+                     WHERE vehicle_id = $1
+                       AND deleted_at IS NULL
+                       AND status = 'in_use'
+                     LIMIT 1`,
+                    [vehicle_id]
+                );
+
+                if (activeInUseRecord.rows.length === 0) {
+                    await client.query(
+                        'UPDATE vehicles SET status = $1 WHERE id = $2',
+                        ['available', vehicle_id]
+                    );
+                    vehicleStatus = 'available';
+                }
+            }
+
+            if (vehicleStatus !== 'available') {
+                await client.query('ROLLBACK');
+                res.status(400).json({
+                    success: false,
+                    message: 'Araç kullanımda, müsait değil'
+                });
+                return;
+            }
+
+            // Check if manager exists (if manager_id is provided)
+            if (manager_id) {
+                const managerCheck = await client.query(
+                    'SELECT id, first_name, last_name FROM managers WHERE id = $1 AND deleted_at IS NULL AND is_active = true',
+                    [manager_id]
+                );
+
+                if (managerCheck.rows.length === 0) {
+                    await client.query('ROLLBACK');
+                    res.status(404).json({
+                        success: false,
+                        message: 'Müdür bulunamadı'
+                    });
+                    return;
+                }
+
+                const manager = managerCheck.rows[0];
+                resolvedManagerName = `${manager.first_name} ${manager.last_name}`;
+            }
+
+            // Create record with custom time if provided, returning actual database values
+            let insertQuery: string;
+            let queryParams: any[];
+
+            if (given_time && /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time)) {
+                insertQuery = `INSERT INTO vehicle_records (
+                    id, vehicle_id, manager_id, manager_name, given_by,
+                    given_date, given_time, destination, notes, gate, status
+                ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, $9, 'in_use')
+                RETURNING given_date, given_time`;
+                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null, gate];
+            } else {
+                insertQuery = `INSERT INTO vehicle_records (
+                    id, vehicle_id, manager_id, manager_name, given_by,
+                    given_date, given_time, destination, notes, gate, status
+                ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, $8, 'in_use')
+                RETURNING given_date, given_time`;
+                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null, gate];
+            }
+
+            const insertResult = await client.query(insertQuery, queryParams);
+            const dbGivenDate = insertResult.rows[0]?.given_date;
+            const dbGivenTime = insertResult.rows[0]?.given_time;
+
+            givenDate = dbGivenDate ? (typeof dbGivenDate === 'string' ? dbGivenDate : new Date(dbGivenDate).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0];
+            givenTimeFormatted = dbGivenTime ? String(dbGivenTime).substring(0, 5) : new Date().toLocaleTimeString('tr-TR').substring(0, 5);
+
+            // Update vehicle status
+            await client.query(
+                'UPDATE vehicles SET status = $1 WHERE id = $2',
+                ['in_use', vehicle_id]
+            );
+
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
         }
-
-        const id = uuidv4();
-
-        // Start transaction
-        await pool.query('BEGIN');
-
-        // Create record with custom time if provided
-        let insertQuery: string;
-        let queryParams: any[];
-
-        if (given_time && /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time)) {
-            // If valid time provided (HH:MM format), use it
-            insertQuery = `INSERT INTO vehicle_records (
-                id, vehicle_id, manager_id, manager_name, given_by,
-                given_date, given_time, destination, notes, gate, status
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, $9, 'in_use')`;
-            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null, gate];
-        } else {
-            // Use current timestamp
-            insertQuery = `INSERT INTO vehicle_records (
-                id, vehicle_id, manager_id, manager_name, given_by,
-                given_date, given_time, destination, notes, gate, status
-            ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, $8, 'in_use')`;
-            queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null, gate];
-        }
-
-        await pool.query(insertQuery, queryParams);
-
-        // Update vehicle status
-        await pool.query(
-            'UPDATE vehicles SET status = $1 WHERE id = $2',
-            ['in_use', vehicle_id]
-        );
-
-        await pool.query('COMMIT');
 
         // GÜVENLİK: Audit log kaydı
-        const clientIp = getClientIp(req);
         await logDataChange(
             'vehicle_records',
             id,
@@ -351,29 +439,14 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             clientIp
         );
 
-        // WhatsApp mesaj şablonu oluştur
+        // WhatsApp mesajı oluştur
         let whatsappMessage = '';
         try {
-            const vehicleInfo = await pool.query(
-                'SELECT plate FROM vehicles WHERE id = $1',
-                [vehicle_id]
-            );
-            const vehiclePlate = vehicleInfo.rows[0]?.plate || 'Bilinmeyen';
-
-            const recordInfo = await pool.query(
-                'SELECT given_date, given_time FROM vehicle_records WHERE id = $1',
-                [id]
-            );
-            const givenDate = recordInfo.rows[0]?.given_date || new Date().toISOString().split('T')[0];
-            const timeString = recordInfo.rows[0]?.given_time || new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
-            // Sadece saat:dakika formatına çevir (HH:MM)
-            const givenTime = timeString.substring(0, 5);
-
             whatsappMessage = createVehicleRecordMessage({
                 vehiclePlate,
                 managerName: resolvedManagerName,
                 givenDate,
-                givenTime,
+                givenTime: givenTimeFormatted,
                 destination,
                 notes: notes || undefined
             });
@@ -396,7 +469,6 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             topics: resolveMutationTopics('/api/vehicles/records'),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Create vehicle record error:', error);
         res.status(500).json({
             success: false,
@@ -642,30 +714,38 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
         values.push(id);
 
         // Start transaction for vehicle status updates
-        await pool.query('BEGIN');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        // Execute update
-        await pool.query(
-            `UPDATE vehicle_records SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-            values
-        );
-
-        // If vehicle changed and record is still in_use, update both old and new vehicle statuses
-        if (vehicle_id && vehicle_id !== oldVehicleId && recordStatus === 'in_use') {
-            // Set old vehicle to available
-            await pool.query(
-                'UPDATE vehicles SET status = $1 WHERE id = $2',
-                ['available', oldVehicleId]
+            // Execute update
+            await client.query(
+                `UPDATE vehicle_records SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+                values
             );
 
-            // Set new vehicle to in_use
-            await pool.query(
-                'UPDATE vehicles SET status = $1 WHERE id = $2',
-                ['in_use', vehicle_id]
-            );
+            // If vehicle changed and record is still in_use, update both old and new vehicle statuses
+            if (vehicle_id && vehicle_id !== oldVehicleId && recordStatus === 'in_use') {
+                // Set old vehicle to available
+                await client.query(
+                    'UPDATE vehicles SET status = $1 WHERE id = $2',
+                    ['available', oldVehicleId]
+                );
+
+                // Set new vehicle to in_use
+                await client.query(
+                    'UPDATE vehicles SET status = $1 WHERE id = $2',
+                    ['in_use', vehicle_id]
+                );
+            }
+
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
         }
-
-        await pool.query('COMMIT');
 
         // GÜVENLİK: Audit log kaydı
         const clientIp = getClientIp(req);
@@ -693,7 +773,6 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Update vehicle record error:', error);
         res.status(500).json({
             success: false,
@@ -746,26 +825,34 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
         const personnel_id = req.user?.userId;
 
         // Start transaction
-        await pool.query('BEGIN');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        // Update record - aracı iade eden kişiyi kaydet
-        await pool.query(
-            `UPDATE vehicle_records 
-             SET return_date = CURRENT_DATE, 
-                 return_time = CURRENT_TIME, 
-                 returned_by = $2,
-                 status = 'returned'
-             WHERE id = $1`,
-            [id, personnel_id]
-        );
+            // Update record - aracı iade eden kişiyi kaydet
+            await client.query(
+                `UPDATE vehicle_records 
+                 SET return_date = CURRENT_DATE, 
+                     return_time = CURRENT_TIME, 
+                     returned_by = $2,
+                     status = 'returned'
+                 WHERE id = $1`,
+                [id, personnel_id]
+            );
 
-        // Update vehicle status
-        await pool.query(
-            'UPDATE vehicles SET status = $1 WHERE id = $2',
-            ['available', vehicle_id]
-        );
+            // Update vehicle status
+            await client.query(
+                'UPDATE vehicles SET status = $1 WHERE id = $2',
+                ['available', vehicle_id]
+            );
 
-        await pool.query('COMMIT');
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
 
         // GÜVENLİK: Audit log kaydı
         const clientIp = getClientIp(req);
@@ -836,7 +923,6 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
             topics: resolveMutationTopics(`/api/vehicles/records/${id}/return`),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Return vehicle error:', error);
         res.status(500).json({
             success: false,
@@ -905,28 +991,34 @@ export const undoVehicleReturn = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        await pool.query('BEGIN');
-        transactionStarted = true;
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        await pool.query(
-            `UPDATE vehicle_records
-             SET return_date = NULL,
-                 return_time = NULL,
-                 returned_by = NULL,
-                 returned_by_name = NULL,
-                 status = 'in_use',
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1`,
-            [id]
-        );
+            await client.query(
+                `UPDATE vehicle_records
+                 SET return_date = NULL,
+                     return_time = NULL,
+                     returned_by = NULL,
+                     returned_by_name = NULL,
+                     status = 'in_use',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [id]
+            );
 
-        await pool.query(
-            'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            ['in_use', vehicleId]
-        );
+            await client.query(
+                'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                ['in_use', vehicleId]
+            );
 
-        await pool.query('COMMIT');
-        transactionStarted = false;
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
 
         const clientIp = getClientIp(req);
         await logDataChange(
@@ -953,10 +1045,6 @@ export const undoVehicleReturn = async (req: Request, res: Response): Promise<vo
             topics: resolveMutationTopics(`/api/vehicles/records/${id}/undo-return`),
         });
     } catch (error) {
-        if (transactionStarted) {
-            await pool.query('ROLLBACK');
-        }
-
         console.error('Undo vehicle return error:', error);
         res.status(500).json({
             success: false,
@@ -1004,36 +1092,44 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        await pool.query('BEGIN');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        await pool.query(
-            `UPDATE vehicle_records
-             SET deleted_at = CURRENT_TIMESTAMP,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1`,
-            [id]
-        );
-
-        const vehicleId = existing.rows[0].vehicle_id;
-        if (vehicleId) {
-            const activeInUseRecord = await pool.query(
-                `SELECT 1
-                 FROM vehicle_records
-                 WHERE vehicle_id = $1
-                   AND deleted_at IS NULL
-                   AND status = 'in_use'
-                 LIMIT 1`,
-                [vehicleId]
+            await client.query(
+                `UPDATE vehicle_records
+                 SET deleted_at = CURRENT_TIMESTAMP,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [id]
             );
 
-            const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
-            await pool.query(
-                'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [nextVehicleStatus, vehicleId]
-            );
+            const vehicleId = existing.rows[0].vehicle_id;
+            if (vehicleId) {
+                const activeInUseRecord = await client.query(
+                    `SELECT 1
+                     FROM vehicle_records
+                     WHERE vehicle_id = $1
+                       AND deleted_at IS NULL
+                       AND status = 'in_use'
+                     LIMIT 1`,
+                    [vehicleId]
+                );
+
+                const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
+                await client.query(
+                    'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                    [nextVehicleStatus, vehicleId]
+                );
+            }
+
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
         }
-
-        await pool.query('COMMIT');
 
         await logDataChange(
             'vehicle_records',
@@ -1059,7 +1155,6 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
             topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Delete vehicle record error:', error);
         res.status(500).json({
             success: false,
@@ -1131,35 +1226,43 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
             }
         }
 
-        await pool.query('BEGIN');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
-        await pool.query(
-            `UPDATE vehicle_records
-             SET deleted_at = NULL,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1`,
-            [id]
-        );
-
-        if (vehicleId) {
-            const activeInUseRecord = await pool.query(
-                `SELECT 1
-                 FROM vehicle_records
-                 WHERE vehicle_id = $1
-                   AND deleted_at IS NULL
-                   AND status = 'in_use'
-                 LIMIT 1`,
-                [vehicleId]
+            await client.query(
+                `UPDATE vehicle_records
+                 SET deleted_at = NULL,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [id]
             );
 
-            const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
-            await pool.query(
-                'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-                [nextVehicleStatus, vehicleId]
-            );
+            if (vehicleId) {
+                const activeInUseRecord = await client.query(
+                    `SELECT 1
+                     FROM vehicle_records
+                     WHERE vehicle_id = $1
+                       AND deleted_at IS NULL
+                       AND status = 'in_use'
+                     LIMIT 1`,
+                    [vehicleId]
+                );
+
+                const nextVehicleStatus = activeInUseRecord.rows.length > 0 ? 'in_use' : 'available';
+                await client.query(
+                    'UPDATE vehicles SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                    [nextVehicleStatus, vehicleId]
+                );
+            }
+
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
         }
-
-        await pool.query('COMMIT');
 
         await logDataChange(
             'vehicle_records',
@@ -1185,7 +1288,6 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
             topics: resolveMutationTopics(`/api/vehicles/records/${id}/restore`),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Restore vehicle record error:', error);
         res.status(500).json({
             success: false,
@@ -1426,7 +1528,7 @@ export const deleteVehicle = async (req: Request, res: Response): Promise<void> 
         const activeRecordsQuery = `
             SELECT COUNT(*) as count
             FROM vehicle_records
-            WHERE vehicle_id = $1 AND return_time IS NULL
+            WHERE vehicle_id = $1 AND return_time IS NULL AND deleted_at IS NULL
         `;
         const activeRecordsResult = await pool.query(activeRecordsQuery, [id]);
 

@@ -7,6 +7,8 @@ import { isValidLength } from '../utils/validation';
 import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
 
 // Personnel type for manager list
 interface Personnel {
@@ -122,18 +124,18 @@ export default function Managers() {
         e.preventDefault();
 
         if (!selectedManagerId) {
-            alert('Lütfen listeden bir müdür seçin.');
+            message.warning('Lütfen listeden bir müdür seçin.');
             return;
         }
 
         // Frontend validasyon
         if (!isValidLength(notes, 0, 1000)) {
-            alert('Açıklama en fazla 1000 karakter olabilir');
+            message.error('Açıklama en fazla 1000 karakter olabilir');
             return;
         }
 
         if (isAdminPage && !isEditing && entryDate && exitDate && exitDate < entryDate) {
-            alert('Çıkış tarihi giriş tarihinden önce olamaz');
+            message.error('Çıkış tarihi giriş tarihinden önce olamaz');
             return;
         }
 
@@ -149,8 +151,10 @@ export default function Managers() {
 
             if (isEditing && editingId) {
                 await api.put(`/managers/records/${editingId}`, payload);
+                message.success('Müdür kaydı güncellendi');
             } else {
                 await api.post('/managers/records', payload);
+                message.success('Müdür giriş kaydı oluşturuldu');
             }
 
             setShowModal(false);
@@ -158,42 +162,58 @@ export default function Managers() {
             fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'İşlem başarısız');
+            message.error(err?.response?.data?.message || 'İşlem başarısız');
         }
     }, [selectedManagerId, notes, entryDate, exitDate, entryTime, exitTime, isAdminPage, isEditing, editingId, resetForm, fetchData]);
 
     // Handle manager exit
     const handleExit = useCallback(async (id: string) => {
-        if (!confirm('Seçili müdür için çıkış kaydı oluşturulsun mu?')) return;
-
-        try {
-            await api.post(`/managers/records/${id}/exit`, { exit_time: null });
-            fetchData();
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Çıkış işlemi başarısız');
-        }
+        Modal.confirm({
+            title: 'Çıkış Kaydı',
+            content: 'Seçili müdür için çıkış kaydı oluşturulsun mu?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/managers/records/${id}/exit`, { exit_time: null });
+                    fetchData();
+                    message.success('Çıkış kaydedildi');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Çıkış işlemi başarısız');
+                }
+            }
+        });
     }, [fetchData]);
 
     const handleDelete = useCallback(async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/managers/records/${id}`);
-            fetchData();
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Silme işlemi başarısız');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/managers/records/${id}`);
+                    fetchData();
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Silme işlemi başarısız');
+                }
+            }
+        });
     }, [fetchData]);
 
     const handleRestore = useCallback(async (id: string) => {
         try {
             await api.post(`/managers/records/${id}/restore`);
             fetchData();
+            message.success('Kayıt geri alındı');
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Geri alma işlemi başarısız');
+            message.error(err?.response?.data?.message || 'Geri alma işlemi başarısız');
         }
     }, [fetchData]);
 

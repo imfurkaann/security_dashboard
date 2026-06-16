@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-import { API_URL } from '../constants';
+import { Modal, message } from 'antd';
+import 'antd/dist/reset.css';
+import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface GateEquipment {
@@ -16,14 +17,6 @@ interface GateConfig {
     isActive: boolean;
     equipments: GateEquipment[];
 }
-
-const getAdminHeaders = () => {
-    const token = localStorage.getItem('adminToken');
-    return {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-    };
-};
 
 export default function AdminGateEquipmentConfig() {
     const [loading, setLoading] = useState(true);
@@ -55,9 +48,7 @@ export default function AdminGateEquipmentConfig() {
         setError('');
 
         try {
-            const response = await axios.get(`${API_URL}/admin/equipment-config`, {
-                headers: getAdminHeaders(),
-            });
+            const response = await api.get('/admin/equipment-config');
 
             const gateList: GateConfig[] = (response.data?.data || []).filter((gate: GateConfig) => gate.isActive);
             setGates(gateList);
@@ -138,14 +129,10 @@ export default function AdminGateEquipmentConfig() {
 
         setSaving(true);
         try {
-            await axios.post(
-                `${API_URL}/admin/equipment-config/gates`,
-                {
-                    name: newGateName.trim(),
-                    equipments: newGateEquipments,
-                },
-                { headers: getAdminHeaders() }
-            );
+            await api.post('/admin/equipment-config/gates', {
+                name: newGateName.trim(),
+                equipments: newGateEquipments,
+            });
 
             setSuccess('Kapı başarıyla oluşturuldu');
             closeCreateModal();
@@ -165,13 +152,9 @@ export default function AdminGateEquipmentConfig() {
         setSaving(true);
 
         try {
-            await axios.put(
-                `${API_URL}/admin/equipment-config/gates/${selectedGate.id}`,
-                {
-                    name: selectedGate.name,
-                },
-                { headers: getAdminHeaders() }
-            );
+            await api.put(`/admin/equipment-config/gates/${selectedGate.id}`, {
+                name: selectedGate.name,
+            });
 
             setSuccess('Kapı bilgileri güncellendi');
             await fetchConfig();
@@ -185,26 +168,28 @@ export default function AdminGateEquipmentConfig() {
     const handleDeleteGate = async () => {
         if (!selectedGate) return;
 
-        if (!window.confirm(`${selectedGate.name} kapısını silmek istediğinize emin misiniz?`)) {
-            return;
-        }
+        Modal.confirm({
+            title: 'Kapıyı Sil',
+            content: `${selectedGate.name} kapısını silmek istediğinize emin misiniz?`,
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                setError('');
+                setSuccess('');
+                setSaving(true);
 
-        setError('');
-        setSuccess('');
-        setSaving(true);
-
-        try {
-            await axios.delete(`${API_URL}/admin/equipment-config/gates/${selectedGate.id}`, {
-                headers: getAdminHeaders(),
-            });
-
-            setSuccess('Kapı silindi');
-            await fetchConfig();
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Kapı silinemedi');
-        } finally {
-            setSaving(false);
-        }
+                try {
+                    await api.delete(`/admin/equipment-config/gates/${selectedGate.id}`);
+                    setSuccess('Kapı silindi');
+                    await fetchConfig();
+                } catch (err: any) {
+                    setError(err.response?.data?.message || 'Kapı silinemedi');
+                } finally {
+                    setSaving(false);
+                }
+            }
+        });
     };
 
     const addEquipmentToSelectedGate = async () => {
@@ -218,11 +203,7 @@ export default function AdminGateEquipmentConfig() {
         setSaving(true);
 
         try {
-            await axios.post(
-                `${API_URL}/admin/equipment-config/gates/${selectedGate.id}/equipments`,
-                { name: trimmed },
-                { headers: getAdminHeaders() }
-            );
+            await api.post(`/admin/equipment-config/gates/${selectedGate.id}/equipments`, { name: trimmed });
 
             setEquipmentToAdd('');
             setSuccess('Ekipman eklendi');
@@ -235,26 +216,28 @@ export default function AdminGateEquipmentConfig() {
     };
 
     const handleEquipmentDelete = async (equipmentId: number) => {
-        if (!window.confirm('Bu ekipmanı silmek istediğinize emin misiniz?')) {
-            return;
-        }
+        Modal.confirm({
+            title: 'Ekipmanı Sil',
+            content: 'Bu ekipmanı silmek istediğinize emin misiniz?',
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                setError('');
+                setSuccess('');
+                setSaving(true);
 
-        setError('');
-        setSuccess('');
-        setSaving(true);
-
-        try {
-            await axios.delete(`${API_URL}/admin/equipment-config/equipments/${equipmentId}`, {
-                headers: getAdminHeaders(),
-            });
-
-            setSuccess('Ekipman silindi');
-            await fetchConfig();
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Ekipman silinemedi');
-        } finally {
-            setSaving(false);
-        }
+                try {
+                    await api.delete(`/admin/equipment-config/equipments/${equipmentId}`);
+                    setSuccess('Ekipman silindi');
+                    await fetchConfig();
+                } catch (err: any) {
+                    setError(err.response?.data?.message || 'Ekipman silinemedi');
+                } finally {
+                    setSaving(false);
+                }
+            }
+        });
     };
 
     const updateSelectedGateState = (updates: Partial<GateConfig>) => {

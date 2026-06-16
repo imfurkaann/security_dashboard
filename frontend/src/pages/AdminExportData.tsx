@@ -1,11 +1,10 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { DatePicker } from 'antd';
+import { DatePicker, message } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
-import { API_URL } from '../constants';
+import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
@@ -60,20 +59,18 @@ export default function AdminExportData() {
     // Önizleme getir
     const fetchPreview = useCallback(async () => {
         if (!startDate || !endDate) {
-            alert('Lütfen tarih aralığı seçin');
+            message.warning('Lütfen tarih aralığı seçin');
             return;
         }
 
         setPreviewLoading(true);
         setPreviewError(null);
         try {
-            const token = localStorage.getItem('adminToken');
-            const response = await axios.get(`${API_URL}/export/preview`, {
+            const response = await api.get('/export/preview', {
                 params: {
                     startDate: startDate.format('YYYY-MM-DD'),
                     endDate: endDate.format('YYYY-MM-DD')
-                },
-                headers: { Authorization: `Bearer ${token}` }
+                }
             });
 
             if (response.data.success) {
@@ -100,13 +97,13 @@ export default function AdminExportData() {
     // Export indir
     const handleExport = async () => {
         if (!startDate || !endDate) {
-            alert('Lütfen tarih aralığı seçin');
+            message.warning('Lütfen tarih aralığı seçin');
             return;
         }
 
         const hasSelectedReport = Object.values(selectedReports).some(v => v);
         if (!hasSelectedReport) {
-            alert('Lütfen en az bir rapor türü seçin');
+            message.warning('Lütfen en az bir rapor türü seçin');
             return;
         }
 
@@ -115,20 +112,14 @@ export default function AdminExportData() {
         setError(null);
 
         try {
-            const token = localStorage.getItem('adminToken');
-
-            const response = await axios.post(
-                `${API_URL}/export/generate`,
+            const response = await api.post(
+                '/export/generate',
                 {
                     startDate: startDate.format('YYYY-MM-DD'),
                     endDate: endDate.format('YYYY-MM-DD'),
                     reports: selectedReports
                 },
                 {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
                     responseType: 'blob',
                     timeout: 300000, // 5 dakika timeout
                     onDownloadProgress: (progressEvent) => {
@@ -180,7 +171,7 @@ export default function AdminExportData() {
 
             setDownloadProgress(100);
             setTimeout(() => {
-                alert('İndirme başarıyla tamamlandı!');
+                message.success('İndirme başarıyla tamamlandı!');
             }, 500);
         } catch (error: any) {
             console.error('Export error:', error);

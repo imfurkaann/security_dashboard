@@ -146,9 +146,13 @@ const clearSessionFiles = (): void => {
         return;
     }
 
-    const files = fs.readdirSync(sessionPath);
-    for (const file of files) {
-        fs.rmSync(path.join(sessionPath, file), { force: true });
+    try {
+        const files = fs.readdirSync(sessionPath);
+        for (const file of files) {
+            fs.rmSync(path.join(sessionPath, file), { force: true, recursive: true });
+        }
+    } catch (error) {
+        console.error('Error clearing session files:', error);
     }
 };
 
@@ -298,7 +302,7 @@ const createConnection = async (): Promise<WASocket> => {
                         if (fs.existsSync(sessionPath)) {
                             const files = fs.readdirSync(sessionPath);
                             for (const file of files) {
-                                fs.rmSync(`${sessionPath}/${file}`, { force: true });
+                                fs.rmSync(path.join(sessionPath, file), { force: true, recursive: true });
                             }
                         }
                         console.log(`✅ Auth session files cleaned: ${sessionPath}`);
@@ -325,7 +329,7 @@ const createConnection = async (): Promise<WASocket> => {
                     if (fs.existsSync(sessionPath)) {
                         const files = fs.readdirSync(sessionPath);
                         for (const file of files) {
-                            fs.rmSync(`${sessionPath}/${file}`, { force: true });
+                            fs.rmSync(path.join(sessionPath, file), { force: true, recursive: true });
                         }
                     }
                     console.log(`✅ Auth session files cleaned after logout: ${sessionPath}`);
@@ -378,7 +382,9 @@ export const getWhatsAppConnectionStatus = (): WhatsAppConnectionStatus => ({
     lastDisconnectReason,
 });
 
-export const sendWhatsAppTextMessage = async (text: string): Promise<WhatsAppSendResult> => {
+let messageQueuePromise: Promise<any> = Promise.resolve();
+
+const sendWhatsAppTextMessageInternal = async (text: string): Promise<WhatsAppSendResult> => {
     const debugId = createDebugId();
     const startedAt = Date.now();
 
@@ -488,6 +494,13 @@ export const sendWhatsAppTextMessage = async (text: string): Promise<WhatsAppSen
     }
 };
 
+export const sendWhatsAppTextMessage = async (text: string): Promise<WhatsAppSendResult> => {
+    const nextInQueue = () => sendWhatsAppTextMessageInternal(text);
+    const result = messageQueuePromise.then(nextInQueue, nextInQueue);
+    messageQueuePromise = result;
+    return result;
+};
+
 export const warmupWhatsAppConnection = (): void => {
     if (!isWhatsAppAutoSendEnabled()) {
         return;
@@ -540,3 +553,17 @@ export const resetWhatsAppSession = (): void => {
 };
 
 export const getWhatsAppQrPayload = (): string | null => lastQrPayload;
+
+export const shutdownWhatsAppConnection = async (): Promise<void> => {
+    console.log('🔌 WhatsApp bağlantısı kapatılıyor...');
+    if (socket) {
+        try {
+            socket.end(undefined);
+        } catch {
+            // ignore
+        }
+    }
+    resetConnectionState();
+    // Wait for disk writes (credentials files save) to complete
+    await new Promise((resolve) => setTimeout(resolve, 500));
+};

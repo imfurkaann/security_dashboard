@@ -5,6 +5,8 @@ import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import type { Vehicle, VehicleUsage, Manager, VehicleFormData, VehicleFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
 
 // Initial form state
 const INITIAL_FORM_DATA: VehicleFormData = {
@@ -82,65 +84,90 @@ export default function Vehicles() {
                 setWhatsappMessage(response.data.whatsappMessage);
                 setAutoSendFailed(false);
                 setShowWhatsAppModal(true);
+            } else {
+                message.success('Kayıt başarıyla oluşturuldu');
             }
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'İşlem başarısız');
+            message.error(err.response?.data?.message || 'İşlem başarısız');
         }
     }, [formData, fetchData]);
 
     // Vehicle return handler
     const handleReturn = useCallback(async (usageId: string) => {
-        if (!confirm('Aracın iadesini kaydetmek istediğinize emin misiniz?')) return;
+        Modal.confirm({
+            title: 'Teslim Al',
+            content: 'Aracın iadesini kaydetmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    const response = await api.post(`/vehicles/records/${usageId}/return`, {});
+                    fetchData();
 
-        try {
-            const response = await api.post(`/vehicles/records/${usageId}/return`, {});
-            fetchData();
-
-            // WhatsApp mesajı varsa modal göster
-            if (response.data?.whatsappMessage) {
-                setWhatsappMessage(response.data.whatsappMessage);
-                setAutoSendFailed(false);
-                setShowWhatsAppModal(true);
+                    // WhatsApp mesajı varsa modal göster
+                    if (response.data?.whatsappMessage) {
+                        setWhatsappMessage(response.data.whatsappMessage);
+                        setAutoSendFailed(false);
+                        setShowWhatsAppModal(true);
+                    } else {
+                        message.success('İade başarıyla kaydedildi');
+                    }
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'İade kaydı başarısız');
+                }
             }
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'İade kaydı başarısız');
-        }
+        });
     }, [fetchData]);
 
     const handleUndoReturn = useCallback(async (usageId: string) => {
-        if (!confirm('Yanlış teslim alma işlemini geri almak istediğinize emin misiniz?')) return;
-
-        try {
-            await api.post(`/vehicles/records/${usageId}/undo-return`, {});
-            fetchData();
-            alert('Teslim alma işlemi geri alındı. Doğru araç için tekrar işlem yapabilirsiniz.');
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'Teslim alma geri alma işlemi başarısız');
-        }
+        Modal.confirm({
+            title: 'Teslim Almayı Geri Al',
+            content: 'Yanlış teslim alma işlemini geri almak istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/vehicles/records/${usageId}/undo-return`, {});
+                    fetchData();
+                    message.success('Teslim alma işlemi geri alındı. Doğru araç için tekrar işlem yapabilirsiniz.');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'Teslim alma geri alma işlemi başarısız');
+                }
+            }
+        });
     }, [fetchData]);
 
     const handleDeleteRecord = useCallback(async (usageId: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/vehicles/records/${usageId}`);
-            setUsages(prev => prev.map(usage => usage.id === usageId ? { ...usage, deleted_at: new Date().toISOString() } : usage));
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'Kayıt silinemedi');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/vehicles/records/${usageId}`);
+                    setUsages(prev => prev.map(usage => usage.id === usageId ? { ...usage, deleted_at: new Date().toISOString() } : usage));
+                    message.success('Kayıt başarıyla silindi');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'Kayıt silinemedi');
+                }
+            }
+        });
     }, []);
 
     const handleRestoreRecord = useCallback(async (usageId: string) => {
         try {
             await api.post(`/vehicles/records/${usageId}/restore`);
             setUsages(prev => prev.map(usage => usage.id === usageId ? { ...usage, deleted_at: null } : usage));
+            message.success('Kayıt başarıyla geri alındı');
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'Kayıt geri alınamadı');
+            message.error(err.response?.data?.message || 'Kayıt geri alınamadı');
         }
     }, []);
 
@@ -156,12 +183,13 @@ export default function Vehicles() {
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
                 setAutoSendFailed(false);
+                message.success('WhatsApp mesajı gönderildi');
             } else {
                 setAutoSendFailed(true);
                 const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
                 const reason = response.data?.reason || 'Bilinmeyen hata';
                 const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
-                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                message.error(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (error: any) {
             setAutoSendFailed(true);
@@ -169,7 +197,7 @@ export default function Vehicles() {
             const details = isTimeout
                 ? 'Otomatik gönderim zaman aşımına uğradı.'
                 : (error.response?.data?.message || error.message);
-            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            message.error(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }
@@ -244,10 +272,10 @@ export default function Vehicles() {
             setFormData(INITIAL_FORM_DATA);
             setShowCustomManager(false);
             fetchData();
-            alert('Kayıt başarıyla güncellendi');
+            message.success('Kayıt başarıyla güncellendi');
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err.response?.data?.message || 'İşlem başarısız');
+            message.error(err.response?.data?.message || 'İşlem başarısız');
         }
     }, [formData, editingUsage, fetchData]);
 

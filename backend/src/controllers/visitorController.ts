@@ -38,9 +38,6 @@ const decodeStoredHtmlEntities = (value: string | null | undefined): string | nu
 export const getVisitorRecords = async (req: Request, res: Response): Promise<void> => {
     try {
         const includeDeleted = req.query.includeDeleted === 'true';
-        const deletedAtSelect = includeDeleted ? 'vr.deleted_at,' : '';
-        const deletedAtFilter = includeDeleted ? '' : 'WHERE vr.deleted_at IS NULL';
-
         const unlimited = req.query.unlimited === 'true';
 
         // Pagination support: optional numeric `limit` and `offset` query params
@@ -50,6 +47,120 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
         const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
 
         const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+
+        const filters: string[] = [];
+        const queryParams: any[] = [];
+        let paramIndex = 1;
+
+        if (!includeDeleted) {
+            filters.push(`vr.deleted_at IS NULL`);
+        }
+
+        // Apply query filters
+        if (req.query.full_name) {
+            filters.push(`vr.full_name ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.full_name}%`);
+        }
+
+        if (req.query.vehicle_plate) {
+            filters.push(`vr.vehicle_plate ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.vehicle_plate}%`);
+        }
+
+        if (req.query.company_name) {
+            filters.push(`vr.company_name ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.company_name}%`);
+        }
+
+        if (req.query.visiting_person) {
+            filters.push(`vr.visiting_person ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.visiting_person}%`);
+        }
+
+        if (req.query.phone) {
+            filters.push(`vr.phone ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.phone}%`);
+        }
+
+        if (req.query.entry_by) {
+            filters.push(`(vr.entry_by_name ILIKE $${paramIndex} OR CONCAT(pe.first_name, ' ', pe.last_name) ILIKE $${paramIndex})`);
+            queryParams.push(`%${req.query.entry_by}%`);
+            paramIndex++;
+        }
+
+        if (req.query.exit_by) {
+            filters.push(`(vr.exit_by_name ILIKE $${paramIndex} OR CONCAT(px.first_name, ' ', px.last_name) ILIKE $${paramIndex})`);
+            queryParams.push(`%${req.query.exit_by}%`);
+            paramIndex++;
+        }
+
+        if (req.query.status && req.query.status !== 'all') {
+            if (req.query.status === 'deleted') {
+                filters.push(`vr.deleted_at IS NOT NULL`);
+            } else {
+                filters.push(`vr.status = $${paramIndex++}`);
+                queryParams.push(req.query.status);
+            }
+        }
+
+        if (req.query.gate && req.query.gate !== 'all') {
+            filters.push(`vr.gate = $${paramIndex++}`);
+            queryParams.push(req.query.gate);
+        }
+
+        if (req.query.entryDateStart) {
+            filters.push(`vr.entry_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.entryDateStart);
+        }
+
+        if (req.query.entryDateEnd) {
+            filters.push(`vr.entry_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.entryDateEnd);
+        }
+
+        if (req.query.exitDateStart) {
+            filters.push(`vr.exit_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.exitDateStart);
+        }
+
+        if (req.query.exitDateEnd) {
+            filters.push(`vr.exit_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.exitDateEnd);
+        }
+
+        // Tag filters
+        if (req.query.subcontractor_worker === 'true') {
+            filters.push(`vr.subcontractor_worker = true`);
+        }
+        if (req.query.for_electric_station === 'true') {
+            filters.push(`vr.for_electric_station = true`);
+        }
+        if (req.query.daily_guest === 'true') {
+            filters.push(`vr.daily_guest = true`);
+        }
+        if (req.query.entry_tag === 'true') {
+            filters.push(`vr.entry_tag = true`);
+        }
+        if (req.query.exit_tag === 'true') {
+            filters.push(`vr.exit_tag = true`);
+        }
+        if (req.query.tour_entry === 'true') {
+            filters.push(`vr.tour_entry = true`);
+        }
+        if (req.query.tour_exit === 'true') {
+            filters.push(`vr.tour_exit = true`);
+        }
+        if (req.query.meeting === 'true') {
+            filters.push(`vr.meeting = true`);
+        }
+        if (req.query.delivery === 'true') {
+            filters.push(`vr.delivery = true`);
+        }
+        if (req.query.guide === 'true') {
+            filters.push(`vr.guide = true`);
+        }
+
+        const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
         const query = `
             SELECT 
@@ -80,7 +191,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.exit_time,
                 vr.status,
                 vr.created_at,
-                ${deletedAtSelect}
+                vr.deleted_at,
                 vr.entry_by_name,
                 vr.exit_by_name,
                 pe.first_name as entry_by_first_name,
@@ -90,11 +201,11 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             FROM visitor_records vr
             LEFT JOIN personnel pe ON vr.entry_by = pe.id
             LEFT JOIN personnel px ON vr.exit_by = px.id
-            ${deletedAtFilter}
+            ${whereClause}
             ORDER BY vr.entry_date DESC, vr.entry_time DESC
             ${limitClause}
         `;
-        const result = await pool.query(query);
+        const result = await pool.query(query, queryParams);
 
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
@@ -272,9 +383,18 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             sendWhatsApp
         ];
 
-        await pool.query('BEGIN');
-        const insertResult = await pool.query(insertQuery, values);
-        await pool.query('COMMIT');
+        const client = await pool.connect();
+        let insertResult;
+        try {
+            await client.query('BEGIN');
+            insertResult = await client.query(insertQuery, values);
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
 
         // GÜVENLİK: Audit log kaydı
         await logDataChange(
@@ -330,7 +450,6 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 
         res.status(201).json({ success: true, message: 'Ziyaretçi girişi kaydedildi', data: { id }, whatsappMessage });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Create visitor record error:', error instanceof Error ? error.message : error);
         res.status(500).json({ success: false, message: 'Ziyaretçi girişi kaydedilirken hata oluştu' });
     }
@@ -353,7 +472,7 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        const recordCheck = await pool.query('SELECT id FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
+        const recordCheck = await pool.query('SELECT * FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
         if (recordCheck.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
             return;
@@ -443,7 +562,7 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             'visitor_records',
             id,
             'UPDATE',
-            null,
+            recordCheck.rows[0] || null,
             { updated_fields: updates },
             req.user?.userId || null,
             clientIp
@@ -493,14 +612,17 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
 
         const personnel_id = req.user?.userId;
 
-        await pool.query(
+        const updateResult = await pool.query(
             `UPDATE visitor_records 
              SET exit_date = CURRENT_DATE, 
                  exit_time = COALESCE($3::time, CURRENT_TIME), 
                  exit_by = $2,
                  status = 'exited', 
                  updated_at = now() 
-             WHERE id = $1 AND deleted_at IS NULL`,
+             WHERE id = $1 AND deleted_at IS NULL
+             RETURNING full_name, company_name, visiting_person, vehicle_plate, 
+                       person_count, children_count, gate, phone, subcontractor_worker, 
+                       for_electric_station, daily_guest, notes, exit_time, send_whatsapp`,
             [id, personnel_id, exit_time || null]
         );
 
@@ -518,16 +640,8 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         // WhatsApp mesaj şablonu oluştur (sadece send_whatsapp = true olanlar için)
         let whatsappMessage = '';
         try {
-            const visitorInfo = await pool.query(
-                `SELECT full_name, company_name, visiting_person, vehicle_plate, 
-                    person_count, children_count, gate, phone, subcontractor_worker, for_electric_station, daily_guest,
-                        notes, exit_time, send_whatsapp 
-                 FROM visitor_records WHERE id = $1`,
-                [id]
-            );
-
-            if (visitorInfo.rows.length > 0 && visitorInfo.rows[0].send_whatsapp) {
-                const record = visitorInfo.rows[0];
+            if (updateResult.rows.length > 0 && updateResult.rows[0].send_whatsapp) {
+                const record = updateResult.rows[0];
                 const timeString = record.exit_time || new Date().toLocaleTimeString('tr-TR');
                 const exitTime = timeString.substring(0, 5);
 

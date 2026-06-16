@@ -1,14 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import DOMPurify from 'dompurify';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-import JSZip from 'jszip';
 
 const { RangePicker } = DatePicker;
 
@@ -54,41 +52,33 @@ export default function IncidentRecords() {
     const [dateEnd, setDateEnd] = useState('');
     const [selectedGate, setSelectedGate] = useState('');
 
-    // Get unique gates from records
-    const uniqueGates = useMemo(() => {
-        const gates = new Set<string>();
-        records.forEach(record => {
-            if (record.gate) {
-                gates.add(record.gate);
-            }
-        });
-        return Array.from(gates).sort();
-    }, [records]);
+    // Static gate options for stable filter dropdown
+    const uniqueGates = ['Ana Kapı', 'Sahil Kapı'];
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
         try {
-            const anyFilterApplied = (
-                reportedBy !== '' ||
-                dateStart !== '' ||
-                dateEnd !== '' ||
-                selectedGate !== ''
-            );
+            const params: Record<string, string | number | boolean> = {
+                includeDeleted: true,
+                limit: PAGE_SIZE,
+                offset,
+                _t: Date.now()
+            };
 
-            let res;
-            if (anyFilterApplied) {
-                res = await api.get(`/incidents/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`);
-            } else {
-                res = await api.get(`/incidents/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`);
-            }
+            if (reportedBy) params.reported_by = reportedBy;
+            if (selectedGate) params.gate = selectedGate;
+            if (dateStart) params.dateStart = dateStart;
+            if (dateEnd) params.dateEnd = dateEnd;
 
+            const res = await api.get('/incidents/records', { params });
             const fetched = res.data?.data || [];
+
             if (append) {
                 setRecords(prev => [...prev, ...fetched]);
             } else {
                 setRecords(fetched);
             }
 
-            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+            setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
             console.error('Veriler yüklenemedi:', error);
         } finally {
@@ -146,25 +136,8 @@ export default function IncidentRecords() {
         enabled: true,
     });
 
-    // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
-            if (selectedGate && record.gate !== selectedGate) return false;
-
-            // Date filtering - inclusive dayjs comparison
-            if (dateStart && dateEnd) {
-                const dateStr = record.report_date || record.created_at;
-                if (!dateStr) return false;
-                const d = dayjs(dateStr);
-                const start = dayjs(dateStart).startOf('day');
-                const end = dayjs(dateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, reportedBy, selectedGate, dateStart, dateEnd]);
+    // The records are filtered server-side
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -209,7 +182,7 @@ export default function IncidentRecords() {
         if (isExporting) return;
 
         if (!dateStart || !dateEnd) {
-            alert('Lütfen bir tarih aralığı seçin.');
+            message.warning('Lütfen bir tarih aralığı seçin.');
             return;
         }
 
@@ -230,7 +203,7 @@ export default function IncidentRecords() {
             });
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
                 return;
             }
 
@@ -251,7 +224,7 @@ export default function IncidentRecords() {
             }, 500);
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -488,10 +461,9 @@ export default function IncidentRecords() {
                             {/* Report Content */}
                             <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Rapor İçeriği</label>
-                                <div
-                                    className="bg-gray-50 rounded-lg p-4 border border-gray-200 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedReport.report_content || '<p class="text-gray-500">Rapor içeriği bulunamadı</p>') }}
-                                />
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-sm text-gray-900 whitespace-pre-wrap max-w-none">
+                                    {selectedReport.report_content || 'Rapor içeriği bulunamadı'}
+                                </div>
                             </div>
 
                             {/* Resolution Notes if exists */}

@@ -432,7 +432,9 @@ export async function getRecordCounts(startDate: string, endDate: string): Promi
             ),
             client.query(
                 `SELECT COUNT(*) as count FROM incidents 
-                 WHERE report_date >= $1::date AND report_date <= $2::date`,
+                 WHERE report_date >= $1::date AND report_date <= $2::date
+                   AND report_file_path IS NOT NULL
+                   AND deleted_at IS NULL`,
                 [startDate, endDate]
             )
         ]);
@@ -980,9 +982,9 @@ export async function generateExportZip(
             zlib: { level: 9 } // Maximum compression
         });
 
-        // Hata yönetimi
+        // Hata yönetimi (Sunucu çökmesini önlemek için konsola yazılır, finalize() otomatik olarak hata dönecektir)
         archive.on('error', (err) => {
-            throw err;
+            console.error('Archive formatting error:', err);
         });
 
         archive.on('warning', (err) => {

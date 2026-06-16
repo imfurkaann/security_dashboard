@@ -1,7 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_URL } from '../constants';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
+import api from '../utils/api';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
@@ -35,14 +36,11 @@ export default function AdminManageManagers() {
 
     const fetchManagers = useCallback(async () => {
         try {
-            const token = localStorage.getItem('adminToken');
-            const response = await axios.get(`${API_URL}/managers`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await api.get('/managers');
             setManagers(response.data.data || []);
         } catch (error) {
             console.error('Error fetching managers:', error);
-            alert('Müdür verileri yüklenirken bir hata oluştu');
+            message.error('Müdür verileri yüklenirken bir hata oluştu');
         } finally {
             setLoading(false);
         }
@@ -88,12 +86,11 @@ export default function AdminManageManagers() {
         e.preventDefault();
 
         if (!firstName.trim() || !lastName.trim()) {
-            alert('Lütfen ad ve soyad alanlarını doldurun');
+            message.warning('Lütfen ad ve soyad alanlarını doldurun');
             return;
         }
 
         try {
-            const token = localStorage.getItem('adminToken');
             const data = {
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
@@ -103,44 +100,42 @@ export default function AdminManageManagers() {
 
             if (editingManager) {
                 // Update existing manager
-                await axios.put(`${API_URL}/managers/${editingManager.id}`, data, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                alert('Müdür başarıyla güncellendi');
+                await api.put(`/managers/${editingManager.id}`, data);
+                message.success('Müdür başarıyla güncellendi');
             } else {
                 // Create new manager
-                await axios.post(`${API_URL}/managers`, data, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                alert('Müdür başarıyla eklendi');
+                await api.post('/managers', data);
+                message.success('Müdür başarıyla eklendi');
             }
 
             closeModal();
-            fetchManagers();
+            void fetchManagers();
         } catch (error: any) {
             console.error('Error saving manager:', error);
             const errorMessage = error.response?.data?.message || 'İşlem sırasında bir hata oluştu';
-            alert(errorMessage);
+            message.error(errorMessage);
         }
     };
 
     const handleDelete = async (id: string, fullName: string) => {
-        if (!confirm(`${fullName} müdürünü silmek istediğinizden emin misiniz?`)) {
-            return;
-        }
-
-        try {
-            const token = localStorage.getItem('adminToken');
-            await axios.delete(`${API_URL}/managers/${id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            alert('Müdür başarıyla silindi');
-            fetchManagers();
-        } catch (error: any) {
-            console.error('Error deleting manager:', error);
-            const errorMessage = error.response?.data?.message || 'Silme işlemi sırasında bir hata oluştu';
-            alert(errorMessage);
-        }
+        Modal.confirm({
+            title: 'Müdürü Sil',
+            content: `${fullName} müdürünü silmek istediğinizden emin misiniz?`,
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/managers/${id}`);
+                    message.success('Müdür başarıyla silindi');
+                    void fetchManagers();
+                } catch (error: any) {
+                    console.error('Error deleting manager:', error);
+                    const errorMessage = error.response?.data?.message || 'Silme işlemi sırasında bir hata oluştu';
+                    message.error(errorMessage);
+                }
+            }
+        });
     };
 
     // Filter managers based on search

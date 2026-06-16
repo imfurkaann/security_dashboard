@@ -6,6 +6,8 @@ import { validateVisitorForm, normalizePlate, normalizePhone } from '../utils/va
 import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
 
 // Tag options for dropdowns
 const VISITOR_TAGS_OPTIONS = [
@@ -259,7 +261,16 @@ export default function Visitors() {
         // Frontend validasyon
         const validation = validateVisitorForm(formData);
         if (!validation.isValid) {
-            alert('Lütfen hataları düzeltin:\n\n' + validation.errors.join('\n'));
+            Modal.error({
+                title: 'Lütfen hataları düzeltin',
+                content: (
+                    <ul className="list-disc pl-4 mt-2">
+                        {validation.errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                        ))}
+                    </ul>
+                )
+            });
             return;
         }
 
@@ -268,6 +279,7 @@ export default function Visitors() {
 
             if (isEditing && editingId) {
                 await api.put(`/visitors/records/${editingId}`, payload);
+                message.success('Ziyaretçi kaydı başarıyla güncellendi');
             } else {
                 const response = await api.post('/visitors/records', payload);
 
@@ -276,6 +288,8 @@ export default function Visitors() {
                     setWhatsappMessage(response.data.whatsappMessage);
                     setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
+                } else {
+                    message.success('Ziyaretçi kaydı başarıyla oluşturuldu');
                 }
             }
 
@@ -284,64 +298,89 @@ export default function Visitors() {
             fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'İşlem başarısız');
+            message.error(err?.response?.data?.message || 'İşlem başarısız');
         }
     }, [formData, buildPayload, isEditing, editingId, resetForm, fetchData]);
 
     // Handle visitor exit
     const handleExit = useCallback(async (id: string) => {
-        if (!confirm('Ziyaretçinin çıkışını kaydetmek istediğinize emin misiniz?')) return;
-        try {
-            const response = await api.post(`/visitors/records/${id}/exit`, { exit_time: null });
-            fetchData();
+        Modal.confirm({
+            title: 'Çıkış Yap',
+            content: 'Ziyaretçinin çıkışını kaydetmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    const response = await api.post(`/visitors/records/${id}/exit`, { exit_time: null });
+                    fetchData();
 
-            // WhatsApp mesajı varsa modal göster
-            if (response.data?.whatsappMessage) {
-                setWhatsappMessage(response.data.whatsappMessage);
-                setAutoSendFailed(false);
-                setShowWhatsAppModal(true);
+                    // WhatsApp mesajı varsa modal göster
+                    if (response.data?.whatsappMessage) {
+                        setWhatsappMessage(response.data.whatsappMessage);
+                        setAutoSendFailed(false);
+                        setShowWhatsAppModal(true);
+                    } else {
+                        message.success('Ziyaretçi çıkışı kaydedildi');
+                    }
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Çıkış kaydı başarısız');
+                }
             }
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Çıkış kaydı başarısız');
-        }
+        });
     }, [fetchData]);
 
     const handleDeleteRecord = useCallback(async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/visitors/records/${id}`);
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Kayıt silinemedi');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/visitors/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Kayıt silinemedi');
+                }
+            }
+        });
     }, []);
 
     const handleRestoreRecord = useCallback(async (id: string) => {
         try {
             await api.post(`/visitors/records/${id}/restore`);
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            message.success('Kayıt geri alındı');
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Kayıt geri alınamadı');
+            message.error(err?.response?.data?.message || 'Kayıt geri alınamadı');
         }
     }, []);
 
     const handleUndoExit = useCallback(async (id: string) => {
-        if (!confirm('Bu çıkışı geri almak istediğinize emin misiniz?')) return;
-
-        try {
-            await api.post(`/visitors/records/${id}/undo-exit`);
-            setRecords(prev => prev.map(record => record.id === id
-                ? { ...record, status: 'inside', exit_date: null, exit_time: null, exit_by: null }
-                : record
-            ));
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Çıkış geri alınamadı');
-        }
+        Modal.confirm({
+            title: 'Çıkışı Geri Al',
+            content: 'Bu çıkışı geri almak istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/visitors/records/${id}/undo-exit`);
+                    setRecords(prev => prev.map(record => record.id === id
+                        ? { ...record, status: 'inside', exit_date: null, exit_time: null, exit_by: null }
+                        : record
+                    ));
+                    message.success('Çıkış işlemi geri alındı');
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Çıkış geri alınamadı');
+                }
+            }
+        });
     }, []);
 
     const handleSendWhatsAppAutomatic = useCallback(async () => {
@@ -356,12 +395,13 @@ export default function Visitors() {
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
                 setAutoSendFailed(false);
+                message.success('WhatsApp mesajı gönderildi');
             } else {
                 setAutoSendFailed(true);
                 const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
                 const reason = response.data?.reason || 'Bilinmeyen hata';
                 const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
-                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                message.error(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (error: any) {
             setAutoSendFailed(true);
@@ -369,7 +409,7 @@ export default function Visitors() {
             const details = isTimeout
                 ? 'Otomatik gönderim zaman aşımına uğradı.'
                 : (error.response?.data?.message || error.message);
-            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            message.error(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }

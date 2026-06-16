@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
+import api from '../utils/api';
 import type { Vehicle } from '../types';
-import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
@@ -33,16 +34,11 @@ export default function AdminManageVehicles() {
     // Fetch vehicles
     const fetchVehicles = async () => {
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
-            const response = await axios.get(`${API_URL}/vehicles`, config);
+            const response = await api.get('/vehicles');
             setVehicles(response.data || []);
         } catch (error) {
             console.error('Araçlar yüklenemedi:', error);
+            message.error('Araçlar yüklenemedi');
         } finally {
             setLoading(false);
         }
@@ -83,63 +79,47 @@ export default function AdminManageVehicles() {
         e.preventDefault();
 
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
-
             const vehicleData = formData;
 
             if (editingVehicle) {
                 // Update existing vehicle
-                await axios.put(
-                    `${API_URL}/vehicles/${editingVehicle.id}`,
-                    vehicleData,
-                    config
-                );
+                await api.put(`/vehicles/${editingVehicle.id}`, vehicleData);
+                message.success('Araç başarıyla güncellendi');
             } else {
                 // Create new vehicle
-                await axios.post(
-                    `${API_URL}/vehicles`,
-                    vehicleData,
-                    config
-                );
+                await api.post('/vehicles', vehicleData);
+                message.success('Araç başarıyla eklendi');
             }
 
             setShowModal(false);
-            fetchVehicles();
-        } catch (error) {
+            void fetchVehicles();
+        } catch (error: any) {
             console.error('Araç kaydedilemedi:', error);
-            alert('Araç kaydedilirken bir hata oluştu');
+            const errorMessage = error.response?.data?.message || 'Araç kaydedilirken bir hata oluştu';
+            message.error(errorMessage);
         }
     };
 
     // Delete vehicle
     const handleDelete = async (id: string) => {
-        if (!confirm('Bu aracı silmek istediğinizden emin misiniz?')) {
-            return;
-        }
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
+        Modal.confirm({
+            title: 'Aracı Sil',
+            content: 'Bu aracı silmek istediğinizden emin misiniz?',
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/vehicles/${id}`);
+                    message.success('Araç başarıyla silindi');
+                    void fetchVehicles();
+                } catch (error: any) {
+                    console.error('Araç silinemedi:', error);
+                    const errorMessage = error.response?.data?.message || 'Araç silinirken bir hata oluştu';
+                    message.error(errorMessage);
                 }
-            };
-
-            await axios.delete(
-                `${API_URL}/vehicles/${id}`,
-                config
-            );
-
-            fetchVehicles();
-        } catch (error) {
-            console.error('Araç silinemedi:', error);
-            alert('Araç silinirken bir hata oluştu');
-        }
+            }
+        });
     };
 
     return (
