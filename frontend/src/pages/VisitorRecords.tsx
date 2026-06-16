@@ -47,6 +47,50 @@ const getVisitorRowStyle = (record: VisitorRecord): { backgroundColor: string } 
     return { backgroundColor: color };
 };
 
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
+
 export default function VisitorRecords() {
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -433,14 +477,14 @@ export default function VisitorRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -473,12 +517,33 @@ export default function VisitorRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    const syncBottomScroll = () => {
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
-
         if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
         tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
     };
 
     return (
@@ -758,7 +823,8 @@ export default function VisitorRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
@@ -766,87 +832,100 @@ export default function VisitorRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[2520px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1600px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
-                                                <th className="w-[105px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç Plaka</th>
-                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
-                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Firma</th>
-                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
-                                                <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
-                                                <th className="w-[165px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
-                                                <th className="w-[190px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiket</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kişi Sayısı</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çocuk Sayısı</th>
-                                                <th className="w-[150px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Telefon</th>
-                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
-                                                <th className="w-[205px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                <th className="w-[60px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlem</th>
+                                                <th className="w-[80px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="w-[100px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Araç Plaka</th>
+                                                <th className="w-[130px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Firma</th>
+                                                <th className="w-[120px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Ziyaret Edilen</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Giriş Tarihi</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
+                                                <th className="w-[140px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Etiket</th>
+                                                <th className="w-[75px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kişi</th>
+                                                <th className="w-[75px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çocuk</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Telefon</th>
+                                                <th className="w-[170px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="w-[100px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
+                                                <th className="w-[110px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`} style={getVisitorRowStyle(record)}>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-500">-</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-500">-</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900">{record.vehicle_plate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs font-bold text-gray-900">{record.vehicle_plate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900">{record.full_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs font-bold text-gray-900">{record.full_name || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.company_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.company_name || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.visiting_person || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.visiting_person || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.entry_date)}</div>
-                                                        <div className="text-xs text-gray-500">{formatTime(record.entry_time)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.entry_date)}</div>
+                                                        <div className="text-[10px] text-gray-500">{formatTime(record.entry_time)}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {record.exit_date ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.exit_date)}</div>
-                                                                <div className="text-xs text-gray-500">{formatTime(record.exit_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.exit_date)}</div>
+                                                                <div className="text-[10px] text-gray-500">{formatTime(record.exit_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-gray-400">-</span>
+                                                            <span className="text-xs text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{getVisitorTags(record).join(', ') || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="flex flex-wrap gap-1 max-w-[140px]">
+                                                            {getVisitorTags(record).length > 0 ? (
+                                                                getVisitorTags(record).map((tag, idx) => (
+                                                                    <span
+                                                                        key={idx}
+                                                                        className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap"
+                                                                    >
+                                                                        {tag}
+                                                                    </span>
+                                                                ))
+                                                            ) : (
+                                                                <span className="text-gray-400 text-xs">-</span>
+                                                            )}
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.person_count ?? '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.person_count ?? '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.children_count ?? '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.children_count ?? '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.phone || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.phone || '-'}</div>
                                                     </td>
-                                                    <td className="w-[250px] px-4 py-3 pr-6">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {renderPreviewText(record.notes, 'Açıklama')}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <span className={`px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[11px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                                                             {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.entry_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.entry_by || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.exit_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.exit_by || '-'}</div>
                                                     </td>
                                                 </tr>
                                             ))}
