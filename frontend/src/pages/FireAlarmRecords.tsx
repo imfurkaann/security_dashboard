@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
@@ -77,12 +76,25 @@ export default function FireAlarmRecords() {
     const fetchData = useCallback(async (offset = 0, append = false) => {
         const fetchId = ++latestFetchId.current;
         try {
-            let res;
-            if (anyFilterApplied) {
-                res = await api.get(`/fire-alarms/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`);
-            } else {
-                res = await api.get(`/fire-alarms/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`);
-            }
+            const params: Record<string, string | number | boolean> = {
+                includeDeleted: true,
+                limit: PAGE_SIZE,
+                offset,
+                _t: Date.now(),
+                alarm_number: alarmNumber,
+                location,
+                recorded_by: recordedBy,
+                resolved_by: resolvedBy,
+                status,
+                gate: gateFilter,
+                false_alarm: falseAlarmFilter,
+                alarmDateStart,
+                alarmDateEnd,
+                resolutionDateStart,
+                resolutionDateEnd
+            };
+
+            const res = await api.get(`/fire-alarms/records`, { params });
 
             if (fetchId !== latestFetchId.current) return;
 
@@ -93,16 +105,29 @@ export default function FireAlarmRecords() {
                 setRecords(fetched);
             }
 
-            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+            setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
             if (fetchId !== latestFetchId.current) return;
             console.error('Veriler yüklenemedi:', error);
+            message.error('Yangın alarm verileri yüklenemedi');
         } finally {
             if (fetchId !== latestFetchId.current) return;
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [anyFilterApplied]);
+    }, [
+        alarmNumber,
+        location,
+        recordedBy,
+        resolvedBy,
+        status,
+        gateFilter,
+        falseAlarmFilter,
+        alarmDateStart,
+        alarmDateEnd,
+        resolutionDateStart,
+        resolutionDateEnd
+    ]);
 
     // Fetch all records + periodic refresh to keep list in sync
     useEffect(() => {
@@ -172,38 +197,7 @@ export default function FireAlarmRecords() {
     }, [fetchData, loadingMore, hasMore, records.length]);
 
     // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            if (alarmNumber && !normalizeSearchText(record.alarm_number).includes(normalizeSearchText(alarmNumber))) return false;
-            if (location && !normalizeSearchText(record.location).includes(normalizeSearchText(location))) return false;
-            if (recordedBy && !normalizeSearchText(record.recorded_by_name).includes(normalizeSearchText(recordedBy))) return false;
-            if (resolvedBy && !normalizeSearchText(record.resolved_by_name).includes(normalizeSearchText(resolvedBy))) return false;
-            if (status === 'deleted' && !record.deleted_at) return false;
-            if (status === 'active' && (record.resolved || Boolean(record.deleted_at))) return false;
-            if (status === 'resolved' && (!record.resolved || Boolean(record.deleted_at))) return false;
-            if (gateFilter !== 'all' && (record.gate || '') !== gateFilter) return false;
-            if (falseAlarmFilter === 'true' && !record.false_alarm) return false;
-            if (falseAlarmFilter === 'false' && record.false_alarm) return false;
-
-            // Alarm date filtering - use inclusive dayjs comparison
-            if (alarmDateStart && alarmDateEnd) {
-                const d = dayjs(record.alarm_time);
-                const start = dayjs(alarmDateStart).startOf('day');
-                const end = dayjs(alarmDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            // Resolution date filtering - inclusive comparison
-            if (resolutionDateStart && resolutionDateEnd && record.resolution_time) {
-                const d = dayjs(record.resolution_time);
-                const start = dayjs(resolutionDateStart).startOf('day');
-                const end = dayjs(resolutionDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -235,7 +229,7 @@ export default function FireAlarmRecords() {
         const resolutionRangeSelected = !!(resolutionDateStart || resolutionDateEnd);
 
         if (!alarmRangeSelected && !resolutionRangeSelected) {
-            alert('Lütfen alarm veya çözümleme tarih aralığı seçin.');
+            message.error('Lütfen alarm veya çözümleme tarih aralığı seçin.');
             return;
         }
 
@@ -254,28 +248,38 @@ export default function FireAlarmRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.error('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
         try {
-            const res = await api.get('/fire-alarms/records?includeDeleted=true&unlimited=true');
+            // Fetch ALL filtered records for exporting
+            const params: Record<string, string | number | boolean> = {
+                includeDeleted: true,
+                unlimited: true,
+                _t: Date.now(),
+                alarm_number: alarmNumber,
+                location,
+                recorded_by: recordedBy,
+                resolved_by: resolvedBy,
+                status,
+                gate: gateFilter,
+                false_alarm: falseAlarmFilter,
+                alarmDateStart,
+                alarmDateEnd,
+                resolutionDateStart,
+                resolutionDateEnd
+            };
+
+            const res = await api.get('/fire-alarms/records', { params });
             const allRecords: FireAlarmRecord[] = res.data?.data || [];
 
             const exportableRecords = allRecords
-                .filter(r => !r.deleted_at)
-                .filter((record) => {
-                    const dateValue = filterBy === 'alarm' ? record.alarm_time : record.resolution_time;
-                    if (!dateValue) return false;
-                    const d = dayjs(dateValue);
-                    const start = dayjs(rangeStart).startOf('day');
-                    const end = dayjs(rangeEnd).endOf('day');
-                    return d.isBetween(start, end, 'millisecond', '[]');
-                });
+                .filter(r => !r.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.error('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -290,6 +294,7 @@ export default function FireAlarmRecords() {
                 .sort((a, b) => b[0].localeCompare(a[0]))
                 .map(([dayKey, items]) => ({
                     dayKey,
+                    dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => dayjs(a.alarm_time).valueOf() - dayjs(b.alarm_time).valueOf())
                 }));
 
@@ -300,91 +305,48 @@ export default function FireAlarmRecords() {
 
             const colWidths = [14, 18, 12, 14, 12, 14, 12, 12, 16, 16, 32];
 
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const group of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Alarm Kayıtları');
-                worksheet.columns = colWidths.map(w => ({ width: w }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1D4ED8' } };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                group.records.forEach((r) => {
-                    const row = worksheet.addRow([
-                        r.alarm_number || '-',
-                        r.location || '-',
-                        r.gate || '-',
-                        formatDate(r.alarm_time),
-                        formatTime(r.alarm_time),
-                        r.resolution_time ? formatDate(r.resolution_time) : '-',
-                        r.resolution_time ? formatTime(r.resolution_time) : '-',
-                        r.resolved ? 'Çözüldü' : 'Aktif',
-                        r.recorded_by_name || '-',
-                        r.resolved_by_name || '-',
-                        r.resolution_notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formatted = dayjs(group.dayKey).format('DD-MM-YYYY');
-                const fileName = `Yangin_Alarm_Kayitlari_${formatted}.xlsx`;
-                const buf = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: buf as ArrayBuffer });
-            }
-
-            const triggerDownload = (blob: Blob, name: string) => new Promise<void>((resolve) => {
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = name;
-                document.body.appendChild(link);
-                link.click();
-                setTimeout(() => {
-                    document.body.removeChild(link);
-                    window.URL.revokeObjectURL(url);
-                    resolve();
-                }, 500);
+            await exportRecordsToExcelAndZip<FireAlarmRecord>({
+                exportGroups,
+                headerRow,
+                columnWidths: colWidths,
+                mapRecordToRow: (r) => [
+                    r.alarm_number || '-',
+                    r.location || '-',
+                    r.gate || '-',
+                    formatDate(r.alarm_time),
+                    formatTime(r.alarm_time),
+                    r.resolution_time ? formatDate(r.resolution_time) : '-',
+                    r.resolution_time ? formatTime(r.resolution_time) : '-',
+                    r.resolved ? 'Çözüldü' : 'Aktif',
+                    r.recorded_by_name || '-',
+                    r.resolved_by_name || '-',
+                    r.resolution_notes || '-'
+                ],
+                sheetName: 'Yangın Alarmı Kayıtları',
+                filePrefix: 'Yangin_Alarm_Kayitlari_',
+                zipNamePrefix: 'Yangin_Alarm_Kayitlari'
             });
-
-            if (dayFiles.length === 1) {
-                const [f] = dayFiles;
-                const blob = new Blob([f.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                await triggerDownload(blob, f.fileName);
-            } else {
-                const zip = new JSZip();
-                dayFiles.forEach(f => zip.file(f.fileName, f.data));
-                const zipBlob = await zip.generateAsync({ type: 'blob' });
-                const ts = dayjs().format('DD-MM-YYYY_HH-mm');
-                await triggerDownload(zipBlob, `Yangin_Alarm_Kayitlari_Toplu_${ts}.zip`);
-            }
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (err) {
             console.error('Export hatası:', err);
-            alert('Kayıtlar indirilirken bir hata oluştu.');
+            message.error('Kayıtlar indirilirken bir hata oluştu.');
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [
+        alarmDateStart,
+        alarmDateEnd,
+        resolutionDateStart,
+        resolutionDateEnd,
+        alarmNumber,
+        location,
+        recordedBy,
+        resolvedBy,
+        status,
+        gateFilter,
+        falseAlarmFilter,
+        isExporting
+    ]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -401,25 +363,34 @@ export default function FireAlarmRecords() {
         setResolutionDateEnd('');
     };
 
-    const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/fire-alarms/records/${id}`);
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+    const handleDeleteRecord = (id: string) => {
+        Modal.confirm({
+            title: 'Kayıt Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/fire-alarms/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt başarıyla silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const handleRestoreRecord = async (id: string) => {
         try {
             await api.post(`/fire-alarms/records/${id}/restore`);
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            message.success('Kayıt başarıyla geri alındı');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
+            message.error('Kayıt geri alınırken bir hata oluştu');
         }
     };
 

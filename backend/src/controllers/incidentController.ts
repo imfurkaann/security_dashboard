@@ -20,74 +20,99 @@ const VALID_STATUSES = ['open', 'in_progress', 'resolved', 'closed'] as const;
 // Tüm rapor kayıtlarını getir (gate filtresi YOK - tüm raporları göster)
 export const getIncidentRecords = async (req: Request, res: Response) => {
     try {
-            // Helper: check if incidents.gate column exists so we can run compatible queries
-            const incidentsHasGate = async (): Promise<boolean> => {
-                try {
-                    const info = await pool.query(
-                        "SELECT column_name FROM information_schema.columns WHERE table_name = 'incidents' AND column_name = 'gate' LIMIT 1"
-                    );
-                    return info.rows.length > 0;
-                } catch (e) {
-                    return false;
-                }
-            };
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limitQuery = req.query.limit;
+        const offsetQuery = req.query.offset;
+        const unlimited = req.query.unlimited === 'true';
 
-            const hasGate = await incidentsHasGate();
+        const reported_by = typeof req.query.reported_by === 'string' ? req.query.reported_by.trim() : '';
+        const gate = typeof req.query.gate === 'string' ? req.query.gate.trim() : '';
+        const dateStart = typeof req.query.dateStart === 'string' ? req.query.dateStart : '';
+        const dateEnd = typeof req.query.dateEnd === 'string' ? req.query.dateEnd : '';
 
-            let query = '';
-            if (hasGate) {
-                query = `
-                SELECT 
-                    i.id,
-                    i.description,
-                    i.incident_type,
-                    i.severity,
-                    i.location,
-                    i.shift_label,
-                    i.report_content,
-                    i.gate,
-                    i.report_date,
-                    CASE WHEN i.resolved THEN 'resolved' ELSE 'open' END as status,
-                    i.created_at,
-                    i.incident_time,
-                    i.resolved,
-                    i.resolution_notes,
-                    i.resolved_at,
-                    p.first_name || ' ' || p.last_name as reported_by
-                FROM incidents i
-                LEFT JOIN personnel p ON i.recorded_by = p.id
-                WHERE i.deleted_at IS NULL 
-                ORDER BY i.created_at DESC
-                LIMIT 1000
-            `;
-            } else {
-                query = `
-                SELECT 
-                    i.id,
-                    i.description,
-                    i.incident_type,
-                    i.severity,
-                    i.location,
-                    i.shift_label,
-                    i.report_content,
-                    NULL AS gate,
-                    i.report_date,
-                    CASE WHEN i.resolved THEN 'resolved' ELSE 'open' END as status,
-                    i.created_at,
-                    i.incident_time,
-                    i.resolved,
-                    i.resolution_notes,
-                    i.resolved_at,
-                    p.first_name || ' ' || p.last_name as reported_by
-                FROM incidents i
-                LEFT JOIN personnel p ON i.recorded_by = p.id
-                WHERE i.deleted_at IS NULL 
-                ORDER BY i.created_at DESC
-                LIMIT 1000
-            `;
+        const incidentsHasGate = async (): Promise<boolean> => {
+            try {
+                const info = await pool.query(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'incidents' AND column_name = 'gate' LIMIT 1"
+                );
+                return info.rows.length > 0;
+            } catch (e) {
+                return false;
             }
-            
-            const result = await pool.query(query);
+        };
+
+        const hasGate = await incidentsHasGate();
+
+        const whereClauses: string[] = [];
+        const queryParams: any[] = [];
+        let paramCounter = 1;
+
+        if (!includeDeleted) {
+            whereClauses.push(`i.deleted_at IS NULL`);
+        }
+
+        if (reported_by) {
+            whereClauses.push(`translate(lower(p.first_name || ' ' || p.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
+            queryParams.push(`%${reported_by.toLowerCase()}%`);
+        }
+
+        if (hasGate && gate) {
+            whereClauses.push(`i.gate = $${paramCounter++}`);
+            queryParams.push(gate);
+        }
+
+        if (dateStart) {
+            whereClauses.push(`(i.report_date >= $${paramCounter++}::date OR i.created_at >= $${paramCounter++}::timestamp)`);
+            queryParams.push(dateStart);
+            queryParams.push(`${dateStart} 00:00:00`);
+            paramCounter++;
+        }
+        if (dateEnd) {
+            whereClauses.push(`(i.report_date <= $${paramCounter++}::date OR i.created_at <= $${paramCounter++}::timestamp)`);
+            queryParams.push(dateEnd);
+            queryParams.push(`${dateEnd} 23:59:59.999`);
+            paramCounter++;
+        }
+
+        const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        let paginationString = '';
+        if (!unlimited) {
+            const limit = Math.max(Number(limitQuery) || 200, 1);
+            const offset = Math.max(Number(offsetQuery) || 0, 0);
+            paginationString = `LIMIT $${paramCounter++} OFFSET $${paramCounter++}`;
+            queryParams.push(limit, offset);
+        }
+
+        const gateSelect = hasGate ? 'i.gate' : 'NULL AS gate';
+
+        const query = `
+            SELECT 
+                i.id,
+                i.description,
+                i.incident_type,
+                i.severity,
+                i.location,
+                i.shift_label,
+                i.report_content,
+                ${gateSelect},
+                i.report_date,
+                CASE WHEN i.resolved THEN 'resolved' ELSE 'open' END as status,
+                i.created_at,
+                i.incident_time,
+                i.resolved,
+                i.resolution_notes,
+                i.resolved_at,
+                p.first_name || ' ' || p.last_name as reported_by
+            FROM incidents i
+            LEFT JOIN personnel p ON i.recorded_by = p.id
+            ${whereString}
+            ORDER BY i.created_at DESC
+            ${paginationString}
+        `;
+        
+        const result = await pool.query(query, queryParams);
         res.json({ success: true, data: result.rows });
     } catch (error) {
         console.error('Get incidents error:', error);

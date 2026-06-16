@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { message } from 'antd';
+import 'antd/dist/reset.css';
 import api from '../utils/api';
 import type { GuestRegistryColumn, GuestRegistryRecord, GuestRegistrySchema } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
@@ -29,15 +31,19 @@ export default function GuestRegistry() {
     const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
     const [debouncedSearchText, setDebouncedSearchText] = useState('');
 
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 100;
+
     const columns = schema.columns;
 
-    const fetchRecords = useCallback(async (searchValue = '', options?: { silent?: boolean }) => {
+    const fetchRecords = useCallback(async (searchValue = '', pageNumber = 1, append = false, options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
-        if (!silent) {
+        if (!silent && !append) {
             setLoading(true);
         }
         try {
-            const params: Record<string, string | number> = { page: 1, limit: 500, _t: Date.now() };
+            const params: Record<string, string | number> = { page: pageNumber, limit: PAGE_SIZE, _t: Date.now() };
 
             if (searchValue.trim()) {
                 params.search = searchValue.trim();
@@ -47,19 +53,28 @@ export default function GuestRegistry() {
             const nextSchema: GuestRegistrySchema = response.data?.schema || EMPTY_SCHEMA;
 
             setSchema(nextSchema);
-            setRecords(response.data?.data || []);
+            const fetchedData = response.data?.data || [];
+
+            if (append) {
+                setRecords(prev => [...prev, ...fetchedData]);
+            } else {
+                setRecords(fetchedData);
+            }
+
+            setHasMore(fetchedData.length === PAGE_SIZE);
         } catch (error) {
             console.error('Misafir kayitlari yuklenemedi:', error);
-            alert('Misafir kayitlari yuklenemedi');
+            message.error('Misafir kayıtları yüklenemedi');
         } finally {
             if (!silent) {
                 setLoading(false);
             }
+            setLoadingMore(false);
         }
     }, []);
 
     useEffect(() => {
-        void fetchRecords();
+        void fetchRecords('', 1, false);
     }, [fetchRecords]);
 
     useEffect(() => {
@@ -76,11 +91,51 @@ export default function GuestRegistry() {
             return;
         }
 
-        void fetchRecords(debouncedSearchText, { silent: true });
+        void fetchRecords(debouncedSearchText, 1, false, { silent: true });
     }, [debouncedSearchText, fetchRecords]);
 
+    // Infinite scroll listener
+    useEffect(() => {
+        const node = tableScrollRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                const nextPage = Math.floor(records.length / PAGE_SIZE) + 1;
+                void fetchRecords(debouncedSearchText, nextPage, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                const nextPage = Math.floor(records.length / PAGE_SIZE) + 1;
+                void fetchRecords(debouncedSearchText, nextPage, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchRecords, loadingMore, hasMore, records.length, debouncedSearchText]);
+
     const refreshGuestRegistryRealtime = useCallback(() => {
-        return fetchRecords(debouncedSearchText, { silent: true });
+        return fetchRecords(debouncedSearchText, 1, false, { silent: true });
     }, [fetchRecords, debouncedSearchText]);
 
     useRealtimeRefetch({
@@ -92,7 +147,7 @@ export default function GuestRegistry() {
     const onReset = async () => {
         setSearchText('');
         setDebouncedSearchText('');
-        await fetchRecords('');
+        await fetchRecords('', 1, false);
     };
 
     const onUploadClick = () => {
@@ -105,7 +160,7 @@ export default function GuestRegistry() {
 
         const fileName = selectedFile.name.toLowerCase();
         if (!fileName.endsWith('.xls') && !fileName.endsWith('.xlsx')) {
-            alert('Sadece Excel dosyalari (.xls, .xlsx) yuklenebilir');
+            message.error('Sadece Excel dosyaları (.xls, .xlsx) yüklenebilir');
             event.target.value = '';
             return;
         }
@@ -126,14 +181,14 @@ export default function GuestRegistry() {
                 setLastSummary(summary);
             }
 
-            alert('Excel yukleme tamamlandi');
+            message.success('Excel yükleme tamamlandı');
             setSearchText('');
             setDebouncedSearchText('');
-            await fetchRecords('');
+            await fetchRecords('', 1, false);
         } catch (error: any) {
             console.error('Excel yuklenemedi:', error);
             const apiMessage = error?.response?.data?.message;
-            alert(apiMessage || 'Excel yukleme sirasinda hata olustu');
+            message.error(apiMessage || 'Excel yükleme sırasında hata oluştu');
         } finally {
             setUploading(false);
             event.target.value = '';
@@ -354,6 +409,11 @@ export default function GuestRegistry() {
                                         ))}
                                     </tbody>
                                 </table>
+                                {loadingMore && (
+                                    <div className="flex items-center justify-center py-4">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

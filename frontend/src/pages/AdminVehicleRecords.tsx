@@ -1,15 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
-import axios from 'axios';
+import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types';
-import { API_URL } from '../constants';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import ActionButton from '../components/ActionButton';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 const { RangePicker } = DatePicker;
 
 const normalizeSearchText = (value: string | null | undefined): string => {
@@ -49,60 +48,50 @@ export default function AdminVehicleRecords() {
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
 
-    // Check if any filter is active (for deciding unlimited fetch)
-    const anyFilterApplied = useMemo(() => {
-        return filters.vehicle_plate !== '' ||
-            filters.manager !== '' ||
-            filters.destination !== '' ||
-            filters.given_by !== '' ||
-            filters.returned_by !== '' ||
-            filters.status !== 'all' ||
-            filters.gate !== 'all' ||
-            filters.givenDateStart !== '' ||
-            filters.givenDateEnd !== '' ||
-            filters.returnDateStart !== '' ||
-            filters.returnDateEnd !== '';
-    }, [filters]);
-
     const fetchData = useCallback(async (offset = 0, append = false) => {
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
 
-            let recordsRes;
-            if (anyFilterApplied) {
-                recordsRes = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, config);
-            } else {
-                recordsRes = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, config);
-            }
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.manager) params.append('manager', filters.manager);
+            if (filters.destination) params.append('destination', filters.destination);
+            if (filters.given_by) params.append('given_by', filters.given_by);
+            if (filters.returned_by) params.append('returned_by', filters.returned_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.givenDateStart) params.append('givenDateStart', filters.givenDateStart);
+            if (filters.givenDateEnd) params.append('givenDateEnd', filters.givenDateEnd);
+            if (filters.returnDateStart) params.append('returnDateStart', filters.returnDateStart);
+            if (filters.returnDateEnd) params.append('returnDateEnd', filters.returnDateEnd);
 
-            // Fetch vehicles list once if empty
-            let vehiclesRes = null;
-            if (vehicles.length === 0) {
-                vehiclesRes = await axios.get(`${API_URL}/vehicles`, config);
-            }
+            const [recordsRes, vehiclesRes] = await Promise.all([
+                api.get(`/vehicles/records?${params.toString()}&_t=${Date.now()}`),
+                vehicles.length === 0 ? api.get('/vehicles') : Promise.resolve(null)
+            ]);
 
-            const fetched = recordsRes.data || [];
+            const fetchedRecords = recordsRes.data || [];
+
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords(prev => [...prev, ...fetchedRecords]);
             } else {
-                setRecords(fetched);
+                setRecords(fetchedRecords);
             }
 
-            if (vehiclesRes) setVehicles(vehiclesRes.data || []);
-
-            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+            setHasMore(fetchedRecords.length === PAGE_SIZE);
+            if (vehiclesRes) {
+                setVehicles(vehiclesRes.data || []);
+            }
         } catch (error) {
+            message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [anyFilterApplied, vehicles.length]);
+    }, [filters, vehicles.length]);
 
     useEffect(() => {
         setLoading(true);
@@ -149,77 +138,12 @@ export default function AdminVehicleRecords() {
 
     useRealtimeRefetch({
         topics: ['vehicles'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
         enabled: true,
     });
 
-    // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            // Vehicle plate filter - exact match
-            if (filters.vehicle_plate && record.vehicle_plate !== filters.vehicle_plate) {
-                return false;
-            }
-
-            // Manager filter
-            if (filters.manager && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager))) {
-                return false;
-            }
-
-            // Destination filter
-            if (filters.destination && !normalizeSearchText(record.destination).includes(normalizeSearchText(filters.destination))) {
-                return false;
-            }
-
-            // Given by filter
-            if (filters.given_by && !normalizeSearchText(record.given_by).includes(normalizeSearchText(filters.given_by))) {
-                return false;
-            }
-
-            // Returned by filter
-            if (filters.returned_by && !normalizeSearchText(record.returned_by).includes(normalizeSearchText(filters.returned_by))) {
-                return false;
-            }
-
-            // Status filter
-            if (filters.status === 'deleted') {
-                if (!record.deleted_at) {
-                    return false;
-                }
-            } else if (filters.status === 'in_use') {
-                if (record.status !== 'in_use' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            } else if (filters.status === 'returned') {
-                if (record.status !== 'returned' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            }
-
-            // Gate filter
-            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
-                return false;
-            }
-
-            // Given date range filter - inclusive dayjs comparison
-            if (filters.givenDateStart && filters.givenDateEnd) {
-                const d = dayjs(record.given_date);
-                const start = dayjs(filters.givenDateStart).startOf('day');
-                const end = dayjs(filters.givenDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            // Return date range filter - inclusive
-            if (filters.returnDateStart && filters.returnDateEnd && record.return_date) {
-                const d = dayjs(record.return_date);
-                const start = dayjs(filters.returnDateStart).startOf('day');
-                const end = dayjs(filters.returnDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, filters]);
+    // Filtered records are handled on backend now
+    const filteredRecords = records;
 
     // Check if any filter is active
     const hasActiveFilters = useMemo(() => {
@@ -268,7 +192,7 @@ export default function AdminVehicleRecords() {
         const returnRangeSelected = !!(filters.returnDateStart || filters.returnDateEnd);
 
         if (!givenRangeSelected && !returnRangeSelected) {
-            alert('Lütfen teslim veya iade tarih aralığı seçin.');
+            message.warning('Lütfen teslim veya iade tarih aralığı seçin.');
             return;
         }
 
@@ -287,16 +211,29 @@ export default function AdminVehicleRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.warning('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = { headers: { Authorization: `Bearer ${adminToken}` } };
-            const res = await axios.get(`${API_URL}/vehicles/records?includeDeleted=true&unlimited=true`, config);
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('unlimited', 'true');
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.manager) params.append('manager', filters.manager);
+            if (filters.destination) params.append('destination', filters.destination);
+            if (filters.given_by) params.append('given_by', filters.given_by);
+            if (filters.returned_by) params.append('returned_by', filters.returned_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.givenDateStart) params.append('givenDateStart', filters.givenDateStart);
+            if (filters.givenDateEnd) params.append('givenDateEnd', filters.givenDateEnd);
+            if (filters.returnDateStart) params.append('returnDateStart', filters.returnDateStart);
+            if (filters.returnDateEnd) params.append('returnDateEnd', filters.returnDateEnd);
+
+            const res = await api.get(`/vehicles/records?${params.toString()}`);
             const allRecords: VehicleUsage[] = res.data || [];
 
             const start = dayjs(rangeStart).startOf('day');
@@ -312,7 +249,7 @@ export default function AdminVehicleRecords() {
                 .filter(record => !record.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -357,115 +294,39 @@ export default function AdminVehicleRecords() {
 
             const worksheetColumnWidths = [18, 16, 20, 16, 24, 12, 14, 12, 14, 12, 18, 18, 14, 32];
 
-            const plateSuffix = filters.vehicle_plate
-                ? `_${filters.vehicle_plate.replace(/[^a-zA-Z0-9_-]/g, '')}`
-                : '';
-
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const dayGroup of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Araç Kayıtları');
-
-                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FF1D4ED8' }
-                    };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                dayGroup.records.forEach((record) => {
-                    const row = worksheet.addRow([
-                        record.vehicle,
-                        record.vehicle_plate,
-                        record.manager,
-                        record.manager_title,
-                        record.destination || '-',
-                        record.gate || '-',
-                        formatDate(record.given_date),
-                        formatTime(record.given_time),
-                        record.return_date ? formatDate(record.return_date) : '-',
-                        record.return_time ? formatTime(record.return_time) : '-',
-                        record.given_by || '-',
-                        record.returned_by || '-',
-                        record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
-                        record.notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
-                const fileName = `Arac_Kayitlari${plateSuffix}_${formattedDayForFileName}.xlsx`;
-                const workbookBuffer = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
-            }
-
-            // Helper function to trigger download with proper cleanup
-            const triggerDownload = (blob: Blob, fileName: string) => {
-                return new Promise<void>((resolve) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    
-                    // Delayed cleanup to ensure download starts
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        resolve();
-                    }, 500);
-                });
-            };
-
-            if (dayFiles.length === 1) {
-                const [singleFile] = dayFiles;
-                const blob = new Blob([singleFile.data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                await triggerDownload(blob, singleFile.fileName);
-                return;
-            }
-
-            const zip = new JSZip();
-            dayFiles.forEach((file) => {
-                zip.file(file.fileName, file.data);
+            await exportRecordsToExcelAndZip<VehicleUsage>({
+                exportGroups,
+                headerRow,
+                columnWidths: worksheetColumnWidths,
+                mapRecordToRow: (record) => [
+                    record.vehicle,
+                    record.vehicle_plate,
+                    record.manager,
+                    record.manager_title,
+                    record.destination || '-',
+                    record.gate || '-',
+                    formatDate(record.given_date),
+                    formatTime(record.given_time),
+                    record.return_date ? formatDate(record.return_date) : '-',
+                    record.return_time ? formatTime(record.return_time) : '-',
+                    record.given_by || '-',
+                    record.returned_by || '-',
+                    record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
+                    record.notes || '-'
+                ],
+                sheetName: 'Araç Kayıtları',
+                filePrefix: 'Arac_Kayitlari_',
+                zipNamePrefix: 'Arac_Kayitlari'
             });
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
-            await triggerDownload(zipBlob, `Arac_Kayitlari_Toplu_${timestamp}.zip`);
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, filters.vehicle_plate, isExporting]);
+    }, [filters, isExporting]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -485,34 +346,42 @@ export default function AdminVehicleRecords() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.delete(`${API_URL}/vehicles/records/${id}`, {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            });
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/vehicles/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const handleRestoreRecord = async (id: string) => {
-        if (!confirm('Bu kaydı geri almak istediğinize emin misiniz?')) return;
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.post(`${API_URL}/vehicles/records/${id}/restore`, {}, {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            });
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
-            setInfoMessage('Kayıt geri alındı.');
-        } catch (error) {
-            console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Geri Al',
+            content: 'Bu kaydı geri almak istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/vehicles/records/${id}/restore`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+                    message.success('Kayıt geri alındı');
+                } catch (error) {
+                    console.error('Kayıt geri alınamadı:', error);
+                    message.error('Kayıt geri alınırken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
@@ -837,9 +706,10 @@ export default function AdminVehicleRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1560px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1680px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
+                                                <th className="w-[120px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
                                                 <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
                                                 <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
                                                 <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
@@ -855,6 +725,15 @@ export default function AdminVehicleRecords() {
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
+                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                        <div className="flex items-center gap-2 whitespace-nowrap">
+                                                            {record.deleted_at ? (
+                                                                <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success" title="Geri Al">Geri Al</ActionButton>
+                                                            ) : (
+                                                                <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                     <td className="px-4 py-3 whitespace-nowrap">
                                                         <div className="text-sm font-bold text-gray-900">{record.vehicle_plate}</div>
                                                         <div className="text-xs text-gray-500">{record.vehicle_brand}</div>

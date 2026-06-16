@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
@@ -43,15 +42,23 @@ export default function ManagerRecords() {
     const PAGE_SIZE = 200;
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
-        const anyFilterApplied = Object.values(filters).some((value) => value !== '' && value !== 'all');
-
         try {
-            const res = await api.get(
-                anyFilterApplied
-                    ? '/managers/records?includeDeleted=true&unlimited=true'
-                    : `/managers/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`
-            );
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
 
+            if (filters.manager_name) params.append('manager_name', filters.manager_name);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
+
+            const res = await api.get(`/managers/records?${params.toString()}`);
             const fetchedRecords = res.data || [];
 
             if (append) {
@@ -60,8 +67,9 @@ export default function ManagerRecords() {
                 setRecords(fetchedRecords);
             }
 
-            setHasMore(anyFilterApplied ? false : fetchedRecords.length === PAGE_SIZE);
+            setHasMore(fetchedRecords.length === PAGE_SIZE);
         } catch (error) {
+            message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
             setLoading(false);
@@ -117,69 +125,8 @@ export default function ManagerRecords() {
         };
     }, [fetchData, loadingMore, hasMore, records.length]);
 
-    // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            // Manager name filter
-            if (filters.manager_name && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager_name))) {
-                return false;
-            }
-
-            // Entry by filter
-            if (filters.entry_by && !normalizeSearchText(record.entry_by).includes(normalizeSearchText(filters.entry_by))) {
-                return false;
-            }
-
-            // Exit by filter
-            if (filters.exit_by && !normalizeSearchText(record.exit_by).includes(normalizeSearchText(filters.exit_by))) {
-                return false;
-            }
-
-            // Status filter
-            if (filters.status === 'deleted' && !record.deleted_at) {
-                return false;
-            }
-            if (filters.status === 'inside' && (record.deleted_at || record.status !== 'inside')) {
-                return false;
-            }
-            if (filters.status === 'exited' && (record.deleted_at || record.status !== 'exited')) {
-                return false;
-            }
-
-            // Gate filter
-            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
-                return false;
-            }
-
-            // Entry date range filter - dayjs ile yerel tarihe çevir
-            const entryDateOnly = record.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '';
-            if (filters.entryDateStart && entryDateOnly) {
-                if (entryDateOnly < filters.entryDateStart) {
-                    return false;
-                }
-            }
-            if (filters.entryDateEnd && entryDateOnly) {
-                if (entryDateOnly > filters.entryDateEnd) {
-                    return false;
-                }
-            }
-
-            // Exit date range filter - dayjs ile yerel tarihe çevir
-            const exitDateOnly = record.exit_date ? dayjs(record.exit_date).format('YYYY-MM-DD') : '';
-            if (filters.exitDateStart && exitDateOnly) {
-                if (exitDateOnly < filters.exitDateStart) {
-                    return false;
-                }
-            }
-            if (filters.exitDateEnd && exitDateOnly) {
-                if (exitDateOnly > filters.exitDateEnd) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-    }, [records, filters]);
+    // Filtered records are handled on backend now
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -216,7 +163,7 @@ export default function ManagerRecords() {
         const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
 
         if (!entryRangeSelected && !exitRangeSelected) {
-            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
+            message.warning('Lütfen giriş veya çıkış tarih aralığı seçin.');
             return;
         }
 
@@ -235,14 +182,28 @@ export default function ManagerRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.warning('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const res = await api.get('/managers/records?includeDeleted=true&unlimited=true');
+            // Fetch filtered records for download (unlimited)
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('unlimited', 'true');
+            if (filters.manager_name) params.append('manager_name', filters.manager_name);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
+
+            const res = await api.get(`/managers/records?${params.toString()}`);
             const allRecords: ManagerRecord[] = res.data || [];
 
             const exportableRecords = allRecords
@@ -252,13 +213,12 @@ export default function ManagerRecords() {
                     const d = dayjs(dateValue);
                     const start = dayjs(rangeStart).startOf('day');
                     const end = dayjs(rangeEnd).endOf('day');
-                    // Normalize to day boundaries and compare inclusively to ensure the end date is included
                     return d.isBetween(start, end, 'millisecond', '[]');
                 })
                 .filter(record => !record.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -299,103 +259,31 @@ export default function ManagerRecords() {
 
             const worksheetColumnWidths = [18, 12, 14, 12, 14, 12, 12, 16, 16, 32];
 
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const dayGroup of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Müdür Kayıtları');
-
-                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FF1D4ED8' }
-                    };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                dayGroup.records.forEach((record) => {
-                    const row = worksheet.addRow([
-                        record.manager || '-',
-                        record.gate || '-',
-                        formatDate(record.entry_date),
-                        formatTime(record.entry_time),
-                        record.exit_date ? formatDate(record.exit_date) : '-',
-                        record.exit_time ? formatTime(record.exit_time) : '-',
-                        record.status || '-',
-                        record.entry_by || '-',
-                        record.exit_by || '-',
-                        record.notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
-                const fileName = `Mudir_Kayitlari_${formattedDayForFileName}.xlsx`;
-                const workbookBuffer = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
-            }
-
-            // Helper function to trigger download with proper cleanup
-            const triggerDownload = (blob: Blob, fileName: string) => {
-                return new Promise<void>((resolve) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    
-                    // Delayed cleanup to ensure download starts
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        resolve();
-                    }, 500);
-                });
-            };
-
-            if (dayFiles.length === 1) {
-                const [singleFile] = dayFiles;
-                const blob = new Blob([singleFile.data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                await triggerDownload(blob, singleFile.fileName);
-                return;
-            }
-
-            const zip = new JSZip();
-            dayFiles.forEach((file) => {
-                zip.file(file.fileName, file.data);
+            await exportRecordsToExcelAndZip<ManagerRecord>({
+                exportGroups,
+                headerRow,
+                columnWidths: worksheetColumnWidths,
+                mapRecordToRow: (record) => [
+                    record.manager || '-',
+                    record.gate || '-',
+                    formatDate(record.entry_date),
+                    formatTime(record.entry_time),
+                    record.exit_date ? formatDate(record.exit_date) : '-',
+                    record.exit_time ? formatTime(record.exit_time) : '-',
+                    record.status || '-',
+                    record.entry_by || '-',
+                    record.exit_by || '-',
+                    record.notes || '-'
+                ],
+                sheetName: 'Müdür Kayıtları',
+                filePrefix: 'Mudir_Kayitlari_',
+                zipNamePrefix: 'Mudir_Kayitlari'
             });
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
-            await triggerDownload(zipBlob, `Mudir_Kayitlari_Toplu_${timestamp}.zip`);
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -417,24 +305,33 @@ export default function ManagerRecords() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/managers/records/${id}`);
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/managers/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const handleRestoreRecord = async (id: string) => {
         try {
             await api.post(`/managers/records/${id}/restore`);
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            message.success('Kayıt geri alındı');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
+            message.error('Kayıt geri alınırken bir hata oluştu');
         }
     };
 

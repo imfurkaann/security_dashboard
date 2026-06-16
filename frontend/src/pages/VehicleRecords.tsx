@@ -1,14 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
@@ -47,13 +46,26 @@ export default function VehicleRecords() {
     const PAGE_SIZE = 200;
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
-        const anyFilterApplied = Object.values(filters).some((value) => value !== '' && value !== 'all');
-
         try {
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
+
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.manager) params.append('manager', filters.manager);
+            if (filters.destination) params.append('destination', filters.destination);
+            if (filters.given_by) params.append('given_by', filters.given_by);
+            if (filters.returned_by) params.append('returned_by', filters.returned_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.givenDateStart) params.append('givenDateStart', filters.givenDateStart);
+            if (filters.givenDateEnd) params.append('givenDateEnd', filters.givenDateEnd);
+            if (filters.returnDateStart) params.append('returnDateStart', filters.returnDateStart);
+            if (filters.returnDateEnd) params.append('returnDateEnd', filters.returnDateEnd);
+
             const [recordsRes, vehiclesRes] = await Promise.all([
-                anyFilterApplied
-                    ? api.get('/vehicles/records?includeDeleted=true&unlimited=true')
-                    : api.get(`/vehicles/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}`),
+                api.get(`/vehicles/records?${params.toString()}`),
                 api.get('/vehicles')
             ]);
 
@@ -65,9 +77,10 @@ export default function VehicleRecords() {
                 setRecords(fetchedRecords);
             }
 
-            setHasMore(anyFilterApplied ? false : fetchedRecords.length === PAGE_SIZE);
+            setHasMore(fetchedRecords.length === PAGE_SIZE);
             setVehicles(vehiclesRes.data || []);
         } catch (error) {
+            message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
             setLoading(false);
@@ -123,85 +136,8 @@ export default function VehicleRecords() {
         };
     }, [fetchData, loadingMore, hasMore, records.length]);
 
-    // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            // Vehicle plate filter - exact match
-            if (filters.vehicle_plate && record.vehicle_plate !== filters.vehicle_plate) {
-                return false;
-            }
-
-            // Manager filter
-            if (filters.manager && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager))) {
-                return false;
-            }
-
-            // Destination filter
-            if (filters.destination && !normalizeSearchText(record.destination).includes(normalizeSearchText(filters.destination))) {
-                return false;
-            }
-
-            // Given by filter
-            if (filters.given_by && !normalizeSearchText(record.given_by).includes(normalizeSearchText(filters.given_by))) {
-                return false;
-            }
-
-            // Returned by filter
-            if (filters.returned_by && !normalizeSearchText(record.returned_by).includes(normalizeSearchText(filters.returned_by))) {
-                return false;
-            }
-
-            // Status filter
-            if (filters.status === 'deleted') {
-                if (!record.deleted_at) {
-                    return false;
-                }
-            } else if (filters.status === 'in_use') {
-                if (record.status !== 'in_use' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            } else if (filters.status === 'returned') {
-                if (record.status !== 'returned' || Boolean(record.deleted_at)) {
-                    return false;
-                }
-            }
-
-            // Gate filter
-            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
-                return false;
-            }
-
-            // Given date range filter - dayjs ile yerel tarihe çevir
-            const givenDateOnly = record.given_date ? dayjs(record.given_date).format('YYYY-MM-DD') : '';
-            if (filters.givenDateStart && givenDateOnly) {
-                if (givenDateOnly < filters.givenDateStart) {
-                    return false;
-                }
-            }
-
-            if (filters.givenDateEnd && givenDateOnly) {
-                if (givenDateOnly > filters.givenDateEnd) {
-                    return false;
-                }
-            }
-
-            // Return date range filter - dayjs ile yerel tarihe çevir
-            const returnDateOnly = record.return_date ? dayjs(record.return_date).format('YYYY-MM-DD') : '';
-            if (filters.returnDateStart && returnDateOnly) {
-                if (returnDateOnly < filters.returnDateStart) {
-                    return false;
-                }
-            }
-
-            if (filters.returnDateEnd && returnDateOnly) {
-                if (returnDateOnly > filters.returnDateEnd) {
-                    return false;
-                }
-            }
-
-            return true;
-        });
-    }, [records, filters]);
+    // Filtered records are handled on backend now
+    const filteredRecords = records;
 
     // Check if any filter is active
     const hasActiveFilters = useMemo(() => {
@@ -228,7 +164,7 @@ export default function VehicleRecords() {
         const returnRangeSelected = !!(filters.returnDateStart || filters.returnDateEnd);
 
         if (!givenRangeSelected && !returnRangeSelected) {
-            alert('Lütfen teslim veya iade tarih aralığı seçin.');
+            message.warning('Lütfen teslim veya iade tarih aralığı seçin.');
             return;
         }
 
@@ -247,14 +183,30 @@ export default function VehicleRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.warning('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const res = await api.get('/vehicles/records?includeDeleted=true&unlimited=true');
+            // Fetch filtered records for download (unlimited)
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('unlimited', 'true');
+            if (filters.vehicle_plate) params.append('vehicle_plate', filters.vehicle_plate);
+            if (filters.manager) params.append('manager', filters.manager);
+            if (filters.destination) params.append('destination', filters.destination);
+            if (filters.given_by) params.append('given_by', filters.given_by);
+            if (filters.returned_by) params.append('returned_by', filters.returned_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.givenDateStart) params.append('givenDateStart', filters.givenDateStart);
+            if (filters.givenDateEnd) params.append('givenDateEnd', filters.givenDateEnd);
+            if (filters.returnDateStart) params.append('returnDateStart', filters.returnDateStart);
+            if (filters.returnDateEnd) params.append('returnDateEnd', filters.returnDateEnd);
+
+            const res = await api.get(`/vehicles/records?${params.toString()}`);
             const allRecords: VehicleUsage[] = res.data || [];
 
             const exportableRecords = allRecords
@@ -264,13 +216,12 @@ export default function VehicleRecords() {
                     const d = dayjs(dateValue);
                     const start = dayjs(rangeStart).startOf('day');
                     const end = dayjs(rangeEnd).endOf('day');
-                    // Use millisecond-level inclusive comparison to ensure end date is included
                     return d.isBetween(start, end, 'millisecond', '[]');
                 })
                 .filter(record => !record.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -315,111 +266,35 @@ export default function VehicleRecords() {
 
             const worksheetColumnWidths = [18, 16, 20, 16, 24, 12, 14, 12, 14, 12, 18, 18, 14, 32];
 
-            const plateSuffix = filters.vehicle_plate
-                ? `_${filters.vehicle_plate.replace(/[^a-zA-Z0-9_-]/g, '')}`
-                : '';
-
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const dayGroup of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Araç Kayıtları');
-
-                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FF1D4ED8' }
-                    };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                dayGroup.records.forEach((record) => {
-                    const row = worksheet.addRow([
-                        record.vehicle,
-                        record.vehicle_plate,
-                        record.manager,
-                        record.manager_title,
-                        record.destination || '-',
-                        record.gate || '-',
-                        formatDate(record.given_date),
-                        formatTime(record.given_time),
-                        record.return_date ? formatDate(record.return_date) : '-',
-                        record.return_time ? formatTime(record.return_time) : '-',
-                        record.given_by || '-',
-                        record.returned_by || '-',
-                        record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
-                        record.notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
-                const fileName = `Arac_Kayitlari${plateSuffix}_${formattedDayForFileName}.xlsx`;
-                const workbookBuffer = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
-            }
-
-            // Helper function to trigger download with proper cleanup
-            const triggerDownload = (blob: Blob, fileName: string) => {
-                return new Promise<void>((resolve) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    
-                    // Delayed cleanup to ensure download starts
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        resolve();
-                    }, 500);
-                });
-            };
-
-            if (dayFiles.length === 1) {
-                const [singleFile] = dayFiles;
-                const blob = new Blob([singleFile.data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                await triggerDownload(blob, singleFile.fileName);
-                return;
-            }
-
-            const zip = new JSZip();
-            dayFiles.forEach((file) => {
-                zip.file(file.fileName, file.data);
+            await exportRecordsToExcelAndZip<VehicleUsage>({
+                exportGroups,
+                headerRow,
+                columnWidths: worksheetColumnWidths,
+                mapRecordToRow: (record) => [
+                    record.vehicle,
+                    record.vehicle_plate,
+                    record.manager,
+                    record.manager_title,
+                    record.destination || '-',
+                    record.gate || '-',
+                    formatDate(record.given_date),
+                    formatTime(record.given_time),
+                    record.return_date ? formatDate(record.return_date) : '-',
+                    record.return_time ? formatTime(record.return_time) : '-',
+                    record.given_by || '-',
+                    record.returned_by || '-',
+                    record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
+                    record.notes || '-'
+                ],
+                sheetName: 'Araç Kayıtları',
+                filePrefix: 'Arac_Kayitlari_',
+                zipNamePrefix: 'Arac_Kayitlari'
             });
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
-            await triggerDownload(zipBlob, `Arac_Kayitlari_Toplu_${timestamp}.zip`);
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -468,24 +343,33 @@ export default function VehicleRecords() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            await api.delete(`/vehicles/records/${id}`);
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/vehicles/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const handleRestoreRecord = async (id: string) => {
         try {
             await api.post(`/vehicles/records/${id}/restore`);
             setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+            message.success('Kayıt geri alındı');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
+            message.error('Kayıt geri alınarken bir hata oluştu');
         }
     };
 

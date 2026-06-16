@@ -640,6 +640,19 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         const oldData = existingResult.rows[0];
+        const rawFileAction = typeof req.body.file_action === 'string'
+            ? req.body.file_action.trim().toLowerCase()
+            : '';
+
+        if (uploadedFiles.length > 0 && rawFileAction && rawFileAction !== 'append' && rawFileAction !== 'replace') {
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+            res.status(400).json({ success: false, message: 'Geçersiz dosya güncelleme modu. append veya replace kullanılmalıdır' });
+            return;
+        }
+
+        const fileAction: 'append' | 'replace' | null = uploadedFiles.length > 0
+            ? (rawFileAction === 'replace' ? 'replace' : 'append')
+            : null;
 
         // TC ve pasaport her ikisi de girilmiş mi kontrol et
         if (tc_no && passport_no) {
@@ -729,7 +742,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         updateFields.push(`notes = $${paramCounter++}`);
         updateValues.push(sanitizedNotes);
 
-        if (uploadedFiles.length > 0) {
+        if (uploadedFiles.length > 0 && fileAction === 'replace') {
             updateFields.push(`file_path = $${paramCounter++}`);
             updateValues.push(uploadedFiles[0].filename);
         }
@@ -746,26 +759,64 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         try {
             await client.query('BEGIN');
 
-            if (uploadedFiles.length > 0) {
+            if (uploadedFiles.length > 0 && fileAction) {
                 const existingFilesQuery = `
-                    SELECT stored_file_name
+                    SELECT stored_file_name, sort_order
                     FROM sgk_record_files
                     WHERE sgk_record_id = $1 AND deleted_at IS NULL
                 `;
                 const existingFilesResult = await client.query(existingFilesQuery, [id]);
 
-                await client.query(
-                    'UPDATE sgk_record_files SET deleted_at = NOW() WHERE sgk_record_id = $1 AND deleted_at IS NULL',
-                    [id]
-                );
+                // Legacy tek dosya kayıtları için, dosyayı önce dosya tablosuna taşı.
+                if (existingFilesResult.rows.length === 0 && oldData.file_path) {
+                    await client.query(
+                        `
+                            INSERT INTO sgk_record_files (
+                                id, sgk_record_id, stored_file_name, original_file_name,
+                                mime_type, size_bytes, sort_order
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        `,
+                        [
+                            uuidv4(),
+                            id,
+                            oldData.file_path,
+                            oldData.file_path,
+                            null,
+                            null,
+                            0
+                        ]
+                    );
 
-                for (const oldFile of existingFilesResult.rows) {
-                    try {
-                        deleteFile(oldFile.stored_file_name);
-                    } catch (fileError) {
-                        console.error('Old file deletion error:', fileError);
+                    existingFilesResult.rows.push({
+                        stored_file_name: oldData.file_path,
+                        sort_order: 0
+                    });
+                }
+
+                if (fileAction === 'replace') {
+                    await client.query(
+                        'UPDATE sgk_record_files SET deleted_at = NOW() WHERE sgk_record_id = $1 AND deleted_at IS NULL',
+                        [id]
+                    );
+
+                    for (const oldFile of existingFilesResult.rows) {
+                        try {
+                            deleteFile(oldFile.stored_file_name);
+                        } catch (fileError) {
+                            console.error('Old file deletion error:', fileError);
+                        }
                     }
                 }
+
+                const maxSortOrder = existingFilesResult.rows.reduce((max: number, row: any) => {
+                    const currentSortOrder = typeof row.sort_order === 'number'
+                        ? row.sort_order
+                        : Number(row.sort_order) || 0;
+                    return Math.max(max, currentSortOrder);
+                }, -1);
+
+                const baseSortOrder = fileAction === 'append' ? (maxSortOrder + 1) : 0;
 
                 for (let i = 0; i < uploadedFiles.length; i++) {
                     const uploadedFile = uploadedFiles[i];
@@ -784,7 +835,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
                         uploadedFile.originalname || null,
                         uploadedFile.mimetype || null,
                         uploadedFile.size || null,
-                        i
+                        baseSortOrder + i
                     ]);
                 }
             }

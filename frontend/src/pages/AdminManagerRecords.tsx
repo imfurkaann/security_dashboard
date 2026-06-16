@@ -1,16 +1,14 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
-import axios from 'axios';
+import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
-import { API_URL } from '../constants';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
@@ -64,26 +62,25 @@ export default function AdminManagerRecords() {
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
         try {
-            const anyFilterApplied = Object.values(filters).some((v) => v !== '' && v !== 'all');
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
 
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
+            if (filters.manager_name) params.append('manager_name', filters.manager_name);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
 
-            let recordsRes;
-            if (anyFilterApplied) {
-                recordsRes = await axios.get(`${API_URL}/managers/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, config);
-            } else {
-                recordsRes = await axios.get(`${API_URL}/managers/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, config);
-            }
-
-            let managersRes = null;
-            if (managersList.length === 0) {
-                managersRes = await axios.get(`${API_URL}/vehicles/managers`, config);
-            }
+            const [recordsRes, managersRes] = await Promise.all([
+                api.get(`/managers/records?${params.toString()}&_t=${Date.now()}`),
+                managersList.length === 0 ? api.get('/vehicles/managers') : Promise.resolve(null)
+            ]);
 
             const fetched: ManagerRecord[] = recordsRes.data || [];
             if (append) {
@@ -94,14 +91,15 @@ export default function AdminManagerRecords() {
 
             if (managersRes) setManagersList(managersRes.data || []);
 
-            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+            setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
+            message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [filters.manager_name, filters.entry_by, filters.exit_by, filters.status, filters.gate, filters.entryDateStart, filters.entryDateEnd, filters.exitDateStart, filters.exitDateEnd, managersList.length]);
+    }, [filters, managersList.length]);
 
     useEffect(() => {
         setLoading(true);
@@ -110,72 +108,12 @@ export default function AdminManagerRecords() {
 
     useRealtimeRefetch({
         topics: ['managers'],
-        onMutation: fetchData,
+        onMutation: () => void fetchData(0, false),
         enabled: true,
     });
 
-    // Filtered records
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            // Manager name filter
-            if (
-                filters.manager_name
-                && !normalizeSearchText(record.manager).includes(normalizeSearchText(filters.manager_name))
-            ) {
-                return false;
-            }
-
-            // Entry by filter
-            if (
-                filters.entry_by
-                && !normalizeSearchText(record.entry_by).includes(normalizeSearchText(filters.entry_by))
-            ) {
-                return false;
-            }
-
-            // Exit by filter
-            if (
-                filters.exit_by
-                && !normalizeSearchText(record.exit_by).includes(normalizeSearchText(filters.exit_by))
-            ) {
-                return false;
-            }
-
-            // Status filter
-            if (filters.status === 'deleted' && !record.deleted_at) {
-                return false;
-            }
-            if (filters.status === 'inside' && (record.deleted_at || record.status !== 'inside')) {
-                return false;
-            }
-            if (filters.status === 'exited' && (record.deleted_at || record.status !== 'exited')) {
-                return false;
-            }
-
-            // Gate filter
-            if (filters.gate !== 'all' && (record.gate || '') !== filters.gate) {
-                return false;
-            }
-
-            // Entry date range filter - inclusive dayjs comparison
-            if (filters.entryDateStart && filters.entryDateEnd) {
-                const d = dayjs(record.entry_date);
-                const start = dayjs(filters.entryDateStart).startOf('day');
-                const end = dayjs(filters.entryDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            // Exit date range filter - inclusive
-            if (filters.exitDateStart && filters.exitDateEnd && record.exit_date) {
-                const d = dayjs(record.exit_date);
-                const start = dayjs(filters.exitDateStart).startOf('day');
-                const end = dayjs(filters.exitDateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, filters]);
+    // Filtered records are handled on backend now
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -209,7 +147,7 @@ export default function AdminManagerRecords() {
         const exitRangeSelected = !!(filters.exitDateStart || filters.exitDateEnd);
 
         if (!entryRangeSelected && !exitRangeSelected) {
-            alert('Lütfen giriş veya çıkış tarih aralığı seçin.');
+            message.warning('Lütfen giriş veya çıkış tarih aralığı seçin.');
             return;
         }
 
@@ -228,16 +166,28 @@ export default function AdminManagerRecords() {
         }
 
         if (!rangeStart || !rangeEnd) {
-            alert('Lütfen geçerli bir tarih aralığı seçin.');
+            message.warning('Lütfen geçerli bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const config = { headers: { Authorization: `Bearer ${adminToken}` } };
-            const res = await axios.get(`${API_URL}/managers/records?includeDeleted=true&unlimited=true`, config);
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('unlimited', 'true');
+
+            if (filters.manager_name) params.append('manager_name', filters.manager_name);
+            if (filters.entry_by) params.append('entry_by', filters.entry_by);
+            if (filters.exit_by) params.append('exit_by', filters.exit_by);
+            if (filters.status) params.append('status', filters.status);
+            if (filters.gate) params.append('gate', filters.gate);
+            if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
+            if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
+            if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
+            if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
+
+            const res = await api.get(`/managers/records?${params.toString()}`);
             const allRecords: ManagerRecord[] = res.data || [];
 
             const start = dayjs(rangeStart).startOf('day');
@@ -253,7 +203,7 @@ export default function AdminManagerRecords() {
                 .filter(record => !record.deleted_at);
 
             if (exportableRecords.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
                 return;
             }
 
@@ -294,104 +244,35 @@ export default function AdminManagerRecords() {
 
             const worksheetColumnWidths = [20, 14, 14, 12, 14, 12, 14, 14, 14, 32];
 
-            const dayFiles: Array<{ fileName: string; data: ArrayBuffer }> = [];
-
-            for (const dayGroup of exportGroups) {
-                const workbook = new ExcelJS.Workbook();
-                const worksheet = workbook.addWorksheet('Müdür Kayıtları');
-
-                worksheet.columns = worksheetColumnWidths.map(width => ({ width }));
-
-                const header = worksheet.addRow(headerRow);
-                header.height = 24;
-                header.eachCell((cell) => {
-                    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FF1D4ED8' }
-                    };
-                    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-                    cell.border = {
-                        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-                        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-                    };
-                });
-
-                dayGroup.records.forEach((record) => {
-                    const row = worksheet.addRow([
-                        record.manager || '-',
-                        record.gate || '-',
-                        record.entry_date ? formatDate(record.entry_date) : '-',
-                        record.entry_time ? formatTime(record.entry_time) : '-',
-                        record.exit_date ? formatDate(record.exit_date) : '-',
-                        record.exit_time ? formatTime(record.exit_time) : '-',
-                        record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
-                        record.entry_by || '-',
-                        record.exit_by || '-',
-                        record.notes || '-'
-                    ]);
-
-                    row.eachCell((cell) => {
-                        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-                        cell.border = {
-                            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
-                            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
-                        };
-                    });
-                });
-
-                const formattedDayForFileName = dayjs(dayGroup.dayKey).format('DD-MM-YYYY');
-                const fileName = `Mudir_Kayitlari_${formattedDayForFileName}.xlsx`;
-                const workbookBuffer = await workbook.xlsx.writeBuffer();
-                dayFiles.push({ fileName, data: workbookBuffer as ArrayBuffer });
-            }
-
-            const triggerDownload = (blob: Blob, fileName: string) => {
-                return new Promise<void>((resolve) => {
-                    const url = window.URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.style.display = 'none';
-                    document.body.appendChild(link);
-                    link.click();
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        window.URL.revokeObjectURL(url);
-                        resolve();
-                    }, 500);
-                });
-            };
-
-            if (dayFiles.length === 1) {
-                const [singleFile] = dayFiles;
-                const blob = new Blob([singleFile.data], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                await triggerDownload(blob, singleFile.fileName);
-                return;
-            }
-
-            const zip = new JSZip();
-            dayFiles.forEach((file) => {
-                zip.file(file.fileName, file.data);
+            await exportRecordsToExcelAndZip<ManagerRecord>({
+                exportGroups,
+                headerRow,
+                columnWidths: worksheetColumnWidths,
+                mapRecordToRow: (record) => [
+                    record.manager || '-',
+                    record.gate || '-',
+                    record.entry_date ? formatDate(record.entry_date) : '-',
+                    record.entry_time ? formatTime(record.entry_time) : '-',
+                    record.exit_date ? formatDate(record.exit_date) : '-',
+                    record.exit_time ? formatTime(record.exit_time) : '-',
+                    record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
+                    record.entry_by || '-',
+                    record.exit_by || '-',
+                    record.notes || '-'
+                ],
+                sheetName: 'Müdür Kayıtları',
+                filePrefix: 'Mudir_Kayitlari_',
+                zipNamePrefix: 'Mudir_Kayitlari'
             });
 
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            const timestamp = dayjs().format('DD-MM-YYYY_HH-mm');
-            await triggerDownload(zipBlob, `Mudir_Kayitlari_Toplu_${timestamp}.zip`);
+            message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
-    }, [filteredRecords, isExporting]);
+    }, [filters, isExporting]);
 
     // Clear all filters
     const clearFilters = () => {
@@ -409,31 +290,42 @@ export default function AdminManagerRecords() {
     };
 
     const handleDeleteRecord = async (id: string) => {
-        if (!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
-
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.delete(`${API_URL}/managers/records/${id}`, {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            });
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
-        } catch (error) {
-            console.error('Kayıt silinemedi:', error);
-            alert('Kayıt silinirken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Sil',
+            content: 'Bu kaydı silmek istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    await api.delete(`/managers/records/${id}`);
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: new Date().toISOString() } : record));
+                    message.success('Kayıt silindi');
+                } catch (error) {
+                    console.error('Kayıt silinemedi:', error);
+                    message.error('Kayıt silinirken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const handleRestoreRecord = async (id: string) => {
-        try {
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.post(`${API_URL}/managers/records/${id}/restore`, {}, {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            });
-            setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
-        } catch (error) {
-            console.error('Kayıt geri alınamadı:', error);
-            alert('Kayıt geri alınırken bir hata oluştu');
-        }
+        Modal.confirm({
+            title: 'Kaydı Geri Al',
+            content: 'Bu kaydı geri almak istediğinize emin misiniz?',
+            okText: 'Evet',
+            cancelText: 'Hayır',
+            onOk: async () => {
+                try {
+                    await api.post(`/managers/records/${id}/restore`, {});
+                    setRecords(prev => prev.map(record => record.id === id ? { ...record, deleted_at: null } : record));
+                    message.success('Kayıt geri alındı');
+                } catch (error) {
+                    console.error('Kayıt geri alınamadı:', error);
+                    message.error('Kayıt geri alınırken bir hata oluştu');
+                }
+            }
+        });
     };
 
     const resetCreateForm = () => {
@@ -460,44 +352,38 @@ export default function AdminManagerRecords() {
         e.preventDefault();
 
         if (!selectedManagerId) {
-            alert('Lütfen listeden bir müdür seçin.');
+            message.warning('Lütfen listeden bir müdür seçin.');
             return;
         }
 
         if (createNotes.length > 1000) {
-            alert('Açıklama en fazla 1000 karakter olabilir');
+            message.warning('Açıklama en fazla 1000 karakter olabilir');
             return;
         }
 
         if (createEntryDate && createExitDate && createExitDate < createEntryDate) {
-            alert('Çıkış tarihi giriş tarihinden önce olamaz');
+            message.warning('Çıkış tarihi giriş tarihinden önce olamaz');
             return;
         }
 
         try {
             setCreatingRecord(true);
-            const adminToken = localStorage.getItem('adminToken');
-            await axios.post(`${API_URL}/managers/records`, {
+            await api.post(`/managers/records`, {
                 manager_id: selectedManagerId,
                 entry_date: createEntryDate || null,
                 exit_date: createExitDate || null,
                 entry_time: createEntryTime || null,
                 exit_time: createExitTime || null,
                 notes: createNotes.trim() || null
-            }, {
-                headers: { Authorization: `Bearer ${adminToken}` }
             });
 
-            const refreshConfig = {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            };
-            const res = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, refreshConfig);
-            setRecords(res.data || []);
+            void fetchData(0, false);
             closeCreateModal();
+            message.success('Kayıt başarıyla oluşturuldu');
         } catch (error: any) {
             console.error('Kayıt oluşturulamadı:', error);
-            const message = error.response?.data?.message || 'Kayıt oluşturulurken bir hata oluştu';
-            alert(message);
+            const errMsg = error.response?.data?.message || 'Kayıt oluşturulurken bir hata oluştu';
+            message.error(errMsg);
         } finally {
             setCreatingRecord(false);
         }
@@ -540,13 +426,12 @@ export default function AdminManagerRecords() {
         if (!editingRecord) return;
 
         if (editNotes.length > 1000) {
-            alert('Açıklama en fazla 1000 karakter olabilir');
+            message.warning('Açıklama en fazla 1000 karakter olabilir');
             return;
         }
 
         try {
             setSavingEdit(true);
-            const adminToken = localStorage.getItem('adminToken');
             const payload = {
                 entry_date: editEntryDate || null,
                 exit_date: editExitDate || null,
@@ -555,21 +440,15 @@ export default function AdminManagerRecords() {
                 notes: editNotes.trim() || null
             };
 
-            await axios.put(`${API_URL}/managers/records/${editingRecord.id}`, payload, {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            });
+            await api.put(`/managers/records/${editingRecord.id}`, payload);
 
-            const refreshConfig = {
-                headers: { Authorization: `Bearer ${adminToken}` }
-            };
-            const refreshed = await axios.get(`${API_URL}/managers/records?includeDeleted=true`, refreshConfig);
-            setRecords(refreshed.data || []);
-
+            void fetchData(0, false);
             closeEditModal();
+            message.success('Kayıt başarıyla güncellendi');
         } catch (error: any) {
             console.error('Kayıt güncellenemedi:', error);
-            const message = error.response?.data?.message || 'Kayıt güncellenirken bir hata oluştu';
-            alert(message);
+            const errMsg = error.response?.data?.message || 'Kayıt güncellenirken bir hata oluştu';
+            message.error(errMsg);
         } finally {
             setSavingEdit(false);
         }

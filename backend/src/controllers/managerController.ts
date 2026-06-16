@@ -15,7 +15,6 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
     try {
         const includeDeleted = req.query.includeDeleted === 'true';
         const deletedAtSelect = includeDeleted ? 'mr.deleted_at,' : '';
-        const deletedAtFilter = includeDeleted ? '' : 'WHERE mr.deleted_at IS NULL';
         const unlimited = req.query.unlimited === 'true';
 
         const reqLimit = Number(req.query.limit ?? 1000);
@@ -24,6 +23,67 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
         const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
 
         const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+
+        const filters: string[] = [];
+        const queryParams: any[] = [];
+        let paramIndex = 1;
+
+        if (!includeDeleted) {
+            filters.push(`mr.deleted_at IS NULL`);
+        }
+
+        // Apply query filters
+        if (req.query.manager_name) {
+            filters.push(`(mr.manager_name ILIKE $${paramIndex} OR CONCAT(m.first_name, ' ', m.last_name) ILIKE $${paramIndex})`);
+            queryParams.push(`%${req.query.manager_name}%`);
+            paramIndex++;
+        }
+
+        if (req.query.entry_by) {
+            filters.push(`CONCAT(pe.first_name, ' ', pe.last_name) ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.entry_by}%`);
+        }
+
+        if (req.query.exit_by) {
+            filters.push(`CONCAT(px.first_name, ' ', px.last_name) ILIKE $${paramIndex++}`);
+            queryParams.push(`%${req.query.exit_by}%`);
+        }
+
+        if (req.query.status && req.query.status !== 'all') {
+            if (req.query.status === 'deleted') {
+                filters.push(`mr.deleted_at IS NOT NULL`);
+            } else {
+                filters.push(`mr.status = $${paramIndex++}`);
+                queryParams.push(req.query.status);
+            }
+        }
+
+        if (req.query.gate && req.query.gate !== 'all') {
+            filters.push(`mr.gate = $${paramIndex++}`);
+            queryParams.push(req.query.gate);
+        }
+
+        if (req.query.entryDateStart) {
+            filters.push(`mr.entry_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.entryDateStart);
+        }
+
+        if (req.query.entryDateEnd) {
+            filters.push(`mr.entry_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.entryDateEnd);
+        }
+
+        if (req.query.exitDateStart) {
+            filters.push(`mr.exit_date >= $${paramIndex++}::date`);
+            queryParams.push(req.query.exitDateStart);
+        }
+
+        if (req.query.exitDateEnd) {
+            filters.push(`mr.exit_date <= $${paramIndex++}::date`);
+            queryParams.push(req.query.exitDateEnd);
+        }
+
+        const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
         const query = `
             SELECT
@@ -54,12 +114,12 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN managers m ON mr.manager_id = m.id
             LEFT JOIN personnel pe ON mr.entry_by = pe.id
             LEFT JOIN personnel px ON mr.exit_by = px.id
-            ${deletedAtFilter}
+            ${whereClause}
             ORDER BY mr.entry_date DESC, mr.entry_time DESC
             ${limitClause}
         `;
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, queryParams);
 
         const formatted = result.rows.map((row: any) => ({
             id: row.id,
@@ -151,6 +211,21 @@ export const createManager = async (req: Request, res: Response): Promise<void> 
         }
 
         await client.query('BEGIN');
+
+        // Check if manager with same name exists
+        const duplicateCheck = await client.query(
+            'SELECT id FROM managers WHERE first_name = $1 AND last_name = $2 AND deleted_at IS NULL',
+            [sanitizedFirstName, sanitizedLastName]
+        );
+
+        if (duplicateCheck.rows.length > 0) {
+            await client.query('ROLLBACK');
+            res.status(400).json({
+                success: false,
+                message: 'Bu isimde bir müdür zaten tanımlı'
+            });
+            return;
+        }
 
         // Insert manager
         const insertQuery = `
@@ -498,40 +573,62 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         const initialStatus = effectiveExitDate ? 'exited' : 'inside';
         const exitBy = effectiveExitDate ? entry_by : null;
 
-        await pool.query('BEGIN');
-        await pool.query(
-            `INSERT INTO managers_records (
-                id, manager_id, manager_name, gate, entry_by, entry_date, entry_time, exit_date, exit_time, exit_by, status, notes
-            ) VALUES (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                COALESCE($7::date, CURRENT_DATE),
-                COALESCE($8::time, CURRENT_TIME),
-                $9::date,
-                $10::time,
-                $11,
-                $12,
-                $6
-            )`,
-            [
-                id,
-                manager_id,
-                managerName,
-                gate,
-                entry_by,
-                sanitizedNotes,
-                effectiveEntryDate,
-                entry_time || null,
-                effectiveExitDate,
-                effectiveExitTime,
-                exitBy,
-                initialStatus
-            ]
-        );
-        await pool.query('COMMIT');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // GÜVENLİK/CONCURRENCY: Çift giriş (double check-in) önleme
+            if (initialStatus === 'inside') {
+                const activeRecordCheck = await client.query(
+                    `SELECT id FROM managers_records WHERE manager_id = $1 AND status = 'inside' AND deleted_at IS NULL FOR UPDATE`,
+                    [manager_id]
+                );
+                if (activeRecordCheck.rows.length > 0) {
+                    await client.query('ROLLBACK');
+                    res.status(400).json({ success: false, message: 'Bu müdür zaten içeride olarak kayıtlı' });
+                    return;
+                }
+            }
+
+            await client.query(
+                `INSERT INTO managers_records (
+                    id, manager_id, manager_name, gate, entry_by, entry_date, entry_time, exit_date, exit_time, exit_by, status, notes
+                ) VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    COALESCE($7::date, CURRENT_DATE),
+                    COALESCE($8::time, CURRENT_TIME),
+                    $9::date,
+                    $10::time,
+                    $11,
+                    $12,
+                    $6
+                )`,
+                [
+                    id,
+                    manager_id,
+                    managerName,
+                    gate,
+                    entry_by,
+                    sanitizedNotes,
+                    effectiveEntryDate,
+                    entry_time || null,
+                    effectiveExitDate,
+                    effectiveExitTime,
+                    exitBy,
+                    initialStatus
+                ]
+            );
+            await client.query('COMMIT');
+        } catch (txError) {
+            await client.query('ROLLBACK');
+            throw txError;
+        } finally {
+            client.release();
+        }
 
         // GÜVENLİK: Audit log kaydı
         await logDataChange(
@@ -563,7 +660,6 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
             topics: resolveMutationTopics('/api/managers/records'),
         });
     } catch (error) {
-        await pool.query('ROLLBACK');
         console.error('Create manager record error:', error instanceof Error ? error.message : error);
         res.status(500).json({ success: false, message: 'Müdür kaydı oluşturulurken hata oluştu' });
     }
@@ -700,12 +796,12 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
         let idx = 1;
 
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
-        if (entry_date !== undefined) { updates.push(`entry_date = $${idx++}`); params.push(entry_date || null); }
+        if (entry_date !== undefined && entry_date !== null && entry_date !== '') { updates.push(`entry_date = $${idx++}`); params.push(entry_date); }
         if (exit_date !== undefined) { updates.push(`exit_date = $${idx++}`); params.push(exit_date || null); }
-        if (entry_time !== undefined) { updates.push(`entry_time = $${idx++}`); params.push(entry_time || null); }
+        if (entry_time !== undefined && entry_time !== null && entry_time !== '') { updates.push(`entry_time = $${idx++}`); params.push(entry_time); }
         if (exit_time !== undefined) { updates.push(`exit_time = $${idx++}`); params.push(exit_time || null); }
 
-        const nextEntryDate = entry_date !== undefined ? (entry_date || null) : existing.entry_date;
+        const nextEntryDate = (entry_date !== undefined && entry_date !== null && entry_date !== '') ? entry_date : existing.entry_date;
         const nextExitDate = exit_date !== undefined ? (exit_date || null) : existing.exit_date;
         const nextExitTime = exit_time !== undefined ? (exit_time || null) : existing.exit_time;
 
@@ -727,6 +823,42 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
         params.push(id);
 
         await pool.query(query, params);
+
+        // KVKK / Audit Log
+        const oldValues = {
+            notes: existing.notes,
+            entry_date: existing.entry_date,
+            exit_date: existing.exit_date,
+            entry_time: existing.entry_time,
+            exit_time: existing.exit_time,
+            status: existing.status
+        };
+
+        const newValues = {
+            notes: notes !== undefined ? notes : existing.notes,
+            entry_date: nextEntryDate,
+            exit_date: nextExitDate,
+            entry_time: nextExitTime ? nextExitTime : (entry_time !== undefined && entry_time !== null && entry_time !== '') ? entry_time : existing.entry_time, // wait, nextExitTime is exit_time. Let's make it correct:
+        };
+        // Let's formulate newValues cleanly
+        const finalNewValues = {
+            notes: notes !== undefined ? notes : existing.notes,
+            entry_date: nextEntryDate,
+            exit_date: nextExitDate,
+            entry_time: (entry_time !== undefined && entry_time !== null && entry_time !== '') ? entry_time : existing.entry_time,
+            exit_time: nextExitTime,
+            status: nextStatus
+        };
+
+        await logDataChange(
+            'managers_records',
+            id,
+            'UPDATE',
+            oldValues,
+            finalNewValues,
+            req.user?.userId || null,
+            clientIp
+        );
 
         res.status(200).json({ success: true, message: 'Kayıt güncellendi' });
 

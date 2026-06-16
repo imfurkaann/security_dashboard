@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { message, Modal } from 'antd';
+import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateFireAlarmForm, isValidLength } from '../utils/validation';
@@ -145,13 +147,13 @@ export default function FireAlarms() {
 
         // Frontend validasyon - sadece konum kontrolü
         if (!location.trim()) {
-            alert('Konum alanı zorunludur');
+            message.error('Konum alanı zorunludur');
             return;
         }
 
         // Notlar için uzunluk kontrolü
         if (!isValidLength(resolutionNotes, 0, 1000)) {
-            alert('Notlar en fazla 1000 karakter olabilir');
+            message.error('Notlar en fazla 1000 karakter olabilir');
             return;
         }
 
@@ -167,8 +169,10 @@ export default function FireAlarms() {
 
             if (isEditing && editingId) {
                 await api.put(`/fire-alarms/records/${editingId}`, payload);
+                message.success('Alarm kaydı güncellendi');
             } else {
                 const response = await api.post('/fire-alarms/records', payload);
+                message.success('Yeni alarm kaydı oluşturuldu');
 
                 // WhatsApp mesajı varsa modal göster
                 if (response.data?.whatsappMessage) {
@@ -183,7 +187,7 @@ export default function FireAlarms() {
             fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'İşlem başarısız');
+            message.error(err?.response?.data?.message || 'İşlem başarısız');
         }
     }, [alarmNumber, location, alarmTime, resolutionTime, resolutionNotes, falseAlarm, isEditing, editingId, resetForm, fetchData]);
 
@@ -193,7 +197,7 @@ export default function FireAlarms() {
 
         // Çözüm notları için uzunluk kontrolü
         if (!isValidLength(resolutionNotes, 0, 1000)) {
-            alert('Çözüm notları en fazla 1000 karakter olabilir');
+            message.error('Çözüm notları en fazla 1000 karakter olabilir');
             return;
         }
 
@@ -203,6 +207,7 @@ export default function FireAlarms() {
                 false_alarm: falseAlarm,
             });
 
+            message.success('Alarm başarıyla çözümlendi');
             setShowResolveModal(false);
             setResolvingId(null);
             setResolutionNotes('');
@@ -217,42 +222,58 @@ export default function FireAlarms() {
             }
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Çözümleme başarısız');
+            message.error(err?.response?.data?.message || 'Çözümleme başarısız');
         }
     }, [resolvingId, resolutionNotes, falseAlarm, fetchData]);
 
-    const handleDelete = useCallback(async (id: string) => {
-        if (!confirm('Bu alarm kaydını silmek istediğinizden emin misiniz?')) return;
-
-        try {
-            await api.delete(`/fire-alarms/records/${id}`);
-            fetchData();
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Silme işlemi başarısız');
-        }
+    const handleDelete = useCallback((id: string) => {
+        Modal.confirm({
+            title: 'Alarm Kaydını Sil',
+            content: 'Bu alarm kaydını silmek istediğinizden emin misiniz?',
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/fire-alarms/records/${id}`);
+                    message.success('Alarm kaydı başarıyla silindi');
+                    fetchData();
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Silme işlemi başarısız');
+                }
+            }
+        });
     }, [fetchData]);
 
     const handleRestore = useCallback(async (id: string) => {
         try {
             await api.post(`/fire-alarms/records/${id}/restore`);
+            message.success('Alarm kaydı başarıyla geri alındı');
             fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Geri alma işlemi başarısız');
+            message.error(err?.response?.data?.message || 'Geri alma işlemi başarısız');
         }
     }, [fetchData]);
 
-    const handleUndoResolve = useCallback(async (id: string) => {
-        if (!confirm('Bu alarmı tekrar aktif yapmak istediğinize emin misiniz?')) return;
-
-        try {
-            await api.post(`/fire-alarms/records/${id}/undo-resolve`);
-            fetchData();
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Çözümleme geri alma işlemi başarısız');
-        }
+    const handleUndoResolve = useCallback((id: string) => {
+        Modal.confirm({
+            title: 'Alarmı Tekrar Aktifleştir',
+            content: 'Bu alarmı tekrar aktif yapmak istediğinize emin misiniz?',
+            okText: 'Evet, Aktifleştir',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.post(`/fire-alarms/records/${id}/undo-resolve`);
+                    message.success('Alarm tekrar aktif hale getirildi');
+                    fetchData();
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Çözümleme geri alma işlemi başarısız');
+                }
+            }
+        });
     }, [fetchData]);
 
     const handleSendWhatsAppAutomatic = useCallback(async () => {
@@ -267,12 +288,13 @@ export default function FireAlarms() {
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
                 setAutoSendFailed(false);
+                message.success('WhatsApp mesajı otomatik olarak gönderildi');
             } else {
                 setAutoSendFailed(true);
                 const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
                 const reason = response.data?.reason || 'Bilinmeyen hata';
                 const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
-                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                message.error(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (error: any) {
             setAutoSendFailed(true);
@@ -280,7 +302,7 @@ export default function FireAlarms() {
             const details = isTimeout
                 ? 'Otomatik gönderim zaman aşımına uğradı.'
                 : (error.response?.data?.message || error.message);
-            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            message.error(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }

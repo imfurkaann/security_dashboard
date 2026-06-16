@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { message, Modal } from 'antd';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
@@ -44,6 +45,8 @@ export default function Sgk() {
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [loading, setLoading] = useState(true);
     const [formData, setFormData] = useState<SgkFormData>(INITIAL_FORM_DATA);
+    const [editAppendFiles, setEditAppendFiles] = useState<File[]>([]);
+    const [editReplaceFiles, setEditReplaceFiles] = useState<File[]>([]);
     const [editingRecord, setEditingRecord] = useState<SgkRecord | null>(null);
     const [allRecords, setAllRecords] = useState<SgkRecord[]>([]);
     const [previewRecord, setPreviewRecord] = useState<SgkRecord | null>(null);
@@ -181,7 +184,7 @@ export default function Sgk() {
         if (filters.tc_no) {
             const cleanTC = filters.tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
-                alert('TC Kimlik No 11 haneli olmalıdır');
+                message.warning('TC Kimlik No 11 haneli olmalıdır');
                 return;
             }
 
@@ -194,18 +197,18 @@ export default function Sgk() {
                 });
                 setAllRecords(response.data.data || []);
                 if (!response.data.data || response.data.data.length === 0) {
-                    alert('Bu TC Kimlik No ile kayıt bulunamadı');
+                    message.warning('Bu TC Kimlik No ile kayıt bulunamadı');
                 }
             } catch (error) {
                 console.error('TC araması başarısız:', error);
-                alert('Arama sırasında hata oluştu');
+                message.error('Arama sırasında hata oluştu');
             } finally {
                 setSearching(false);
             }
         } else if (filters.passport_no) {
             const cleanPassport = filters.passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
-                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                message.warning('Pasaport numarası 6-20 karakter arasında olmalıdır');
                 return;
             }
 
@@ -218,11 +221,11 @@ export default function Sgk() {
                 });
                 setAllRecords(response.data.data || []);
                 if (!response.data.data || response.data.data.length === 0) {
-                    alert('Bu Pasaport No ile kayıt bulunamadı');
+                    message.warning('Bu Pasaport No ile kayıt bulunamadı');
                 }
             } catch (error) {
                 console.error('Pasaport araması başarısız:', error);
-                alert('Arama sırasında hata oluştu');
+                message.error('Arama sırasında hata oluştu');
             } finally {
                 setSearching(false);
             }
@@ -262,29 +265,61 @@ export default function Sgk() {
     // Reset upload form
     const resetUploadForm = useCallback(() => {
         setFormData(INITIAL_FORM_DATA);
+        setEditAppendFiles([]);
+        setEditReplaceFiles([]);
     }, []);
 
-    // Handle file selection
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFiles = Array.from(e.target.files || []);
+    const validateSelectedFiles = useCallback((selectedFiles: File[]): File[] | null => {
         const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
 
         const hasInvalidType = selectedFiles.some((file) => !allowedTypes.includes(file.type));
         if (hasInvalidType) {
-            alert('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir');
-            return;
+            message.warning('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir');
+            return null;
         }
 
         const maxTotalBytes = 50 * 1024 * 1024;
         const totalBytes = selectedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
 
         if (totalBytes > maxTotalBytes) {
-            alert('Toplam dosya boyutu en fazla 50MB olabilir');
+            message.warning('Toplam dosya boyutu en fazla 50MB olabilir');
+            return null;
+        }
+
+        return selectedFiles;
+    }, []);
+
+    // Handle upload modal file selection
+    const handleUploadFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
+        if (!selectedFiles) {
             return;
         }
 
-        setFormData({ ...formData, pdf_files: selectedFiles });
-    };
+        setFormData((previous) => ({ ...previous, pdf_files: selectedFiles }));
+    }, [validateSelectedFiles]);
+
+    // Handle edit modal append file selection (keeps existing files)
+    const handleEditAppendFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
+        if (!selectedFiles) {
+            return;
+        }
+
+        setEditAppendFiles(selectedFiles);
+        setEditReplaceFiles([]);
+    }, [validateSelectedFiles]);
+
+    // Handle edit modal replace file selection (replaces all existing files)
+    const handleEditReplaceFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
+        if (!selectedFiles) {
+            return;
+        }
+
+        setEditReplaceFiles(selectedFiles);
+        setEditAppendFiles([]);
+    }, [validateSelectedFiles]);
 
     // Handle upload submission
     const handleUploadSubmit = useCallback(async (e: React.FormEvent) => {
@@ -293,7 +328,7 @@ export default function Sgk() {
         // Frontend validasyon
         // TC ve pasaport her ikisi de girilmiş mi?
         if (formData.tc_no?.trim() && formData.passport_no?.trim()) {
-            alert('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
+            message.warning('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
             return;
         }
 
@@ -301,7 +336,7 @@ export default function Sgk() {
         if (formData.tc_no?.trim()) {
             const cleanTC = formData.tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
-                alert('TC Kimlik No 11 haneli olmalıdır');
+                message.warning('TC Kimlik No 11 haneli olmalıdır');
                 return;
             }
         }
@@ -310,18 +345,18 @@ export default function Sgk() {
         if (formData.passport_no?.trim()) {
             const cleanPassport = formData.passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
-                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                message.warning('Pasaport numarası 6-20 karakter arasında olmalıdır');
                 return;
             }
         }
 
         if (!formData.full_name?.trim()) {
-            alert('Ad Soyad zorunludur');
+            message.warning('Ad Soyad zorunludur');
             return;
         }
 
         if (!formData.pdf_files || formData.pdf_files.length === 0) {
-            alert('En az bir belge dosyası seçmelisiniz');
+            message.warning('En az bir belge dosyası seçmelisiniz');
             return;
         }
 
@@ -351,7 +386,7 @@ export default function Sgk() {
                 }
             });
 
-            alert('SGK belgeleri başarıyla kaydedildi');
+            message.success('SGK belgeleri başarıyla kaydedildi');
             setShowUploadModal(false);
             resetUploadForm();
 
@@ -360,7 +395,7 @@ export default function Sgk() {
             setAllRecords(recordsResponse.data || []);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Kayıt başarısız');
+            message.error(err?.response?.data?.message || 'Kayıt başarısız');
         }
     }, [formData, resetUploadForm]);
 
@@ -402,7 +437,7 @@ export default function Sgk() {
                 });
                 setPreviewContentType(contentType);
             } catch (error) {
-                alert('Belge önizlenirken hata oluştu');
+                message.error('Belge önizlenirken hata oluştu');
                 setShowPreviewModal(false);
                 setPreviewRecord(null);
                 setPdfUrl('');
@@ -415,6 +450,15 @@ export default function Sgk() {
         fetchSelectedPreviewFile();
     }, [showPreviewModal, previewRecord, selectedPreviewFile]);
 
+    // Unmount cleanup for pdfUrl to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (pdfUrl) {
+                URL.revokeObjectURL(pdfUrl);
+            }
+        };
+    }, [pdfUrl]);
+
     // Handle edit
     const handleEdit = useCallback((record: SgkRecord) => {
         setEditingRecord(record);
@@ -426,26 +470,33 @@ export default function Sgk() {
             notes: record.notes || '',
             pdf_files: []
         });
+        setEditAppendFiles([]);
+        setEditReplaceFiles([]);
         setShowEditModal(true);
     }, []);
 
     // Handle delete
     const handleDelete = useCallback(async (record: SgkRecord) => {
-        const confirmMessage = `"${record.full_name}" isimli kişinin SGK kaydını silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve belge dosyası da silinecektir.`;
+        Modal.confirm({
+            title: 'SGK Kaydını Sil',
+            content: `"${record.full_name}" isimli kişinin SGK kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve tüm ilişkili belge dosyaları silinecektir.`,
+            okText: 'Evet, Sil',
+            okType: 'danger',
+            cancelText: 'Vazgeç',
+            onOk: async () => {
+                try {
+                    await api.delete(`/sgk/records/${record.id}`);
+                    message.success('Kayıt ve belge başarıyla silindi');
 
-        if (!confirm(confirmMessage)) return;
-
-        try {
-            await api.delete(`/sgk/records/${record.id}`);
-            alert('Kayıt ve belge başarıyla silindi');
-
-            // Listeyi yenile
-            const response = await api.get('/sgk/records');
-            setAllRecords(response.data || []);
-        } catch (error) {
-            const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Silme işlemi sırasında hata oluştu');
-        }
+                    // Listeyi yenile
+                    const response = await api.get('/sgk/records');
+                    setAllRecords(response.data || []);
+                } catch (error) {
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err?.response?.data?.message || 'Silme işlemi sırasında hata oluştu');
+                }
+            }
+        });
     }, []);
 
     // Handle edit submission
@@ -456,7 +507,7 @@ export default function Sgk() {
 
         // TC ve pasaport her ikisi de girilmiş mi?
         if (formData.tc_no?.trim() && formData.passport_no?.trim()) {
-            alert('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
+            message.warning('TC Kimlik No ve Pasaport Numarası aynı anda girilemez. Sadece birini giriniz.');
             return;
         }
 
@@ -465,7 +516,7 @@ export default function Sgk() {
         if (formData.tc_no?.trim()) {
             const cleanTC = formData.tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
-                alert('TC Kimlik No 11 haneli olmalıdır');
+                message.warning('TC Kimlik No 11 haneli olmalıdır');
                 return;
             }
         }
@@ -474,13 +525,18 @@ export default function Sgk() {
         if (formData.passport_no?.trim()) {
             const cleanPassport = formData.passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
-                alert('Pasaport numarası 6-20 karakter arasında olmalıdır');
+                message.warning('Pasaport numarası 6-20 karakter arasında olmalıdır');
                 return;
             }
         }
 
         if (!formData.full_name?.trim()) {
-            alert('Ad Soyad zorunludur');
+            message.warning('Ad Soyad zorunludur');
+            return;
+        }
+
+        if (editAppendFiles.length > 0 && editReplaceFiles.length > 0) {
+            message.warning('Aynı anda hem yeni dosya ekleme hem tam yenileme seçemezsiniz. Lütfen birini seçin.');
             return;
         }
 
@@ -506,17 +562,25 @@ export default function Sgk() {
             if (formData.notes?.trim()) {
                 formDataToSend.append('notes', formData.notes.trim());
             }
-            if (formData.pdf_files.length > 0) {
-                formData.pdf_files.forEach((file) => {
+            if (editAppendFiles.length > 0) {
+                editAppendFiles.forEach((file) => {
                     formDataToSend.append('pdf_files', file);
                 });
+                formDataToSend.append('file_action', 'append');
+            }
+
+            if (editReplaceFiles.length > 0) {
+                editReplaceFiles.forEach((file) => {
+                    formDataToSend.append('pdf_files', file);
+                });
+                formDataToSend.append('file_action', 'replace');
             }
 
             await api.put(`/sgk/records/${editingRecord.id}`, formDataToSend, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
 
-            alert('Kayıt başarıyla güncellendi');
+            message.success('Kayıt başarıyla güncellendi');
             setShowEditModal(false);
             setEditingRecord(null);
             resetUploadForm();
@@ -526,11 +590,11 @@ export default function Sgk() {
             setAllRecords(recordsResponse.data || []);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            alert(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
+            message.error(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
         } finally {
             setLoading(false);
         }
-    }, [editingRecord, formData, resetUploadForm]);
+    }, [editAppendFiles, editReplaceFiles, editingRecord, formData, resetUploadForm]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -838,7 +902,7 @@ export default function Sgk() {
                                         type="file"
                                         accept="application/pdf,image/jpeg,image/jpg,image/png"
                                         multiple
-                                        onChange={handleFileChange}
+                                        onChange={handleUploadFileChange}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                                         required
                                     />
@@ -891,7 +955,7 @@ export default function Sgk() {
                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                                 <p className="text-sm text-yellow-800">
                                     <strong>Not:</strong> TC/Pasaport güncellemek için tekrar girmeniz gerekiyor.
-                                    Dosya değiştirmek isterseniz yeni dosyaları seçin, aksi halde mevcut dosyalar korunur.
+                                    Dosya işlemleri için aşağıdaki iki seçenekten yalnızca birini kullanın.
                                 </p>
                             </div>
 
@@ -955,22 +1019,42 @@ export default function Sgk() {
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Belge Dosyaları (PDF, JPG, PNG) <span className="text-gray-500">(Opsiyonel)</span>
+                                        Yeni Dosya Ekle (Mevcutlar silinmez) <span className="text-gray-500">(Opsiyonel)</span>
                                     </label>
                                     <input
                                         type="file"
                                         accept="application/pdf,image/jpeg,image/jpg,image/png"
                                         multiple
-                                        onChange={handleFileChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        disabled={editReplaceFiles.length > 0}
+                                        onChange={handleEditAppendFilesChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     />
-                                    {formData.pdf_files.length > 0 ? (
+                                    {editAppendFiles.length > 0 ? (
                                         <p className="mt-2 text-sm text-green-600">
-                                            Yeni dosyalar: {formData.pdf_files.length} adet
+                                            Eklenecek yeni dosyalar: {editAppendFiles.length} adet
                                         </p>
                                     ) : (
                                         <p className="mt-2 text-sm text-gray-600">
                                             Mevcut dosya: {editingRecord.file_count || editingRecord.files?.length || 0} adet
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Dosyaları Yeniden Yükle (Tümünü değiştir) <span className="text-gray-500">(Opsiyonel)</span>
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept="application/pdf,image/jpeg,image/jpg,image/png"
+                                        multiple
+                                        disabled={editAppendFiles.length > 0}
+                                        onChange={handleEditReplaceFilesChange}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                    />
+                                    {editReplaceFiles.length > 0 && (
+                                        <p className="mt-2 text-sm text-red-600">
+                                            Yeniden yüklenecek dosyalar: {editReplaceFiles.length} adet (mevcut dosyalar silinir)
                                         </p>
                                     )}
                                 </div>

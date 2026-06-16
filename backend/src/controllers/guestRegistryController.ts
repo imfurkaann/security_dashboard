@@ -357,34 +357,48 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
             // Her yeni Excel yuklemesinde onceki tum kayitlari kaldirip tam yenileme yap.
             await client.query('TRUNCATE TABLE misafir_kayitlari');
 
-            for (const row of parsedRows) {
+            const activeRows = parsedRows.filter(row => {
                 if (isEmptyRow(row.rowData)) {
                     skippedRows += 1;
-                    continue;
+                    return false;
                 }
+                return true;
+            });
 
-                await client.query(
-                    `INSERT INTO misafir_kayitlari (
-                        id,
-                        excel_file_name,
-                        sheet_name,
-                        row_number,
-                        row_data,
-                        created_by
-                    ) VALUES (
-                        $1, $2, $3, $4, $5::jsonb, $6
-                    )`,
-                    [
+            // Paketler halinde (Batch Size = 500) veritabanına ekleyelim
+            const batchSize = 500;
+            for (let i = 0; i < activeRows.length; i += batchSize) {
+                const chunk = activeRows.slice(i, i + batchSize);
+                
+                const valuePlaceholders: string[] = [];
+                const queryValues: any[] = [];
+                
+                chunk.forEach((row, rowIndex) => {
+                    const baseIndex = rowIndex * 6;
+                    valuePlaceholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}::jsonb, $${baseIndex + 6})`);
+                    queryValues.push(
                         uuidv4(),
                         uploadedFile.originalname,
                         row.sheetName,
                         row.rowNumber,
                         JSON.stringify(row.rowData),
                         createdBy
-                    ]
-                );
+                    );
+                });
 
-                insertedRows += 1;
+                const batchQuery = `
+                    INSERT INTO misafir_kayitlari (
+                        id,
+                        excel_file_name,
+                        sheet_name,
+                        row_number,
+                        row_data,
+                        created_by
+                    ) VALUES ${valuePlaceholders.join(', ')}
+                `;
+
+                await client.query(batchQuery, queryValues);
+                insertedRows += chunk.length;
             }
 
             await client.query('COMMIT');
@@ -463,34 +477,22 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
         const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
 
         const searchQuery = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+        const normalizedSearch = normalizeSearchText(searchQuery);
 
-        const dataResult = await pool.query(
-            `SELECT
-                id,
-                excel_file_name,
-                sheet_name,
-                row_number,
-                row_data,
-                created_at
-             FROM misafir_kayitlari
-             WHERE deleted_at IS NULL
-             ORDER BY created_at ASC, sheet_name ASC, row_number ASC`
+        // Schema ve kolon tiplerini çıkarmak için 500 satırlık küçük bir örneklem alalım
+        const sampleResult = await pool.query(
+            `SELECT row_data 
+             FROM misafir_kayitlari 
+             WHERE deleted_at IS NULL 
+             LIMIT 500`
         );
-
-        const records = dataResult.rows.map((row: any) => ({
-            id: row.id,
-            excel_file_name: row.excel_file_name,
-            sheet_name: row.sheet_name,
-            row_number: row.row_number,
-            row_data: row.row_data || {},
-            created_at: row.created_at
-        }));
 
         const orderedColumnKeys: string[] = [];
         const columnValueMap = new Map<string, unknown[]>();
 
-        records.forEach((record) => {
-            Object.entries(record.row_data as Record<string, unknown>).forEach(([key, value]) => {
+        sampleResult.rows.forEach((row: any) => {
+            const rowData = row.row_data || {};
+            Object.entries(rowData).forEach(([key, value]) => {
                 if (isHiddenGeneratedColumn(key)) {
                     return;
                 }
@@ -511,38 +513,70 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
             index
         }));
 
-        const visibleRecords = records.map((record) => {
-            const visibleRowData = Object.fromEntries(
-                Object.entries(record.row_data as Record<string, unknown>).filter(([key]) => !isHiddenGeneratedColumn(key))
-            );
+        // Toplam kayıt sayısını bulalım (SQL filtreleme ile)
+        let countQuery = `
+            SELECT COUNT(*) 
+            FROM misafir_kayitlari 
+            WHERE deleted_at IS NULL
+        `;
+        const countParams: any[] = [];
+        if (searchQuery) {
+            countQuery += `
+                AND EXISTS (
+                    SELECT 1 FROM jsonb_each_text(row_data)
+                    WHERE translate(lower(value), 'çğıöşüı', 'cgiosui') LIKE $1
+                )
+            `;
+            countParams.push(`%${normalizedSearch}%`);
+        }
+        const countResult = await pool.query(countQuery, countParams);
+        const total = parseInt(countResult.rows[0].count, 10);
 
+        // Sayfalanmış veriyi çekelim (SQL filtreleme ve sayfalama ile)
+        let dataQuery = `
+            SELECT id, excel_file_name, sheet_name, row_number, row_data, created_at
+            FROM misafir_kayitlari
+            WHERE deleted_at IS NULL
+        `;
+        const dataParams: any[] = [];
+        let paramIdx = 1;
+        if (searchQuery) {
+            dataQuery += `
+                AND EXISTS (
+                    SELECT 1 FROM jsonb_each_text(row_data)
+                    WHERE translate(lower(value), 'çğıöşüı', 'cgiosui') LIKE $${paramIdx++}
+                )
+            `;
+            dataParams.push(`%${normalizedSearch}%`);
+        }
+
+        dataQuery += `
+            ORDER BY created_at ASC, sheet_name ASC, row_number ASC
+            LIMIT $${paramIdx++} OFFSET $${paramIdx++}
+        `;
+
+        const offset = (page - 1) * limit;
+        dataParams.push(limit, offset);
+
+        const dataResult = await pool.query(dataQuery, dataParams);
+
+        const formattedData = dataResult.rows.map((row: any) => {
+            const visibleRowData = Object.fromEntries(
+                Object.entries(row.row_data || {}).filter(([key]) => !isHiddenGeneratedColumn(key))
+            );
             return {
-                ...record,
-                row_data: visibleRowData
+                id: row.id,
+                excel_file_name: row.excel_file_name,
+                sheet_name: row.sheet_name,
+                row_number: row.row_number,
+                row_data: visibleRowData,
+                created_at: row.created_at
             };
         });
 
-        let filteredRecords = visibleRecords.filter((record) => {
-            if (!searchQuery) {
-                return true;
-            }
-
-            const normalizedSearch = normalizeSearchText(searchQuery);
-            const rowData = record.row_data as Record<string, unknown>;
-            const searchableText = Object.values(rowData)
-                .map((value) => (value === null || value === undefined ? '' : normalizeSearchText(String(value))))
-                .join(' ');
-
-            return searchableText.includes(normalizedSearch);
-        });
-
-        const total = filteredRecords.length;
-        const offset = (page - 1) * limit;
-        filteredRecords = filteredRecords.slice(offset, offset + limit);
-
         res.status(200).json({
             success: true,
-            data: filteredRecords,
+            data: formattedData,
             schema: {
                 columns
             },

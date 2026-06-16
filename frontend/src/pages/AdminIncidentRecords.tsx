@@ -1,21 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DatePicker } from 'antd';
+import { DatePicker, message } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
-import DOMPurify from 'dompurify';
-import axios from 'axios';
 import { formatDate, formatTime } from '../utils/dateUtils';
-import { API_URL } from '../constants';
+import api from '../utils/api';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 const { RangePicker } = DatePicker;
-
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
 
 interface IncidentRecord {
     id: string;
@@ -46,8 +40,6 @@ export default function AdminIncidentRecords() {
     const [isExporting, setIsExporting] = useState(false);
     const navigate = useNavigate();
 
-    
-
     // Filter states
     const [reportedBy, setReportedBy] = useState('');
     const [dateStart, setDateStart] = useState('');
@@ -55,20 +47,16 @@ export default function AdminIncidentRecords() {
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
         try {
-            const anyFilterApplied = Boolean(reportedBy || dateStart || dateEnd);
-            const adminToken = localStorage.getItem('adminToken');
-            const config = {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            };
+            const params = new URLSearchParams();
+            params.append('includeDeleted', 'true');
+            params.append('limit', String(PAGE_SIZE));
+            params.append('offset', String(offset));
 
-            let res;
-            if (anyFilterApplied) {
-                res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&unlimited=true&_t=${Date.now()}`, config);
-            } else {
-                res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`, config);
-            }
+            if (reportedBy) params.append('reported_by', reportedBy);
+            if (dateStart) params.append('dateStart', dateStart);
+            if (dateEnd) params.append('dateEnd', dateEnd);
+
+            const res = await api.get(`/incidents/records?${params.toString()}&_t=${Date.now()}`);
 
             const fetched: IncidentRecord[] = res.data?.data || [];
             if (append) {
@@ -77,9 +65,10 @@ export default function AdminIncidentRecords() {
                 setRecords(fetched);
             }
 
-            setHasMore(anyFilterApplied ? false : fetched.length === PAGE_SIZE);
+            setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
             console.error('Veriler yüklenemedi:', error);
+            message.error('Veriler yüklenemedi');
         } finally {
             setLoading(false);
             setLoadingMore(false);
@@ -128,23 +117,8 @@ export default function AdminIncidentRecords() {
         enabled: true,
     });
 
-    // Filtered records (inclusive date range)
-    const filteredRecords = useMemo(() => {
-        return records.filter(record => {
-            if (reportedBy && !normalizeSearchText(record.reported_by).includes(normalizeSearchText(reportedBy))) return false;
-
-            if (dateStart && dateEnd) {
-                const dateValue = record.report_date || record.created_at;
-                if (!dateValue) return false;
-                const d = dayjs(dateValue);
-                const start = dayjs(dateStart).startOf('day');
-                const end = dayjs(dateEnd).endOf('day');
-                if (!d.isBetween(start, end, 'millisecond', '[]')) return false;
-            }
-
-            return true;
-        });
-    }, [records, reportedBy, dateStart, dateEnd]);
+    // Filtered records
+    const filteredRecords = records;
 
     // Group by day for both default and filtered views (newest day first)
     const groupedByDay = useMemo(() => {
@@ -188,20 +162,14 @@ export default function AdminIncidentRecords() {
         if (isExporting) return;
 
         if (!dateStart || !dateEnd) {
-            alert('Lütfen bir tarih aralığı seçin.');
+            message.warning('Lütfen bir tarih aralığı seçin.');
             return;
         }
 
         setIsExporting(true);
 
         try {
-            const adminToken = localStorage.getItem('adminToken');
-            const res = await axios.get(`${API_URL}/incidents/records?includeDeleted=true&unlimited=true`, {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                }
-            });
-
+            const res = await api.get('/incidents/records?includeDeleted=true&unlimited=true');
             const allRecords: IncidentRecord[] = res.data?.data || [];
 
             const start = dayjs(dateStart).startOf('day');
@@ -215,14 +183,11 @@ export default function AdminIncidentRecords() {
             });
 
             if (exportable.length === 0) {
-                alert('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
+                message.warning('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
                 return;
             }
 
-            const exportRes = await axios.post(`${API_URL}/incidents/records/export`, { records: exportable }, {
-                headers: {
-                    Authorization: `Bearer ${adminToken}`
-                },
+            const exportRes = await api.post('/incidents/records/export', { records: exportable }, {
                 responseType: 'blob'
             });
 
@@ -241,7 +206,7 @@ export default function AdminIncidentRecords() {
             }, 500);
         } catch (error) {
             console.error('Export hatası:', error);
-            alert('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            message.error('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -454,10 +419,9 @@ export default function AdminIncidentRecords() {
                             {/* Report Content */}
                             <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Rapor İçeriği</label>
-                                <div
-                                    className="bg-gray-50 rounded-lg p-4 border border-gray-200 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(selectedReport.report_content || '<p class="text-gray-500">Rapor içeriği bulunamadı</p>') }}
-                                />
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 text-gray-900 whitespace-pre-wrap break-words text-sm max-h-[300px] overflow-y-auto">
+                                    {selectedReport.report_content || 'Rapor içeriği bulunamadı'}
+                                </div>
                             </div>
 
                             {/* Resolution Notes if exists */}

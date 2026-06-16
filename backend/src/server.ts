@@ -21,7 +21,7 @@ import statisticsRoutes from './routes/statistics';
 import guestRegistryRoutes from './routes/guestRegistry';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
-import { setWhatsAppTargetJid, warmupWhatsAppConnection } from './services/whatsappBaileys';
+import { setWhatsAppTargetJid, warmupWhatsAppConnection, shutdownWhatsAppConnection } from './services/whatsappBaileys';
 import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
 import { initRealtime, emitApiMutation, resolveMutationTopics } from './realtime/socket';
 
@@ -265,12 +265,14 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('SIGTERM sinyali alındı, bağlantılar kapatılıyor...');
+    await shutdownWhatsAppConnection();
     await pool.end();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     console.log('SIGINT sinyali alındı, bağlantılar kapatılıyor...');
+    await shutdownWhatsAppConnection();
     await pool.end();
     process.exit(0);
 });

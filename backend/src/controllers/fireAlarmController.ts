@@ -15,11 +15,104 @@ export const getFireAlarms = async (req: Request, res: Response) => {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        const includeDeleted = req.query.includeDeleted === 'true';
-        const deletedAtSelect = includeDeleted ? 'fa.deleted_at,' : '';
-        const deletedAtFilter = includeDeleted ? '' : 'WHERE fa.deleted_at IS NULL';
 
-        const result = await pool.query(`
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limitQuery = req.query.limit;
+        const offsetQuery = req.query.offset;
+        const unlimited = req.query.unlimited === 'true';
+
+        const alarm_number = typeof req.query.alarm_number === 'string' ? req.query.alarm_number.trim() : '';
+        const location = typeof req.query.location === 'string' ? req.query.location.trim() : '';
+        const gate = typeof req.query.gate === 'string' ? req.query.gate.trim() : '';
+        const false_alarm = typeof req.query.false_alarm === 'string' ? req.query.false_alarm.trim() : 'all';
+        const status = typeof req.query.status === 'string' ? req.query.status.trim() : 'all';
+        const recorded_by = typeof req.query.recorded_by === 'string' ? req.query.recorded_by.trim() : '';
+        const resolved_by = typeof req.query.resolved_by === 'string' ? req.query.resolved_by.trim() : '';
+
+        const alarmDateStart = typeof req.query.alarmDateStart === 'string' ? req.query.alarmDateStart : '';
+        const alarmDateEnd = typeof req.query.alarmDateEnd === 'string' ? req.query.alarmDateEnd : '';
+        const resolutionDateStart = typeof req.query.resolutionDateStart === 'string' ? req.query.resolutionDateStart : '';
+        const resolutionDateEnd = typeof req.query.resolutionDateEnd === 'string' ? req.query.resolutionDateEnd : '';
+
+        const whereClauses: string[] = [];
+        const queryParams: any[] = [];
+        let paramCounter = 1;
+
+        if (status === 'deleted') {
+            whereClauses.push(`fa.deleted_at IS NOT NULL`);
+        } else if (status === 'active') {
+            whereClauses.push(`fa.resolved = false`);
+            whereClauses.push(`fa.deleted_at IS NULL`);
+        } else if (status === 'resolved') {
+            whereClauses.push(`fa.resolved = true`);
+            whereClauses.push(`fa.deleted_at IS NULL`);
+        } else {
+            if (!includeDeleted) {
+                whereClauses.push(`fa.deleted_at IS NULL`);
+            }
+        }
+
+        if (alarm_number) {
+            whereClauses.push(`translate(lower(fa.alarm_number), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
+            queryParams.push(`%${alarm_number.toLowerCase()}%`);
+        }
+
+        if (location) {
+            whereClauses.push(`translate(lower(fa.location), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
+            queryParams.push(`%${location.toLowerCase()}%`);
+        }
+
+        if (recorded_by) {
+            whereClauses.push(`translate(lower(pr.first_name || ' ' || pr.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
+            queryParams.push(`%${recorded_by.toLowerCase()}%`);
+        }
+
+        if (resolved_by) {
+            whereClauses.push(`translate(lower(ps.first_name || ' ' || ps.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
+            queryParams.push(`%${resolved_by.toLowerCase()}%`);
+        }
+
+        if (gate && gate !== 'all') {
+            whereClauses.push(`fa.gate = $${paramCounter++}`);
+            queryParams.push(gate);
+        }
+
+        if (false_alarm === 'true') {
+            whereClauses.push(`fa.false_alarm = true`);
+        } else if (false_alarm === 'false') {
+            whereClauses.push(`fa.false_alarm = false`);
+        }
+
+        if (alarmDateStart) {
+            whereClauses.push(`fa.alarm_time >= $${paramCounter++}::timestamp`);
+            queryParams.push(`${alarmDateStart} 00:00:00`);
+        }
+        if (alarmDateEnd) {
+            whereClauses.push(`fa.alarm_time <= $${paramCounter++}::timestamp`);
+            queryParams.push(`${alarmDateEnd} 23:59:59.999`);
+        }
+
+        if (resolutionDateStart) {
+            whereClauses.push(`fa.resolution_time >= $${paramCounter++}::timestamp`);
+            queryParams.push(`${resolutionDateStart} 00:00:00`);
+        }
+        if (resolutionDateEnd) {
+            whereClauses.push(`fa.resolution_time <= $${paramCounter++}::timestamp`);
+            queryParams.push(`${resolutionDateEnd} 23:59:59.999`);
+        }
+
+        const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        let paginationString = '';
+        if (!unlimited) {
+            const limit = Math.max(Number(limitQuery) || 200, 1);
+            const offset = Math.max(Number(offsetQuery) || 0, 0);
+            paginationString = `LIMIT $${paramCounter++} OFFSET $${paramCounter++}`;
+            queryParams.push(limit, offset);
+        }
+
+        const query = `
             SELECT 
                 fa.id,
                 fa.alarm_number,
@@ -31,16 +124,18 @@ export const getFireAlarms = async (req: Request, res: Response) => {
                 fa.resolution_notes,
                 fa.false_alarm,
                 fa.created_at,
-                ${deletedAtSelect}
+                fa.deleted_at,
                 pr.first_name || ' ' || pr.last_name as recorded_by_name,
                 ps.first_name || ' ' || ps.last_name as resolved_by_name
             FROM fire_alarms fa
             LEFT JOIN personnel pr ON fa.recorded_by = pr.id
             LEFT JOIN personnel ps ON fa.resolved_by = ps.id
-            ${deletedAtFilter}
+            ${whereString}
             ORDER BY fa.created_at DESC, fa.id DESC
-            LIMIT 1000
-        `);
+            ${paginationString}
+        `;
+
+        const result = await pool.query(query, queryParams);
         res.json({ success: true, data: result.rows });
     } catch (error) {
         console.error('Get fire alarms error:', error);
