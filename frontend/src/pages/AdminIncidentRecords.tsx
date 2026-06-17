@@ -6,8 +6,52 @@ import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import api from '../utils/api';
-import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
+
 
 const { RangePicker } = DatePicker;
 
@@ -38,6 +82,8 @@ export default function AdminIncidentRecords() {
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedReport, setSelectedReport] = useState<IncidentRecord | null>(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
 
     // Filter states
@@ -205,12 +251,87 @@ export default function AdminIncidentRecords() {
                 window.URL.revokeObjectURL(url);
             }, 500);
         } catch (error) {
-            console.error('Export hatası:', error);
-            message.error('Raporlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            console.error('Rapor indirilemedi:', error);
+            message.error('Rapor indirilemedi');
         } finally {
             setIsExporting(false);
         }
-    }, [dateStart, dateEnd, isExporting]);
+    }, [isExporting, dateStart, dateEnd]);
+
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
+    useEffect(() => {
+        const updateScrollbarWidth = () => {
+            const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
+            const tableClientWidth = tableScrollRef.current?.clientWidth ?? 0;
+            const barClientWidth = bottomScrollRef.current?.clientWidth ?? 0;
+            const normalizedWidth = Math.max(
+                tableScrollWidth - tableClientWidth + barClientWidth,
+                barClientWidth + 1
+            );
+            setScrollbarSpacerWidth(normalizedWidth);
+        };
+
+        updateScrollbarWidth();
+
+        const resizeObserver = new ResizeObserver(updateScrollbarWidth);
+        if (tableScrollRef.current) resizeObserver.observe(tableScrollRef.current);
+        if (bottomScrollRef.current) resizeObserver.observe(bottomScrollRef.current);
+        window.addEventListener('resize', updateScrollbarWidth);
+
+        return () => {
+            window.removeEventListener('resize', updateScrollbarWidth);
+            resizeObserver.disconnect();
+        };
+    }, [filteredRecords.length, loading]);
+
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
+        tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
+    };
+
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -315,7 +436,7 @@ export default function AdminIncidentRecords() {
                 </div>
 
                 {/* Records */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-auto flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-visible flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -328,7 +449,7 @@ export default function AdminIncidentRecords() {
                             <p className="text-gray-500">Filtrelere uygun kayıt bulunamadı</p>
                         </div>
                     ) : (
-                        <div ref={tableScrollRef} className="h-full min-h-0 overflow-x-auto overflow-y-auto">
+                        <div ref={tableScrollRef} onScroll={syncTableScroll} className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2">
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
@@ -338,37 +459,43 @@ export default function AdminIncidentRecords() {
                                     <table className="w-full min-w-[1150px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vardiya</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlem</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Tarih</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Vardiya</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kaydeden</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className="hover:bg-gray-50">
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.report_date || record.created_at)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.incident_time || record.created_at)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap">
+                                                            <CompactActionButton
+                                                                onClick={() => openReportModal(record)}
+                                                                variant="primary"
+                                                                label="Kayıt Aç"
+                                                                icon={
+                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                    </svg>
+                                                                }
+                                                            />
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.shift_label || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.report_date || record.created_at)}</div>
+                                                        <div className="text-[10px] text-gray-500">{formatTime(record.incident_time || record.created_at)}</div>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="text-sm text-gray-900 max-w-[520px] truncate">{record.description}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.shift_label || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.reported_by}</div>
+                                                    <td className="px-3 py-2.5">
+                                                        {renderPreviewText(record.description, 'Açıklama')}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <ActionButton
-                                                            onClick={() => openReportModal(record)}
-                                                            variant="primary"
-                                                            title="Raporu Görüntüle"
-                                                        >
-                                                            Kayıt Aç
-                                                        </ActionButton>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.reported_by}</div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -447,6 +574,32 @@ export default function AdminIncidentRecords() {
                     </div>
                 </div>
             )}
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className="fixed bottom-0 left-0 right-0 lg:left-[var(--sidebar-width)] z-40 border-t border-gray-200 bg-white/95 backdrop-blur shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
+                <div ref={bottomScrollRef} onScroll={syncBottomScroll} className="h-5 overflow-x-scroll overflow-y-hidden">
+                    <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
+                </div>
+            </div>
         </div>
     );
 }

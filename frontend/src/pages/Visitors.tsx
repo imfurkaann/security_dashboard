@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
-import { validateVisitorForm, normalizePlate, normalizePhone } from '../utils/validation';
+import { validateVisitorForm, normalizePlate, normalizePhone, formatPhoneNumber } from '../utils/validation';
 import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
@@ -964,7 +964,7 @@ export default function Visitors() {
                                                 </td>
 
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    <div className="text-xs text-gray-900">{rec.phone || '-'}</div>
+                                                    <div className="text-xs text-gray-900">{formatPhoneNumber(rec.phone)}</div>
                                                 </td>
 
                                                 <td className="px-3 py-2.5 whitespace-nowrap w-[180px]">

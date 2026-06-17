@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
 import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { ArrowLeft, Calendar, FileText, Check, AlertTriangle, ShieldCheck, Download, Users, Car, Flame, FileDown } from 'lucide-react';
 
 const { RangePicker } = DatePicker;
 
@@ -48,12 +49,37 @@ export default function AdminExportData() {
         incidents: true
     });
 
-    const reportLabels: Record<string, string> = {
-        managers: 'Müdür Giriş/Çıkış Kayıtları',
-        vehicles: 'Araç Kayıtları',
-        visitors: 'Ziyaretçi Kayıtları',
-        fireAlarms: 'Yangın Alarm Kayıtları',
-        incidents: 'Vardiya Raporları (Olay Kayıtları)'
+    const reportMetadata = {
+        managers: {
+            label: 'Müdür Giriş/Çıkış Kayıtları',
+            icon: ShieldCheck,
+            colorClass: 'text-indigo-600 border-indigo-200 bg-indigo-50/50',
+            activeColorClass: 'border-blue-500 bg-blue-50/40 text-blue-900 ring-1 ring-blue-500/10'
+        },
+        vehicles: {
+            label: 'Araç Kayıtları',
+            icon: Car,
+            colorClass: 'text-blue-600 border-blue-200 bg-blue-50/50',
+            activeColorClass: 'border-blue-500 bg-blue-50/40 text-blue-900 ring-1 ring-blue-500/10'
+        },
+        visitors: {
+            label: 'Ziyaretçi Kayıtları',
+            icon: Users,
+            colorClass: 'text-emerald-600 border-emerald-200 bg-emerald-50/50',
+            activeColorClass: 'border-blue-500 bg-blue-50/40 text-blue-900 ring-1 ring-blue-500/10'
+        },
+        fireAlarms: {
+            label: 'Yangın Alarm Kayıtları',
+            icon: Flame,
+            colorClass: 'text-rose-600 border-rose-200 bg-rose-50/50',
+            activeColorClass: 'border-blue-500 bg-blue-50/40 text-blue-900 ring-1 ring-blue-500/10'
+        },
+        incidents: {
+            label: 'Olay / Vardiya Kayıtları',
+            icon: FileText,
+            colorClass: 'text-amber-600 border-amber-200 bg-amber-50/50',
+            activeColorClass: 'border-blue-500 bg-blue-50/40 text-blue-900 ring-1 ring-blue-500/10'
+        }
     };
 
     // Önizleme getir
@@ -78,7 +104,7 @@ export default function AdminExportData() {
             }
         } catch (error: any) {
             console.error('Preview error:', error);
-            const errorMessage = error.response?.data?.message || 'Önizleme yüklenirken hata oluştu. Sunucu bağlantısını kontrol edin.';
+            const errorMessage = error.response?.data?.message || 'Önizleme verileri yüklenirken hata oluştu.';
             setPreviewError(errorMessage);
         } finally {
             setPreviewLoading(false);
@@ -121,42 +147,33 @@ export default function AdminExportData() {
                 },
                 {
                     responseType: 'blob',
-                    timeout: 300000, // 5 dakika timeout
+                    timeout: 300000,
                     onDownloadProgress: (progressEvent) => {
                         if (progressEvent.total) {
                             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                             setDownloadProgress(progress);
                         } else {
-                            // Total bilinmiyorsa, yükleme yapıldığını göster
                             setDownloadProgress(prev => Math.min(prev + 5, 90));
                         }
                     }
                 }
             );
 
-            // Response'un error olup olmadığını kontrol et
-            // Blob olarak gelen hata mesajını kontrol et
             if (response.data.type === 'application/json') {
                 const text = await response.data.text();
                 const json = JSON.parse(text);
                 throw new Error(json.message || 'Sunucu hatası');
             }
 
-            // Dosyayı indir
             const blob = new Blob([response.data], { type: 'application/zip' });
 
-            // Blob boyutunu kontrol et - çok küçükse muhtemelen hata mesajı
             if (blob.size < 100) {
                 const text = await blob.text();
                 try {
                     const json = JSON.parse(text);
                     throw new Error(json.message || 'İndirme başarısız');
                 } catch (e) {
-                    if (e instanceof SyntaxError) {
-                        // JSON değilse devam et
-                    } else {
-                        throw e;
-                    }
+                    // Ignore syntax errors
                 }
             }
 
@@ -200,7 +217,6 @@ export default function AdminExportData() {
         }
     };
 
-    // Checkbox değişimi
     const handleReportToggle = (key: string) => {
         setSelectedReports(prev => ({
             ...prev,
@@ -208,7 +224,6 @@ export default function AdminExportData() {
         }));
     };
 
-    // Tümünü seç/kaldır
     const handleSelectAll = (selectAll: boolean) => {
         setSelectedReports({
             managers: selectAll,
@@ -222,60 +237,113 @@ export default function AdminExportData() {
     const allSelected = Object.values(selectedReports).every(v => v);
     const noneSelected = Object.values(selectedReports).every(v => !v);
 
+    // Hızlı tarih presets
+    const applyPreset = (days: number) => {
+        setDateRange([dayjs().subtract(days, 'day'), dayjs()]);
+        setPreview(null);
+    };
+
+    const applyMonthPreset = () => {
+        setDateRange([dayjs().startOf('month'), dayjs()]);
+        setPreview(null);
+    };
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button
-                                onClick={() => navigate('/admin/dashboard')}
-                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                </svg>
-                            </button>
-                            <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Veri Dışa Aktarma</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Güvenlik kayıtlarını Excel formatında indirin</p>
-                            </div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+                    <div className="flex items-center gap-4 min-w-0">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/dashboard')}
+                            className="p-2.5 hover:bg-slate-800 rounded-xl transition shrink-0 border border-slate-700/60 bg-slate-800/45 text-slate-300 hover:text-white"
+                            title="Geri Dön"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
+                                <FileDown className="w-8 h-8 text-blue-500" />
+                                Veri Dışa Aktarma Merkezi
+                            </h1>
+                            <p className="text-sm text-slate-300 mt-1">
+                                Belirtilen tarih aralığındaki tüm güvenlik kayıtlarını Excel (XLSX) formatında paketlenmiş olarak indirin.
+                            </p>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
-                {/* Tarih Seçimi */}
-                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Tarih Aralığı
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 max-w-5xl mx-auto">
+                
+                {/* Tarih Seçimi Kartı */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-6 shadow-sm">
+                    <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 flex items-center gap-2">
+                        <Calendar className="w-4.5 h-4.5 text-blue-500" />
+                        Tarih Filtresi & Zaman Aralığı
                     </h2>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Tarih Aralığı</label>
-                        <RangePicker
-                            value={dateRange}
-                            onChange={(dates) => {
-                                if (dates && dates[0] && dates[1]) {
-                                    setDateRange([dates[0], dates[1]]);
-                                } else {
-                                    setDateRange(null);
-                                }
-                            }}
-                            format="DD.MM.YYYY"
-                            placeholder={['Başlangıç', 'Bitiş']}
-                            className="w-full"
-                            disabledDate={(current) => current && current > dayjs().endOf('day')}
-                        />
+                    
+                    <div className="space-y-4">
+                        <div className="flex flex-col gap-3">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tarih Aralığı Seçin</label>
+                            <div className="custom-range-picker-wrapper">
+                                <RangePicker
+                                    value={dateRange}
+                                    onChange={(dates) => {
+                                        if (dates && dates[0] && dates[1]) {
+                                            setDateRange([dates[0], dates[1]]);
+                                        } else {
+                                            setDateRange(null);
+                                        }
+                                        setPreview(null);
+                                    }}
+                                    format="DD.MM.YYYY"
+                                    placeholder={['Başlangıç Tarihi', 'Bitiş Tarihi']}
+                                    className="w-full bg-white border-gray-300 hover:border-gray-400 text-gray-900 rounded-xl py-2.5 focus:border-blue-500"
+                                    disabledDate={(current) => current && current > dayjs().endOf('day')}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Hızlı Seçim Preset Butonları */}
+                        <div className="flex flex-wrap items-center gap-2 pt-2">
+                            <span className="text-xs text-gray-400 mr-1">Hızlı Seçim:</span>
+                            <button
+                                type="button"
+                                onClick={() => applyPreset(7)}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-250 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-700 transition-all"
+                            >
+                                Son 7 Gün
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => applyPreset(30)}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-250 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-700 transition-all"
+                            >
+                                Son 30 Gün
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => applyPreset(90)}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-250 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-700 transition-all"
+                            >
+                                Son 90 Gün
+                            </button>
+                            <button
+                                type="button"
+                                onClick={applyMonthPreset}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-250 border border-gray-200 hover:border-gray-300 rounded-lg text-xs font-medium text-gray-700 transition-all"
+                            >
+                                Bu Ay
+                            </button>
+                        </div>
                     </div>
-                    <div className="mt-4 flex justify-stretch sm:justify-end">
+
+                    <div className="mt-6 flex justify-end border-t border-gray-150 pt-4">
                         <button
                             onClick={fetchPreview}
                             disabled={previewLoading || !startDate || !endDate}
-                            className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-655 hover:from-blue-700 hover:to-indigo-755 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all hover:scale-[1.02] text-sm shadow-sm"
                         >
                             {previewLoading ? (
                                 <>
@@ -283,193 +351,218 @@ export default function AdminExportData() {
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
-                                    Yükleniyor...
+                                    Önizleme Yükleniyor...
                                 </>
                             ) : (
                                 <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                    Önizleme
+                                    Veri Önizleme Getir
                                 </>
                             )}
                         </button>
                     </div>
 
-                    {/* Önizleme Hata Mesajı */}
+                    {/* Önizleme Hata Bildirimi */}
                     {previewError && (
-                        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div>
-                                <p className="text-red-800 font-medium">Önizleme Hatası</p>
-                                <p className="text-red-600 text-sm mt-1">{previewError}</p>
+                        <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3.5 text-red-800">
+                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <span className="font-bold text-red-800 block text-sm">Önizleme Alınamadı</span>
+                                <p className="text-red-750 text-xs mt-1 leading-relaxed">{previewError}</p>
                             </div>
                             <button
                                 onClick={() => setPreviewError(null)}
-                                className="ml-auto text-red-400 hover:text-red-600"
+                                className="text-red-500 hover:text-red-700"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                &times;
                             </button>
                         </div>
                     )}
                 </div>
 
-                {/* Rapor Seçimi */}
-                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            İndirilecek Raporlar
+                {/* Rapor Seçimi Kartı */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-6 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 border-b border-gray-150 pb-3">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                            <FileText className="w-4.5 h-4.5 text-blue-500" />
+                            İndirilecek Kayıt Türleri
                         </h2>
-                        <div className="flex items-center gap-2">
+                        
+                        <div className="flex items-center gap-3 text-xs">
                             <button
+                                type="button"
                                 onClick={() => handleSelectAll(true)}
                                 disabled={allSelected}
-                                className="text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+                                className="font-semibold text-blue-600 hover:text-blue-700 disabled:text-gray-400 transition"
                             >
                                 Tümünü Seç
                             </button>
                             <span className="text-gray-300">|</span>
                             <button
+                                type="button"
                                 onClick={() => handleSelectAll(false)}
                                 disabled={noneSelected}
-                                className="text-sm text-red-600 hover:text-red-800 disabled:text-gray-400"
+                                className="font-semibold text-red-650 hover:text-red-750 disabled:text-gray-400 transition"
                             >
-                                Tümünü Kaldır
+                                Tümünü Temizle
                             </button>
                         </div>
                     </div>
-                    <div className="space-y-3">
-                        {Object.entries(reportLabels).map(([key, label]) => (
-                            <label
-                                key={key}
-                                className="flex items-start sm:items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-colors"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={selectedReports[key as keyof typeof selectedReports]}
-                                    onChange={() => handleReportToggle(key)}
-                                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                                />
-                                <span className="text-gray-700 flex-1">{label}</span>
-                                {preview && (
-                                    <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded shrink-0">
-                                        {preview.counts[key as keyof RecordCounts]} kayıt
-                                    </span>
-                                )}
-                            </label>
-                        ))}
+
+                    {/* Report Types Card Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        {Object.entries(reportMetadata).map(([key, meta]) => {
+                            const isSelected = selectedReports[key as keyof typeof selectedReports];
+                            const IconComponent = meta.icon;
+                            const count = preview?.counts[key as keyof RecordCounts] ?? null;
+
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => handleReportToggle(key)}
+                                    className={`text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between gap-4 group cursor-pointer ${
+                                        isSelected 
+                                            ? meta.activeColorClass 
+                                            : 'border-gray-250 bg-white hover:border-gray-300 hover:bg-gray-50/50 text-gray-600'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3.5 min-w-0">
+                                        <div className={`p-2.5 rounded-lg border shrink-0 transition-transform group-hover:scale-105 ${
+                                            isSelected ? 'bg-blue-100 border-blue-200 text-blue-600' : 'bg-gray-50 border-gray-200 text-gray-400'
+                                        }`}>
+                                            <IconComponent className="w-5 h-5" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className={`block font-semibold text-sm ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
+                                                {meta.label}
+                                            </span>
+                                            <span className="text-[10px] text-gray-400 block mt-0.5">XLSX formatında dışa aktarma</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Record counts badges */}
+                                    <div className="shrink-0 flex items-center gap-2">
+                                        {count !== null && (
+                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                                                isSelected 
+                                                    ? 'bg-blue-100 border-blue-250 text-blue-800' 
+                                                    : 'bg-gray-105 border-gray-200 text-gray-500'
+                                            }`}>
+                                                {count} kayıt
+                                            </span>
+                                        )}
+                                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all ${
+                                            isSelected 
+                                                ? 'bg-blue-500 border-blue-400 text-white' 
+                                                : 'border-gray-300 bg-white'
+                                        }`}>
+                                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Önizleme Sonuçları */}
+                {/* Önizleme İstatistik Paneli */}
                 {preview && (
-                    <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                            </svg>
-                            Önizleme
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm animate-fadeIn">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">
+                            Önizleme & Dosya Analizi
                         </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="bg-blue-50 rounded-lg p-4 text-center">
-                                <div className="text-2xl font-bold text-blue-600">{preview.totalDays}</div>
-                                <div className="text-sm text-gray-600">Gün</div>
+                        
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <div className="bg-gray-50 border border-gray-150 rounded-xl p-4 text-center">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Zaman Dilimi</span>
+                                <span className="block text-2xl font-extrabold text-slate-800 mt-1">{preview.totalDays} Gün</span>
                             </div>
-                            <div className="bg-green-50 rounded-lg p-4 text-center">
-                                <div className="text-2xl font-bold text-green-600">{preview.totalRecords}</div>
-                                <div className="text-sm text-gray-600">Toplam Kayıt</div>
+                            
+                            <div className="bg-gray-50 border border-gray-150 rounded-xl p-4 text-center">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Veritabanı Toplam</span>
+                                <span className="block text-2xl font-extrabold text-blue-700 mt-1">{preview.totalRecords}</span>
                             </div>
-                            <div className="bg-purple-50 rounded-lg p-4 text-center">
-                                <div className="text-2xl font-bold text-purple-600">
-                                    {Object.values(selectedReports).filter(v => v).length}
-                                </div>
-                                <div className="text-sm text-gray-600">Seçili Rapor</div>
+
+                            <div className="bg-gray-50 border border-gray-150 rounded-xl p-4 text-center">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Seçili Dosyalar</span>
+                                <span className="block text-2xl font-extrabold text-indigo-700 mt-1">
+                                    {Object.values(selectedReports).filter(v => v).length} / 5
+                                </span>
                             </div>
-                            <div className="bg-orange-50 rounded-lg p-4 text-center">
-                                <div className="text-2xl font-bold text-orange-600">
+
+                            <div className="bg-gray-50 border border-gray-150 rounded-xl p-4 text-center">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">İndirilecek Toplam Satır</span>
+                                <span className="block text-2xl font-extrabold text-emerald-700 mt-1">
                                     {Object.entries(selectedReports)
                                         .filter(([_, selected]) => selected)
                                         .reduce((sum, [key]) => sum + preview.counts[key as keyof RecordCounts], 0)}
-                                </div>
-                                <div className="text-sm text-gray-600">İndirilecek</div>
+                                </span>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* İndirme Butonu */}
-                <div className="bg-white rounded-lg shadow px-3 py-2 w-full">
-                    {/* Hata Mesajı */}
+                {/* İndirme Aksiyon Kartı */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 md:p-6 shadow-sm space-y-4">
+                    
+                    {/* Hata Bildirimi */}
                     {error && (
-                        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                            <svg className="w-6 h-6 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3.5 text-red-800 animate-fadeIn">
+                            <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />
                             <div className="flex-1">
-                                <p className="text-red-800 font-semibold">İndirme Başarısız</p>
-                                <p className="text-red-600 text-sm mt-1">{error}</p>
-                                <p className="text-red-500 text-xs mt-2">Lütfen tarih aralığını kontrol edip tekrar deneyin veya sistem yöneticisine başvurun.</p>
+                                <span className="font-bold text-red-800 block text-sm">İndirme İşlemi Başarısız</span>
+                                <p className="text-red-750 text-xs mt-1 leading-relaxed">{error}</p>
+                                <p className="text-red-400/80 text-[10px] mt-2">Daha küçük bir tarih aralığı seçip tekrar deneyin veya sunucu durumunu kontrol edin.</p>
                             </div>
                             <button
                                 onClick={() => setError(null)}
-                                className="text-red-400 hover:text-red-600 flex-shrink-0"
+                                className="text-red-500 hover:text-red-755 shrink-0"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                &times;
                             </button>
                         </div>
                     )}
 
+                    {/* Progress Bar */}
                     {downloading && (
-                        <div className="mb-4">
+                        <div className="bg-slate-50 border border-gray-150 rounded-xl p-4 animate-pulse">
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm text-gray-600">İndiriliyor...</span>
-                                <span className="text-sm font-medium text-blue-600">{downloadProgress}%</span>
+                                <span className="text-xs font-semibold text-slate-500">Veritabanı arşivleniyor ve sıkıştırılıyor...</span>
+                                <span className="text-sm font-bold text-blue-600">%{downloadProgress}</span>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="w-full bg-gray-205 rounded-full h-2.5 overflow-hidden p-0.5 border border-gray-200">
                                 <div
-                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300 shadow-sm"
                                     style={{ width: `${downloadProgress}%` }}
                                 ></div>
                             </div>
                         </div>
                     )}
+
                     <button
                         onClick={handleExport}
                         disabled={downloading || !startDate || !endDate || noneSelected}
-                        className="w-full py-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-semibold text-lg disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3"
+                        className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-655 hover:from-emerald-700 hover:to-teal-755 text-white rounded-xl font-bold text-base disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2.5 shadow-sm"
                     >
                         {downloading ? (
                             <>
-                                <svg className="animate-spin h-6 w-6" fill="none" viewBox="0 0 24 24">
+                                <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
-                                İndiriliyor...
+                                Paket Dosyası Hazırlanıyor...
                             </>
                         ) : (
                             <>
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Excel Olarak İndir
+                                <Download className="w-5 h-5" />
+                                Seçili Raporları ZIP Olarak İndir (Excel)
                             </>
                         )}
                     </button>
-                    <p className="text-center text-sm text-gray-500 mt-3">
-                        Veriler ZIP dosyası içinde yıl/ay/gün klasör yapısıyla indirilecektir
+                    <p className="text-center text-xs text-gray-500">
+                        Seçilen tablolar ayrı ayrı Excel sayfaları haline getirilip tek bir <span className="font-mono text-gray-600">.zip</span> arşivi olarak sunulur.
                     </p>
                 </div>
-
             </main>
         </div>
     );

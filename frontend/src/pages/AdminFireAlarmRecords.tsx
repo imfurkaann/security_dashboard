@@ -7,8 +7,54 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import api from '../utils/api';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { isValidLength } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
+
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
+
 
 interface FireAlarmRecord {
     id: string;
@@ -39,6 +85,17 @@ export default function AdminFireAlarmRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+
+    // Edit states
+    const [showModal, setShowModal] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editAlarmNumber, setEditAlarmNumber] = useState('');
+    const [editLocation, setEditLocation] = useState('');
+    const [editAlarmTime, setEditAlarmTime] = useState('');
+    const [editResolutionTime, setEditResolutionTime] = useState('');
+    const [editResolutionNotes, setEditResolutionNotes] = useState('');
+    const [editFalseAlarm, setEditFalseAlarm] = useState(false);
 
     // Filter states
     const [alarmNumber, setAlarmNumber] = useState('');
@@ -289,6 +346,69 @@ export default function AdminFireAlarmRecords() {
         setResolutionDateEnd('');
     };
 
+    const resetForm = useCallback(() => {
+        setEditAlarmNumber('');
+        setEditLocation('');
+        setEditAlarmTime('');
+        setEditResolutionTime('');
+        setEditResolutionNotes('');
+        setEditFalseAlarm(false);
+        setIsEditing(false);
+        setEditingId(null);
+    }, []);
+
+    const openModalForEdit = useCallback((record: FireAlarmRecord) => {
+        setEditAlarmNumber(record.alarm_number || '');
+        setEditLocation(record.location);
+        if (record.alarm_time) {
+            setEditAlarmTime(formatTime(record.alarm_time));
+        }
+        if (record.resolution_time) {
+            setEditResolutionTime(formatTime(record.resolution_time));
+        }
+        setEditResolutionNotes(record.resolution_notes || '');
+        setEditFalseAlarm(record.false_alarm);
+        setIsEditing(true);
+        setEditingId(record.id);
+        setShowModal(true);
+    }, []);
+
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editLocation.trim()) {
+            message.error('Konum alanı zorunludur');
+            return;
+        }
+
+        if (!isValidLength(editResolutionNotes, 0, 1000)) {
+            message.error('Notlar en fazla 1000 karakter olabilir');
+            return;
+        }
+
+        try {
+            const payload = {
+                alarm_number: editAlarmNumber.trim() || null,
+                location: editLocation.trim(),
+                alarm_time: editAlarmTime && editAlarmTime !== '-' ? editAlarmTime : null,
+                resolution_time: editResolutionTime && editResolutionTime !== '-' ? editResolutionTime : null,
+                false_alarm: editFalseAlarm,
+                resolution_notes: editResolutionNotes.trim() || null,
+            };
+
+            if (editingId) {
+                await api.put(`/fire-alarms/records/${editingId}`, payload);
+                message.success('Alarm kaydı güncellendi');
+                setShowModal(false);
+                resetForm();
+                void fetchData(0, false);
+            }
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err?.response?.data?.message || 'İşlem başarısız');
+        }
+    }, [editAlarmNumber, editLocation, editAlarmTime, editResolutionTime, editResolutionNotes, editFalseAlarm, editingId, resetForm, fetchData]);
+
     const handleDeleteRecord = async (id: string) => {
         Modal.confirm({
             title: 'Kaydı Sil',
@@ -403,13 +523,35 @@ export default function AdminFireAlarmRecords() {
         };
     }, [fetchData, loadingMore, hasMore, records.length]);
 
-    const syncBottomScroll = () => {
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
+
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
-
         if (!tableNode || !barNode) return;
-        tableNode.scrollLeft = barNode.scrollLeft;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
     };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
+        tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
+    };
+
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -614,7 +756,7 @@ export default function AdminFireAlarmRecords() {
                 </div>
 
                 {/* Records */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-visible flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -629,7 +771,8 @@ export default function AdminFireAlarmRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
@@ -637,62 +780,90 @@ export default function AdminFireAlarmRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1550px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1550px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm No</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Konum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapi</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alarm Zamani</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozum Zamani</th>
-                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notlar</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kaydeden</th>
-                                                <th className="px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cozumleyen</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlem</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm No</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Konum</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapi</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Alarm Zamani</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cozum Zamani</th>
+                                                <th className="w-[250px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Notlar</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kaydeden</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cozumleyen</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-medium text-gray-900">{record.alarm_number || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap">
+                                                            {record.deleted_at ? (
+                                                                <CompactActionButton
+                                                                    onClick={() => handleRestoreRecord(record.id)}
+                                                                    variant="success"
+                                                                    label="Geri Al"
+                                                                    icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>}
+                                                                />
+                                                            ) : (
+                                                                <>
+                                                                    <CompactActionButton
+                                                                        onClick={() => openModalForEdit(record)}
+                                                                        variant="primary"
+                                                                        label="Düzenle"
+                                                                        icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>}
+                                                                    />
+                                                                    <CompactActionButton
+                                                                        onClick={() => handleDeleteRecord(record.id)}
+                                                                        variant="danger"
+                                                                        label="Sil"
+                                                                        icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
+                                                                    />
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
-                                                        {record.false_alarm && <span className="text-xs text-red-600 font-medium">Yanlis Alarm</span>}
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs font-medium text-gray-900">{record.alarm_number || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs font-bold text-gray-900 whitespace-nowrap">{record.location}</div>
+                                                        {record.false_alarm && <span className="text-[10px] text-red-600 font-medium block">Yanlis Alarm</span>}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.alarm_time)}</div>
-                                                        <div className="text-xs text-gray-600">{formatTime(record.alarm_time)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.alarm_time)}</div>
+                                                        <div className="text-[10px] text-gray-500">{formatTime(record.alarm_time)}</div>
+                                                    </td>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {record.resolution_time ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.resolution_time)}</div>
-                                                                <div className="text-xs text-gray-600">{formatTime(record.resolution_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.resolution_time)}</div>
+                                                                <div className="text-[10px] text-gray-500">{formatTime(record.resolution_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-sm text-gray-400">-</span>
+                                                            <span className="text-xs text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="w-[250px] px-4 py-3 pr-6">
+                                                    <td className="w-[250px] px-3 py-2.5 pr-6">
                                                         {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {record.resolved ? (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-green-100 text-green-800">Cozuldu</span>
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] font-semibold rounded-full bg-green-100 text-green-800">Cozuldu</span>
                                                         ) : (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs font-medium rounded-full bg-red-100 text-red-800">Aktif</span>
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] font-semibold rounded-full bg-red-100 text-red-800">Aktif</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.recorded_by_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.recorded_by_name || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{record.resolved_by_name || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{record.resolved_by_name || '-'}</div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -710,6 +881,113 @@ export default function AdminFireAlarmRecords() {
                     <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
                 </div>
             </div>
+
+            {showModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-md w-full p-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-900">
+                                Alarm Kaydını Düzenle
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowModal(false);
+                                    resetForm();
+                                }}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Alarm Numarası</label>
+                                <input
+                                    type="text"
+                                    value={editAlarmNumber}
+                                    onChange={(e) => setEditAlarmNumber(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    placeholder="Örn: AL-001, Panel 3, Kat 2 Alarm 5"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Konum *</label>
+                                <input
+                                    type="text"
+                                    value={editLocation}
+                                    onChange={(e) => setEditLocation(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    placeholder="Örn: 3. Kat Koridor, Lobi, Mutfak"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Alarm Saati</label>
+                                <input
+                                    type="time"
+                                    value={editAlarmTime === '-' ? '' : editAlarmTime}
+                                    onChange={(e) => setEditAlarmTime(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    style={{ colorScheme: 'light' }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Çözüm Saati</label>
+                                <input
+                                    type="time"
+                                    value={editResolutionTime === '-' ? '' : editResolutionTime}
+                                    onChange={(e) => setEditResolutionTime(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    style={{ colorScheme: 'light' }}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Notlar / Açıklama</label>
+                                <textarea
+                                    value={editResolutionNotes}
+                                    onChange={(e) => setEditResolutionNotes(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    rows={3}
+                                    placeholder="Çözüm notları, yanlış alarm gerekçesi vb..."
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 py-1">
+                                <input
+                                    type="checkbox"
+                                    id="editFalseAlarm"
+                                    checked={editFalseAlarm}
+                                    onChange={(e) => setEditFalseAlarm(e.target.checked)}
+                                    className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                                />
+                                <label htmlFor="editFalseAlarm" className="text-sm font-medium text-gray-700 select-none cursor-pointer">
+                                    Bu bir yanlış alarmdı
+                                </label>
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="submit"
+                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition"
+                                >
+                                    Güncelle
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowModal(false);
+                                        resetForm();
+                                    }}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-medium transition"
+                                >
+                                    İptal
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {textPreview && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

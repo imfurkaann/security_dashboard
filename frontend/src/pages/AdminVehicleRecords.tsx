@@ -5,19 +5,83 @@ import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
-import type { VehicleUsage, Vehicle } from '../types';
+import type { VehicleUsage, Vehicle, Manager } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-import ActionButton from '../components/ActionButton';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 const { RangePicker } = DatePicker;
+
+interface CompactActionButtonProps {
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+    variant?: 'primary' | 'success' | 'danger' | 'neutral';
+    title?: string;
+    disabled?: boolean;
+    className?: string;
+}
+
+const actionVariantClasses = {
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+};
+
+function CompactActionButton({
+    onClick,
+    icon,
+    label,
+    variant = 'neutral',
+    title,
+    disabled = false,
+    className = ''
+}: CompactActionButtonProps) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={title || label}
+            className={`compact-btn inline-flex items-center justify-center h-8 min-w-[32px] px-2 hover:px-3 rounded-full border transition-all duration-300 ease-in-out disabled:cursor-not-allowed disabled:opacity-50 ${actionVariantClasses[variant]} ${className}`.trim()}
+        >
+            <span className="flex items-center justify-center shrink-0">
+                {icon}
+            </span>
+            <span className="compact-btn-text text-[11px] font-bold">
+                {label}
+            </span>
+        </button>
+    );
+}
 
 const normalizeSearchText = (value: string | null | undefined): string => {
     return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
 };
 
+interface VehicleEditFormData {
+    vehicle_id: string;
+    manager_id: string;
+    manager_name: string;
+    destination: string;
+    notes: string;
+    given_time: string;
+    return_time: string;
+}
+
+const INITIAL_FORM_DATA: VehicleEditFormData = {
+    vehicle_id: '',
+    manager_id: '',
+    manager_name: '',
+    destination: '',
+    notes: '',
+    given_time: '',
+    return_time: ''
+};
+
 export default function AdminVehicleRecords() {
     const [records, setRecords] = useState<VehicleUsage[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [managers, setManagers] = useState<Manager[]>([]);
     const [loading, setLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -26,8 +90,13 @@ export default function AdminVehicleRecords() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+    const isScrollingTable = useRef(false);
+    const isScrollingBar = useRef(false);
 
-    
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingUsage, setEditingUsage] = useState<VehicleUsage | null>(null);
+    const [formData, setFormData] = useState<VehicleEditFormData>(INITIAL_FORM_DATA);
+    const [showCustomManager, setShowCustomManager] = useState(false);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -67,9 +136,10 @@ export default function AdminVehicleRecords() {
             if (filters.returnDateStart) params.append('returnDateStart', filters.returnDateStart);
             if (filters.returnDateEnd) params.append('returnDateEnd', filters.returnDateEnd);
 
-            const [recordsRes, vehiclesRes] = await Promise.all([
+            const [recordsRes, vehiclesRes, managersRes] = await Promise.all([
                 api.get(`/vehicles/records?${params.toString()}&_t=${Date.now()}`),
-                vehicles.length === 0 ? api.get('/vehicles') : Promise.resolve(null)
+                vehicles.length === 0 ? api.get('/vehicles') : Promise.resolve(null),
+                managers.length === 0 ? api.get('/vehicles/managers') : Promise.resolve(null)
             ]);
 
             const fetchedRecords = recordsRes.data || [];
@@ -84,6 +154,9 @@ export default function AdminVehicleRecords() {
             if (vehiclesRes) {
                 setVehicles(vehiclesRes.data || []);
             }
+            if (managersRes) {
+                setManagers(managersRes.data || []);
+            }
         } catch (error) {
             message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
@@ -91,7 +164,7 @@ export default function AdminVehicleRecords() {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [filters, vehicles.length]);
+    }, [filters, vehicles.length, managers.length]);
 
     useEffect(() => {
         setLoading(true);
@@ -345,6 +418,61 @@ export default function AdminVehicleRecords() {
         });
     };
 
+    const resetForm = useCallback(() => {
+        setFormData(INITIAL_FORM_DATA);
+        setShowCustomManager(false);
+    }, []);
+
+    const openEditModal = useCallback((usage: VehicleUsage) => {
+        setEditingUsage(usage);
+
+        const vehicleMatch = vehicles.find(v => v.plate === usage.vehicle_plate);
+        const vehicleId = vehicleMatch?.id || '';
+
+        const managerMatch = managers.find(m =>
+            `${m.first_name} ${m.last_name}` === usage.manager
+        );
+        const managerId = managerMatch?.id || '';
+
+        setFormData({
+            vehicle_id: vehicleId,
+            manager_id: managerId,
+            manager_name: managerId ? '' : (usage.manager || ''),
+            destination: usage.destination || '',
+            notes: usage.notes || '',
+            given_time: usage.given_time ? formatTime(usage.given_time) : '',
+            return_time: usage.return_time ? formatTime(usage.return_time) : ''
+        });
+
+        setShowCustomManager(!managerId);
+        setShowEditModal(true);
+    }, [vehicles, managers]);
+
+    const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUsage) return;
+
+        try {
+            await api.put(`/vehicles/records/${editingUsage.id}`, {
+                vehicle_id: formData.vehicle_id,
+                manager_id: formData.manager_id || null,
+                manager_name: formData.manager_name || null,
+                destination: formData.destination,
+                notes: formData.notes || null,
+                given_time: formData.given_time || null,
+                return_time: formData.return_time || null
+            });
+            setShowEditModal(false);
+            setEditingUsage(null);
+            resetForm();
+            fetchData(0, false);
+            message.success('Kayıt başarıyla güncellendi');
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'İşlem başarısız');
+        }
+    }, [formData, editingUsage, fetchData, resetForm]);
+
     const handleDeleteRecord = async (id: string) => {
         Modal.confirm({
             title: 'Kaydı Sil',
@@ -389,14 +517,14 @@ export default function AdminVehicleRecords() {
         const isLong = text.length > 15;
 
         if (!isLong) {
-            return <div className="text-sm text-gray-900 block max-w-[240px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
         }
 
         return (
             <button
                 type="button"
                 onClick={() => setTextPreview({ title, value: text })}
-                className="text-sm text-blue-700 hover:text-blue-900 underline text-left block max-w-[240px] truncate whitespace-nowrap overflow-hidden"
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
                 title="Tamamını görmek için tıklayın"
             >
                 {text}
@@ -435,12 +563,30 @@ export default function AdminVehicleRecords() {
         return () => clearTimeout(t);
     }, [infoMessage]);
 
-    const syncBottomScroll = () => {
+    const syncTableScroll = () => {
+        if (isScrollingBar.current) return;
         const tableNode = tableScrollRef.current;
         const barNode = bottomScrollRef.current;
-
         if (!tableNode || !barNode) return;
+
+        isScrollingTable.current = true;
+        barNode.scrollLeft = tableNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingTable.current = false;
+        });
+    };
+
+    const syncBottomScroll = () => {
+        if (isScrollingTable.current) return;
+        const tableNode = tableScrollRef.current;
+        const barNode = bottomScrollRef.current;
+        if (!tableNode || !barNode) return;
+
+        isScrollingBar.current = true;
         tableNode.scrollLeft = barNode.scrollLeft;
+        requestAnimationFrame(() => {
+            isScrollingBar.current = false;
+        });
     };
 
     return (
@@ -683,7 +829,7 @@ export default function AdminVehicleRecords() {
                 </div>
 
                 {/* Records Table */}
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-visible flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -698,92 +844,111 @@ export default function AdminVehicleRecords() {
                     ) : (
                         <div
                             ref={tableScrollRef}
-                            className="h-full min-h-0 overflow-x-hidden overflow-y-auto pb-2"
+                            onScroll={syncTableScroll}
+                            className="h-full min-h-0 overflow-x-auto scrollbar-hide overflow-y-auto pb-2"
                         >
                             {groupedByDay.map((dayGroup) => (
                                 <div key={dayGroup.dayKey} className="mb-4 last:mb-0">
                                     <div className="sticky top-0 bg-gray-100 px-4 py-2 border-l-4 border-blue-500 z-10 shadow-sm">
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
-
-                                    <table className="w-full min-w-[1680px] table-fixed divide-y divide-gray-200">
+ 
+                                    <table className="w-full min-w-[1300px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="w-[120px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
-                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Araç</th>
-                                                <th className="w-[170px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Müdür</th>
-                                                <th className="w-[180px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
-                                                <th className="w-[95px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kapı</th>
-                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
-                                                <th className="w-[130px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İade Tarihi</th>
-                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Eden</th>
-                                                <th className="w-[160px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Alan</th>
-                                                <th className="w-[110px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Durum</th>
-                                                <th className="w-[250px] px-4 py-3 whitespace-nowrap text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Araç</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Müdür</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Gidilen Yer</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Teslim Tarihi</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İade Tarihi</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Teslim Eden</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Teslim Alan</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Açıklama</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap">
                                                             {record.deleted_at ? (
-                                                                <ActionButton onClick={() => handleRestoreRecord(record.id)} variant="success" title="Geri Al">Geri Al</ActionButton>
+                                                                <CompactActionButton
+                                                                    onClick={() => handleRestoreRecord(record.id)}
+                                                                    variant="success"
+                                                                    label="Geri Al"
+                                                                    icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.306 7H18" /></svg>}
+                                                                />
                                                             ) : (
-                                                                <ActionButton onClick={() => handleDeleteRecord(record.id)} variant="danger" title="Sil">Sil</ActionButton>
+                                                                <>
+                                                                    <CompactActionButton
+                                                                        onClick={() => openEditModal(record)}
+                                                                        variant="primary"
+                                                                        label="Düzenle"
+                                                                        icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>}
+                                                                    />
+                                                                    <CompactActionButton
+                                                                        onClick={() => handleDeleteRecord(record.id)}
+                                                                        variant="danger"
+                                                                        label="Sil"
+                                                                        icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>}
+                                                                    />
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm font-bold text-gray-900">{record.vehicle_plate}</div>
-                                                        <div className="text-xs text-gray-500">{record.vehicle_brand}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs font-bold text-gray-900">{record.vehicle_plate}</div>
+                                                        <div className="text-[10px] text-gray-500">{record.vehicle_brand}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
-                                                        <div className="text-xs text-gray-500">{record.manager_title}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.manager || '-'}</div>
+                                                        <div className="text-[10px] text-gray-500">{record.manager_title}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.destination || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.gate || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900">{formatDate(record.given_date)}</div>
-                                                        <div className="text-xs text-gray-500">{formatTime(record.given_time)}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900">{formatDate(record.given_date)}</div>
+                                                        <div className="text-[10px] text-gray-500">{formatTime(record.given_time)}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {record.return_date ? (
                                                             <>
-                                                                <div className="text-sm text-gray-900">{formatDate(record.return_date)}</div>
-                                                                <div className="text-xs text-gray-500">{formatTime(record.return_time)}</div>
+                                                                <div className="text-xs text-gray-900">{formatDate(record.return_date)}</div>
+                                                                <div className="text-[10px] text-gray-500">{formatTime(record.return_time)}</div>
                                                             </>
                                                         ) : (
-                                                            <span className="text-gray-400">-</span>
+                                                            <span className="text-xs text-gray-400">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.given_by || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
-                                                        <div className="text-sm text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        <div className="text-xs text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
                                                     </td>
-                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {record.deleted_at ? (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-red-100 text-red-700">
                                                                 Silindi
                                                             </span>
                                                         ) : record.status === 'in_use' ? (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                                                                 Kullanımda
                                                             </span>
                                                         ) : (
-                                                            <span className="px-2 py-1 inline-flex whitespace-nowrap text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-green-100 text-green-800">
                                                                 Teslim Alındı
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-3 pr-6">
+                                                    <td className="px-3 py-2.5 pr-6">
                                                         {renderPreviewText(record.notes, 'Açıklama')}
                                                     </td>
                                                 </tr>
@@ -802,6 +967,188 @@ export default function AdminVehicleRecords() {
                     <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
                 </div>
             </div>
+
+            {showEditModal && editingUsage && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">
+                                    Araç Kaydını Düzenle
+                                </h2>
+                                <button
+                                    onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleEditSubmit} className="space-y-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Araç Seçin <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            required
+                                            value={formData.vehicle_id}
+                                            onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                                            disabled={editingUsage?.status === 'returned'}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="">Araç seçiniz...</option>
+                                            {vehicles.map(vehicle => (
+                                                <option key={vehicle.id} value={vehicle.id}>
+                                                    {vehicle.plate} - {vehicle.brand}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {editingUsage?.status === 'returned' && (
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Teslim alınmış kayıtlarda araç değiştirilemez
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Aracı Alan Müdür <span className="text-red-500">*</span>
+                                        </label>
+                                        {!showCustomManager ? (
+                                            <>
+                                                <select
+                                                    required={!showCustomManager}
+                                                    value={formData.manager_id}
+                                                    onChange={(e) => {
+                                                        if (e.target.value === 'custom') {
+                                                            setShowCustomManager(true);
+                                                            setFormData({ ...formData, manager_id: '', manager_name: '' });
+                                                        } else {
+                                                            setFormData({ ...formData, manager_id: e.target.value, manager_name: '' });
+                                                        }
+                                                    }}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                >
+                                                    <option value="">Müdür seçiniz...</option>
+                                                    {managers.map(manager => (
+                                                        <option key={manager.id} value={manager.id}>
+                                                            {manager.first_name} {manager.last_name} - {manager.title}
+                                                        </option>
+                                                    ))}
+                                                    <option value="custom">🔽 Listede Yok - Elle Gir</option>
+                                                </select>
+                                            </>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    required={showCustomManager}
+                                                    value={formData.manager_name}
+                                                    onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
+                                                    placeholder="Müdür adı soyadı"
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowCustomManager(false);
+                                                        setFormData({ ...formData, manager_id: '', manager_name: '' });
+                                                    }}
+                                                    className="text-sm text-blue-600 hover:text-blue-800"
+                                                >
+                                                    ← Listeye Dön
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Gidilen Yer <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={formData.destination}
+                                            onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                                            placeholder="Örn: Havalimanı, Şehir Merkezi"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Teslim Saati
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={formData.given_time}
+                                            onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
+                                            step="60"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            style={{ colorScheme: 'light' }}
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Boş bırakırsanız mevcut saat korunur
+                                        </p>
+                                    </div>
+
+                                    {editingUsage && editingUsage.status === 'returned' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Teslim Alınma Saati
+                                            </label>
+                                            <input
+                                                type="time"
+                                                value={formData.return_time}
+                                                onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
+                                                step="60"
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                style={{ colorScheme: 'light' }}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Boş bırakırsanız mevcut saat korunur
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Açıklama / Not
+                                        </label>
+                                        <textarea
+                                            value={formData.notes}
+                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                            rows={3}
+                                            placeholder="Kullanım amacı, ek notlar..."
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
+                                    >
+                                        Güncelle
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
+                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
+                                    >
+                                        İptal
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {textPreview && (
                 <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">

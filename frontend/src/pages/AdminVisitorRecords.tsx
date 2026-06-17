@@ -8,6 +8,7 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { formatPhoneNumber } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
 
@@ -920,7 +921,7 @@ export default function AdminVisitorRecords() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-visible flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -1058,7 +1059,7 @@ export default function AdminVisitorRecords() {
                                                         <div className="text-xs text-gray-900">{record.children_count ?? '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        <div className="text-xs text-gray-900">{record.phone || '-'}</div>
+                                                        <div className="text-xs text-gray-900">{formatPhoneNumber(record.phone)}</div>
                                                     </td>
                                                     <td className="w-[180px] px-3 py-2.5 pr-2">
                                                         {renderPreviewText(record.notes, 'Açıklama')}
