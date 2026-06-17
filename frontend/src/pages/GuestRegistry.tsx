@@ -328,28 +328,28 @@ export default function GuestRegistry() {
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <button
                                 onClick={() => navigate(isAdmin ? '/admin/dashboard' : '/dashboard')}
-                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Misafir Kayıt Sayfası</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel misafir kayıtlarını yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Misafir Kayıt Sayfası</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel misafir kayıtlarını yönetin.</p>
                             </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 w-full lg:w-auto">
                             <button
                                 onClick={onUploadClick}
                                 disabled={uploading}
-                                className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-lg transition-all duration-300 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm w-full sm:w-auto animate-fadeIn"
+                                className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed animate-fadeIn"
                             >
                                 {uploading ? (
                                     <>
@@ -380,7 +380,7 @@ export default function GuestRegistry() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-6 pb-16 flex flex-col gap-4 overflow-hidden">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 {lastSummary && (
                     <div className="mb-2 bg-emerald-50/50 border border-emerald-200/60 rounded-xl p-4 shadow-sm animate-fadeIn">
                         <h3 className="text-xs font-semibold text-emerald-900 uppercase tracking-wider mb-3 flex items-center gap-1.5">

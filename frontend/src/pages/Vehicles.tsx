@@ -446,38 +446,38 @@ export default function Vehicles() {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Araç Kayıt Sayfası</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel araçlarının kullanım kayıtlarını yönetin</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Araç Kayıt Sayfası</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel araçlarının kullanım kayıtlarını yönetin</p>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full lg:w-auto">
+                        <div className="grid grid-cols-2 sm:flex gap-2 w-full lg:w-auto">
                             <button
                                 onClick={() => navigate('/vehicle-records')}
-                                className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
+                                className="flex items-center justify-center gap-1.5 bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
                                 Kayıt Filtrele
                             </button>
                             <button
                                 onClick={() => openModal()}
-                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base"
+                                className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                                 Araç Teslim Et
@@ -487,60 +487,59 @@ export default function Vehicles() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 <div className="w-full">
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700">
-                            <div className="flex items-center gap-3 min-h-[48px]">
-                                <div className="p-2 bg-blue-400/30 rounded-lg border border-blue-300/60 shrink-0 text-white">
-                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                                    </svg>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mb-2.5">
+                        <div className="rounded-xl shadow-sm p-2.5 border border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700">
+                            <div className="flex items-center justify-between px-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-blue-400/30 rounded-lg border border-blue-300/60 shrink-0 text-white">
+                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-xs font-bold text-white/95 uppercase tracking-wider">Toplam Araç</span>
                                 </div>
-                                <div className="min-w-0 flex-1 text-center">
-                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Toplam Araç</p>
-                                    <p className="text-xl font-bold text-white leading-none mt-1">{vehicles.length}</p>
-                                </div>
+                                <span className="text-xl font-extrabold text-white">{vehicles.length}</span>
                             </div>
                         </div>
 
-                        <div className="rounded-xl shadow-sm p-3 min-h-[92px] border border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-700">
-                            <div className="flex items-center gap-3 min-h-[48px]">
-                                <div className="p-2 bg-emerald-400/30 rounded-lg border border-emerald-300/60 shrink-0 text-white">
-                                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                        <div className="rounded-xl shadow-sm p-2.5 border border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-700">
+                            <div className="flex items-center justify-between px-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-emerald-400/30 rounded-lg border border-emerald-300/60 shrink-0 text-white">
+                                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-xs font-bold text-white/95 uppercase tracking-wider">Kullanımda</span>
                                 </div>
-                                <div className="min-w-0 flex-1 text-center">
-                                    <p className="text-[11px] font-bold text-white/90 uppercase tracking-wider leading-none">Kullanımda</p>
-                                    <p className="text-xl font-bold text-white leading-none mt-1">{inUseCount}</p>
-                                </div>
+                                <span className="text-xl font-extrabold text-white">{inUseCount}</span>
                             </div>
                         </div>
-
                     </div>
 
                     {/* Filters */}
-                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-4 w-full">
+                    <div className="bg-white rounded-lg shadow px-3 py-1.5 mb-2.5 w-full">
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 onClick={() => setFilter('all')}
-                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Bugünün Kayıtları ({todayUsages.length})
                             </button>
                             <button
                                 onClick={() => setFilter('in_use')}
-                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'in_use' ? 'bg-orange-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Kullanımda Olan Araçlar ({inUseCount})
                             </button>
                             <button
                                 onClick={() => setFilter('deleted')}
-                                className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'deleted' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Silinen Kayıtlar ({todayDeletedUsages.length})

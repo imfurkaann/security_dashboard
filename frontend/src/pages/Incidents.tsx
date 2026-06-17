@@ -341,27 +341,27 @@ export default function Incidents() {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <button
                                 onClick={() => navigate('/dashboard')}
-                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Vardiya Rapor Sistemi</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Günlük güvenlik vardiya raporlarını kaydedin</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Vardiya Rapor Sistemi</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Günlük güvenlik vardiya raporlarını kaydedin</p>
                             </div>
                         </div>
                         <button
                             onClick={() => navigate('/incident-records')}
-                            className="flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto"
+                            className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                             </svg>
                             Kayıt Filtrele
@@ -370,7 +370,7 @@ export default function Incidents() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 <div className="max-w-6xl mx-auto w-full">
                     {/* Vardiya Kartları */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
@@ -380,26 +380,26 @@ export default function Incidents() {
                             return (
                                 <div
                                     key={shift.id}
-                                    className={`rounded-xl shadow-sm p-4 min-h-[120px] border transition-all ${access.accessible
+                                    className={`rounded-xl shadow-sm p-3 min-h-[100px] border transition-all ${access.accessible
                                         ? 'border-blue-500 bg-gradient-to-br from-blue-500 to-blue-700'
                                         : 'border-slate-200 bg-white'
                                         }`}
                                 >
-                                    <div className="flex items-center gap-3 min-h-[48px] mb-3">
-                                        <div className={`p-2 rounded-lg border shrink-0 ${access.accessible ? 'bg-white/20 border-white/20' : 'bg-blue-100 border-blue-200'}`}>
-                                            <svg className={`w-6 h-6 ${access.accessible ? 'text-white' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="flex items-center gap-2 min-h-[40px] mb-2">
+                                        <div className={`p-1.5 rounded-lg border shrink-0 ${access.accessible ? 'bg-white/20 border-white/20' : 'bg-blue-100 border-blue-200'}`}>
+                                            <svg className={`w-5 h-5 ${access.accessible ? 'text-white' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                             </svg>
                                         </div>
                                         <div className="min-w-0 flex-1 text-center">
-                                            <h3 className={`text-lg font-bold leading-tight ${access.accessible ? 'text-white' : 'text-gray-900'}`}>{shift.label}</h3>
-                                            <span className={`text-xs font-medium ${access.accessible ? 'text-white/90' : 'text-gray-500'}`}>
+                                            <h3 className={`text-base font-bold leading-tight ${access.accessible ? 'text-white' : 'text-gray-900'}`}>{shift.label}</h3>
+                                            <span className={`text-[10px] font-medium ${access.accessible ? 'text-white/90' : 'text-gray-500'}`}>
                                                 {access.message}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <p className={`text-sm mb-4 leading-relaxed ${access.accessible ? 'text-white/90' : 'text-gray-600'}`}>
+                                    <p className={`text-xs mb-3 leading-relaxed ${access.accessible ? 'text-white/90' : 'text-gray-600'}`}>
                                         Günlük güvenlik olaylarını ve vardiya notlarını kaydedin. Rapor otomatik olarak Word dosyasına dönüştürülecektir.
                                     </p>
 
@@ -407,7 +407,7 @@ export default function Incidents() {
                                         <button
                                             onClick={() => openReportModal(shift.label, !!shiftReports[shift.label])}
                                             disabled={!access.accessible}
-                                            className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 text-sm ${!access.accessible
+                                            className={`flex-1 py-1.5 px-3 rounded-lg font-semibold transition flex items-center justify-center gap-1.5 text-xs sm:text-sm ${!access.accessible
                                                 ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                                                 : shiftReports[shift.label]
                                                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm hover:shadow-md'
@@ -418,7 +418,7 @@ export default function Incidents() {
                                                 `${access.hoursUntil} saat kaldı`
                                             ) : shiftReports[shift.label] ? (
                                                 <>
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                     </svg>
                                                     Raporu Düzenle

@@ -324,8 +324,7 @@ export default function AdminVisitorQrManagement() {
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
-                                    <QrCode className="w-8 h-8 text-blue-500" />
+                                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words">
                                     Misafir QR Yönetimi
                                 </h1>
                                 <p className="text-sm text-slate-300 mt-1">
@@ -346,7 +345,7 @@ export default function AdminVisitorQrManagement() {
                             <button
                                 type="button"
                                 onClick={() => setShowCreateModal(true)}
-                                className="flex-1 sm:flex-none bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all hover:scale-[1.02] shadow-sm text-sm"
+                                className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm text-sm"
                             >
                                 <Plus className="w-4.5 h-4.5" />
                                 Yeni QR Oluştur
@@ -357,24 +356,11 @@ export default function AdminVisitorQrManagement() {
             </header>
 
             <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 max-w-7xl mx-auto">
-                {/* Localhost / LAN Network warning */}
-                {isLocalhostOrigin && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5 text-amber-900 shadow-sm">
-                        <Info className="w-5.5 h-5.5 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1 text-xs sm:text-sm">
-                            <span className="font-bold text-amber-800 block">Lokal Geliştirme Ortamı (LAN Bağlantısı)</span>
-                            <p className="text-amber-750 leading-relaxed">
-                                Şu anda localhost üzerindesiniz. QR kodların akıllı telefonlar tarafından taranıp çalışabilmesi için telefonunuz ile bilgisayarınızın aynı kablosuz (Wi-Fi) ağda olması gerekir. 
-                                Karekodlar otomatik olarak LAN IP adresiniz <span className="font-mono bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded text-amber-800">{qrBaseUrl}</span> hedefiyle üretilmektedir.
-                            </p>
-                        </div>
-                    </div>
-                )}
+
 
                 {/* QR Cards Grid */}
                 {!sortedGates.length ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500 shadow-sm flex flex-col items-center gap-3 justify-center min-h-[300px]">
-                        <QrCode className="w-16 h-16 text-gray-400 stroke-[1.5]" />
                         <span className="text-lg font-medium text-gray-700">Tanımlı Geçiş Kapısı Yok</span>
                         <span className="text-sm text-gray-450 max-w-md">Karekod üretebilmek için öncelikle sisteme en az bir kapı eklemeniz gerekmektedir.</span>
                     </div>
@@ -460,7 +446,7 @@ export default function AdminVisitorQrManagement() {
                                             type="button"
                                             onClick={() => handlePrint(gate.code, gate.name)}
                                             disabled={!qrDataUrl}
-                                            className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                                         >
                                             <Printer className="w-4 h-4" />
                                             Yazdır
@@ -478,7 +464,6 @@ export default function AdminVisitorQrManagement() {
                 <div className="fixed inset-0 z-50 bg-black/45 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
                     <div className="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl p-6 text-gray-800 animate-scaleIn">
                         <div className="flex items-center gap-2 mb-4">
-                            <QrCode className="w-5 h-5 text-blue-500" />
                             <h2 className="text-lg font-bold text-gray-900">Yeni QR Karekod Oluştur</h2>
                         </div>
 
@@ -515,7 +500,7 @@ export default function AdminVisitorQrManagement() {
                                 type="button"
                                 onClick={() => void handleCreateFromModal()}
                                 disabled={!createGateCode}
-                                className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white rounded-xl text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                                 Oluştur
                             </button>
