@@ -31,20 +31,47 @@ const getSocket = (): Socket => {
         return socket;
     }
 
+    const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+
     socket = io(SOCKET_SERVER_URL, {
         path: '/api/socket.io/',
         transports: ['websocket', 'polling'],
+        auth: { token },
         autoConnect: true,
         reconnection: true,
     });
 
+    (socket as any)._lastToken = token;
+
     return socket;
 };
 
-export const initializeRealtimeClient = (): Socket => getSocket();
+export const initializeRealtimeClient = (): Socket => {
+    const client = getSocket();
+    const currentToken = localStorage.getItem('token') || localStorage.getItem('adminToken');
+    
+    if ((client as any)._lastToken !== currentToken) {
+        (client as any)._lastToken = currentToken;
+        client.auth = { token: currentToken };
+        if (client.connected) {
+            client.disconnect().connect();
+        }
+    }
+    return client;
+};
 
 export const subscribeToApiMutations = (listener: MutationListener): (() => void) => {
     const client = getSocket();
+
+    // Dynamically check if token changed (e.g. after login/logout) and reconnect if necessary
+    const currentToken = localStorage.getItem('token') || localStorage.getItem('adminToken');
+    if ((client as any)._lastToken !== currentToken) {
+        (client as any)._lastToken = currentToken;
+        client.auth = { token: currentToken };
+        if (client.connected) {
+            client.disconnect().connect();
+        }
+    }
 
     const wrapper = (event: ApiMutationEvent) => {
         try {
@@ -65,3 +92,4 @@ export const subscribeToApiMutations = (listener: MutationListener): (() => void
         client.off('api:mutation', wrapper);
     };
 };
+
