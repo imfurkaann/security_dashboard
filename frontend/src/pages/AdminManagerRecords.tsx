@@ -83,6 +83,7 @@ export default function AdminManagerRecords() {
     const [editExitTime, setEditExitTime] = useState('');
     const [editNotes, setEditNotes] = useState('');
     const [savingEdit, setSavingEdit] = useState(false);
+    const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const navigate = useNavigate();
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -497,6 +498,26 @@ export default function AdminManagerRecords() {
         }
     };
 
+    const renderPreviewText = (value: string | null | undefined, title: string) => {
+        const text = (value || '-').toString();
+        const isLong = text.length > 15;
+
+        if (!isLong) {
+            return <div className="text-xs text-gray-900 block max-w-[140px] truncate whitespace-nowrap overflow-hidden" title={text}>{text}</div>;
+        }
+
+        return (
+            <button
+                type="button"
+                onClick={() => setTextPreview({ title, value: text })}
+                className="text-xs text-blue-700 hover:text-blue-900 underline text-left block max-w-[140px] truncate whitespace-nowrap overflow-hidden"
+                title="Tamamını görmek için tıklayın"
+            >
+                {text}
+            </button>
+        );
+    };
+
     useEffect(() => {
         const updateScrollbarWidth = () => {
             const tableScrollWidth = tableScrollRef.current?.scrollWidth ?? 0;
@@ -814,7 +835,7 @@ export default function AdminManagerRecords() {
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0">
+                <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-visible flex-1 min-h-0">
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -838,7 +859,7 @@ export default function AdminManagerRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1050px] table-auto divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1150px] table-auto divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
                                                 <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlemler</th>
@@ -848,6 +869,7 @@ export default function AdminManagerRecords() {
                                                 <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Tarihi</th>
                                                 <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Giriş Yapan</th>
                                                 <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Çıkış Yapan</th>
+                                                <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Açıklama</th>
                                                 <th className="px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Durum</th>
                                             </tr>
                                         </thead>
@@ -923,6 +945,9 @@ export default function AdminManagerRecords() {
                                                         <div className="text-xs text-gray-900">{record.exit_by || '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
+                                                        {renderPreviewText(record.notes, 'Açıklama')}
+                                                    </td>
+                                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                                         <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                                                             {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
                                                         </span>
@@ -943,6 +968,26 @@ export default function AdminManagerRecords() {
                     <div style={{ width: `${scrollbarSpacerWidth}px`, height: 1 }} />
                 </div>
             </div>
+
+            {textPreview && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
+                            <button
+                                type="button"
+                                onClick={() => setTextPreview(null)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+                        <div className="px-4 py-4">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {showEditModal && editingRecord && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

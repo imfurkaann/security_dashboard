@@ -8,6 +8,7 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { formatPhoneNumber } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
 
@@ -832,10 +833,9 @@ export default function VisitorRecords() {
                                         <h3 className="text-sm font-semibold text-gray-800">{dayGroup.dayLabel}</h3>
                                     </div>
 
-                                    <table className="w-full min-w-[1600px] table-fixed divide-y divide-gray-200">
+                                    <table className="w-full min-w-[1540px] table-fixed divide-y divide-gray-200">
                                         <thead className="bg-gray-50 sticky top-10 z-10">
                                             <tr>
-                                                <th className="w-[60px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İşlem</th>
                                                 <th className="w-[80px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Kapı</th>
                                                 <th className="w-[100px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Araç Plaka</th>
                                                 <th className="w-[130px] px-3 py-2.5 whitespace-nowrap text-left text-[11px] font-semibold text-gray-500 uppercase tracking-wider">İsim Soyisim</th>
@@ -856,9 +856,6 @@ export default function VisitorRecords() {
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
                                                 <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`} style={getVisitorRowStyle(record)}>
-                                                    <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        <div className="text-xs text-gray-500">-</div>
-                                                    </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
@@ -911,7 +908,7 @@ export default function VisitorRecords() {
                                                         <div className="text-xs text-gray-900">{record.children_count ?? '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        <div className="text-xs text-gray-900">{record.phone || '-'}</div>
+                                                        <div className="text-xs text-gray-900">{formatPhoneNumber(record.phone)}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
                                                         {renderPreviewText(record.notes, 'Açıklama')}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { message } from 'antd';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
@@ -17,6 +17,8 @@ const EMPTY_SCHEMA: GuestRegistrySchema = { columns: [] };
 
 export default function GuestRegistry() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const isAdmin = location.pathname.startsWith('/admin');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
@@ -330,7 +332,7 @@ export default function GuestRegistry() {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                             <button
-                                onClick={() => navigate('/dashboard')}
+                                onClick={() => navigate(isAdmin ? '/admin/dashboard' : '/dashboard')}
                                 className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

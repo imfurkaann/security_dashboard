@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { ArrowLeft, Car, ShieldAlert, Check, Percent, Layers, Gauge } from 'lucide-react';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -33,6 +35,7 @@ const getInitialReserved = (): string => {
 };
 
 export default function AdminParkingManagement() {
+    const navigate = useNavigate();
     const [capacityInput, setCapacityInput] = useState<string>(getInitialCapacity);
     const [reservedInput, setReservedInput] = useState<string>(getInitialReserved);
     const [successMessage, setSuccessMessage] = useState('');
@@ -60,15 +63,12 @@ export default function AdminParkingManagement() {
         enabled: true,
     });
 
-    const previewMessage = useMemo(() => {
-        if (!capacityInput) {
-            return 'Henüz kapasite girilmedi';
-        }
-
-        const reserved = reservedInput ? Number(reservedInput) : 0;
-        const available = Number(capacityInput) - reserved;
-
-        return `Toplam kapasite: ${capacityInput} | Rezerve: ${reserved} | Mevcut: ${available}`;
+    const parsedStats = useMemo(() => {
+        const capacity = capacityInput ? Math.max(0, Math.floor(Number(capacityInput))) : 0;
+        const reserved = reservedInput ? Math.max(0, Math.floor(Number(reservedInput))) : 0;
+        const available = Math.max(0, capacity - reserved);
+        const ratio = capacity > 0 ? (reserved / capacity) * 100 : 0;
+        return { capacity, reserved, available, ratio };
     }, [capacityInput, reservedInput]);
 
     const handleSave = (event: React.FormEvent<HTMLFormElement>) => {
@@ -79,13 +79,13 @@ export default function AdminParkingManagement() {
         const numericCapacity = Number(capacityInput);
         const numericReserved = Number(reservedInput || 0);
 
-        if (!Number.isFinite(numericCapacity) || numericCapacity < 0) {
-            setErrorMessage('Lütfen otopark kapasitesi için 0 veya daha büyük bir sayı girin');
+        if (Number.isNaN(numericCapacity) || numericCapacity < 0 || !capacityInput.trim()) {
+            setErrorMessage('Lütfen otopark kapasitesi için geçerli bir sayı girin');
             return;
         }
 
-        if (!Number.isFinite(numericReserved) || numericReserved < 0) {
-            setErrorMessage('Lütfen rezerve otopark sayısı için 0 veya daha büyük bir sayı girin');
+        if (Number.isNaN(numericReserved) || numericReserved < 0) {
+            setErrorMessage('Lütfen rezerve otopark sayısı için geçerli bir sayı veya 0 girin');
             return;
         }
 
@@ -98,76 +98,184 @@ export default function AdminParkingManagement() {
         localStorage.setItem(PARKING_RESERVED_STORAGE_KEY, String(Math.floor(numericReserved)));
         setCapacityInput(String(Math.floor(numericCapacity)));
         setReservedInput(String(Math.floor(numericReserved)));
-        setSuccessMessage('Otopark ayarları kaydedildi');
+        setSuccessMessage('Otopark ayarları başarıyla kaydedildi');
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
+        <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight">Otopark Yönetimi</h1>
-                    <p className="text-sm sm:text-base text-slate-200 mt-1">
-
-                    </p>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+                    <div className="flex items-center gap-4 min-w-0">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/admin/dashboard')}
+                            className="p-2.5 hover:bg-slate-800 rounded-xl transition shrink-0 border border-slate-700/60 bg-slate-800/45 text-slate-300 hover:text-white"
+                            title="Geri Dön"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
+                                <Car className="w-8 h-8 text-blue-500" />
+                                Otopark Yönetimi
+                            </h1>
+                            <p className="text-sm text-slate-300 mt-1">
+                                Otopark kapasitesini ve rezerve park yeri verilerini kontrol edin.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8">
-                <div className="max-w-3xl bg-white rounded-lg shadow px-4 sm:px-6 py-5 sm:py-6 border border-gray-100">
-                    <form onSubmit={handleSave} className="space-y-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6 max-w-5xl mx-auto">
+                {successMessage && (
+                    <div className="bg-emerald-50 border border-emerald-250 text-emerald-850 rounded-xl px-4 py-3.5 flex items-center gap-3 animate-fadeIn">
+                        <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <span className="text-sm font-medium">{successMessage}</span>
+                    </div>
+                )}
+
+                {errorMessage && (
+                    <div className="bg-red-50 border border-red-250 text-red-850 rounded-xl px-4 py-3.5 flex items-center gap-3 animate-fadeIn">
+                        <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" />
+                        <span className="text-sm font-medium">{errorMessage}</span>
+                    </div>
+                )}
+
+                {/* KPI Summary Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Capacity card */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm relative overflow-hidden group">
+                        <div className="absolute right-4 top-4 text-slate-100 group-hover:text-slate-200/50 transition-colors">
+                            <Layers className="w-12 h-12" />
+                        </div>
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Toplam Kapasite</span>
+                        <span className="block text-3xl font-extrabold text-slate-900 mt-2">
+                            {parsedStats.capacity || '-'}
+                        </span>
+                        <span className="block text-xs text-slate-400 mt-1.5">Tanımlı toplam araç yeri</span>
+                    </div>
+
+                    {/* Reserved card */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm relative overflow-hidden group">
+                        <div className="absolute right-4 top-4 text-amber-100 group-hover:text-amber-200/50 transition-colors">
+                            <Gauge className="w-12 h-12" />
+                        </div>
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Rezerve Yer</span>
+                        <span className="block text-3xl font-extrabold text-amber-600 mt-2">
+                            {parsedStats.reserved}
+                        </span>
+                        <span className="block text-xs text-slate-400 mt-1.5">Dolu / Korumalı park yeri</span>
+                    </div>
+
+                    {/* Available card */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm relative overflow-hidden group">
+                        <div className="absolute right-4 top-4 text-emerald-100 group-hover:text-emerald-200/50 transition-colors">
+                            <Car className="w-12 h-12" />
+                        </div>
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Mevcut Boş Yer</span>
+                        <span className="block text-3xl font-extrabold text-emerald-600 mt-2">
+                            {parsedStats.available}
+                        </span>
+                        <span className="block text-xs text-slate-400 mt-1.5">Giriş yapabilecek boş kapasite</span>
+                    </div>
+                </div>
+
+                {/* Progress bar card */}
+                {parsedStats.capacity > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                <Percent className="w-4 h-4 text-blue-500" />
+                                Canlı Doluluk Oranı
+                            </span>
+                            <span className="text-sm font-extrabold text-blue-800 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+                                %{parsedStats.ratio.toFixed(1)}
+                            </span>
+                        </div>
+                        
+                        <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden border border-slate-200 p-0.5">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-700 ease-out bg-gradient-to-r ${
+                                    parsedStats.ratio > 85 
+                                        ? 'from-red-500 to-rose-500' 
+                                        : parsedStats.ratio > 65 
+                                            ? 'from-amber-500 to-yellow-500' 
+                                            : 'from-emerald-500 to-teal-500'
+                                }`}
+                                style={{ width: `${Math.min(100, parsedStats.ratio)}%` }}
+                            />
+                        </div>
+                        
+                        <div className="flex justify-between text-xs text-slate-450 mt-2.5">
+                            <span>%0 (Boş)</span>
+                            <span>%50</span>
+                            <span>%100 (Dolu)</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Configuration form */}
+                <div className="bg-white border border-gray-200 rounded-2xl p-6 md:p-8 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-900 mb-5 pb-3 border-b border-gray-150">
+                        Otopark Konfigürasyon Ayarları
+                    </h2>
+
+                    <form onSubmit={handleSave} className="space-y-6 max-w-xl">
                         <div>
-                            <label htmlFor="parking-capacity" className="mb-2 block text-sm font-medium text-gray-700">
+                            <label htmlFor="parking-capacity" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                                 Otopark Kapasitesi
                             </label>
-                            <input
-                                id="parking-capacity"
-                                type="number"
-                                min={0}
-                                inputMode="numeric"
-                                value={capacityInput}
-                                onChange={(event) => {
-                                    setCapacityInput(event.target.value);
-                                    setSuccessMessage('');
-                                    setErrorMessage('');
-                                }}
-                                placeholder="Ornek: 300"
-                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none transition focus:border-blue-500"
-                            />
+                            <div className="relative">
+                                <input
+                                    id="parking-capacity"
+                                    type="number"
+                                    min={0}
+                                    inputMode="numeric"
+                                    value={capacityInput}
+                                    onChange={(event) => {
+                                        setCapacityInput(event.target.value);
+                                        setSuccessMessage('');
+                                        setErrorMessage('');
+                                    }}
+                                    placeholder="Örn: 300"
+                                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 outline-none text-gray-900 text-sm transition-all focus:ring-1 focus:ring-blue-500/20"
+                                />
+                            </div>
+                            <span className="block text-xs text-slate-400 mt-1.5">Güvenlik kapısı ekranlarında görünecek toplam otopark alanı sayısı.</span>
                         </div>
 
                         <div>
-                            <label htmlFor="parking-reserved" className="mb-2 block text-sm font-medium text-gray-700">
-                                Rezerve Otopark Sayısı
+                            <label htmlFor="parking-reserved" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                                Rezerve / Dolu Otopark Sayısı
                             </label>
-                            <input
-                                id="parking-reserved"
-                                type="number"
-                                min={0}
-                                inputMode="numeric"
-                                value={reservedInput}
-                                onChange={(event) => {
-                                    setReservedInput(event.target.value);
-                                    setSuccessMessage('');
-                                    setErrorMessage('');
-                                }}
-                                placeholder="Ornek: 20"
-                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 outline-none transition focus:border-blue-500"
-                            />
+                            <div className="relative">
+                                <input
+                                    id="parking-reserved"
+                                    type="number"
+                                    min={0}
+                                    inputMode="numeric"
+                                    value={reservedInput}
+                                    onChange={(event) => {
+                                        setReservedInput(event.target.value);
+                                        setSuccessMessage('');
+                                        setErrorMessage('');
+                                    }}
+                                    placeholder="Örn: 20"
+                                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl focus:border-blue-500 outline-none text-gray-900 text-sm transition-all focus:ring-1 focus:ring-blue-500/20"
+                                />
+                            </div>
+                            <span className="block text-xs text-slate-400 mt-1.5">Şu anda içeride olan veya rezerve edilmiş park yeri miktarı.</span>
                         </div>
 
-                        <button
-                            type="submit"
-                            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-                        >
-                            Kaydet
-                        </button>
-
-                        <div className="rounded-md bg-blue-50 border border-blue-100 px-3 py-2">
-                            <p className="text-sm text-blue-800">{previewMessage}</p>
+                        <div className="pt-2 border-t border-slate-100">
+                            <button
+                                type="submit"
+                                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm text-sm"
+                            >
+                                Yapılandırmayı Kaydet
+                            </button>
                         </div>
-
-                        {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
-                        {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
                     </form>
                 </div>
             </main>

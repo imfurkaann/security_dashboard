@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
 import api from '../utils/api';
@@ -94,6 +95,7 @@ const renderWrappedNameTick = ({
 };
 
 export default function AdminPersonnelStatistics() {
+    const navigate = useNavigate();
     const [period, setPeriod] = useState<PeriodType>('weekly');
     const [rows, setRows] = useState<PersonnelStatRow[]>([]);
     const [startDate, setStartDate] = useState<string | null>(null);
@@ -179,15 +181,75 @@ export default function AdminPersonnelStatistics() {
         return `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`;
     }, [startDate, endDate]);
 
+    const statsCards = useMemo(() => {
+        const topPerson = chartData[0];
+        return [
+            {
+                title: 'Toplam Kayıt Sayısı',
+                value: totals.totalCount,
+                subtitle: 'Sistemdeki toplam kayıt',
+                gradient: 'from-blue-600 to-indigo-700',
+                icon: (
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                )
+            },
+            {
+                title: 'En Aktif Personel',
+                value: topPerson ? `${topPerson.firstName} ${topPerson.lastName}` : '-',
+                subtitle: topPerson ? `${topPerson.totalCount} kayıt` : 'Kayıt bulunamadı',
+                gradient: 'from-purple-600 to-indigo-700',
+                icon: (
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                )
+            },
+            {
+                title: 'Yangın Alarmları',
+                value: totals.fireAlarmCount,
+                subtitle: 'Toplam yangın alarmı',
+                gradient: 'from-rose-500 to-red-700',
+                icon: (
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                )
+            },
+            {
+                title: 'Ziyaretçi Girişleri',
+                value: totals.visitorCount,
+                subtitle: 'Otel ziyaretçi kayıtları',
+                gradient: 'from-emerald-500 to-teal-700',
+                icon: (
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                )
+            }
+        ];
+    }, [totals, chartData]);
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Admin Paneli</p>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Personel İstatistiği</h1>
-                            <p className="text-sm sm:text-base text-slate-200 mt-1">Personel bazlı kayıt performansı ({PERIOD_LABELS[period]})</p>
+                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                            <button
+                                onClick={() => navigate('/admin/dashboard')}
+                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                            </button>
+                            <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Admin Paneli</p>
+                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Personel İstatistiği</h1>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Personel bazlı kayıt performansı ({PERIOD_LABELS[period]})</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -214,19 +276,21 @@ export default function AdminPersonnelStatistics() {
                             <button
                                 onClick={() => fetchStats(period)}
                                 disabled={loading}
-                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                             >
                                 <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                                 Yenile
                             </button>
                         </div>
 
-                        <div className="xl:ml-auto text-sm text-slate-600">
+                        <div className="xl:ml-auto text-sm text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
                             <span className="text-slate-500">Tarih Aralığı:</span>{' '}
                             <span className="font-semibold text-slate-900">{periodRangeText}</span>
                         </div>
                     </div>
                 </div>
+
+
 
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                     <div className="px-3 sm:px-4 pt-4 pb-3 border-b border-gray-100">
@@ -281,7 +345,7 @@ export default function AdminPersonnelStatistics() {
                         )}
                     </div>
 
-                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-slate-50/50">
                         <h2 className="text-base font-bold text-gray-900">Personel Performans Tablosu</h2>
                         {loading && <span className="text-sm text-gray-500">Yükleniyor...</span>}
                     </div>
@@ -290,16 +354,16 @@ export default function AdminPersonnelStatistics() {
 
                     <div className="w-full overflow-x-auto">
                         <table className="w-full min-w-full lg:min-w-[920px] table-fixed text-xs sm:text-sm">
-                            <thead className="bg-slate-50">
+                            <thead className="bg-slate-50/80 sticky top-0 border-b border-slate-100">
                                 <tr>
-                                    <th className="w-12 px-2 py-2 text-left font-semibold text-slate-700">#</th>
-                                    <th className="px-2 py-2 text-left font-semibold text-slate-700">Personel</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">Araç</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">Ziyaretçi</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">Müdür</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">Yangın</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">SGK</th>
-                                    <th className="w-24 px-2 py-2 text-right font-semibold text-slate-700">Toplam</th>
+                                    <th className="w-14 px-2 py-3 text-left font-semibold text-slate-700">#</th>
+                                    <th className="px-2 py-3 text-left font-semibold text-slate-700">Personel</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">Araç</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">Ziyaretçi</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">Müdür</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">Yangın</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">SGK</th>
+                                    <th className="w-24 px-2 py-3 text-right font-semibold text-slate-700">Toplam</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -311,33 +375,46 @@ export default function AdminPersonnelStatistics() {
                                     </tr>
                                 )}
 
-                                {rows.map((row, index) => (
-                                    <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/70">
-                                        <td className="px-2 py-2 text-slate-700">{index + 1}</td>
-                                        <td className="px-2 py-2 min-w-0">
-                                            <div className="font-medium text-slate-900 truncate">{row.firstName} {row.lastName}</div>
-                                            <div className="text-xs text-slate-500 truncate">@{row.username}</div>
-                                        </td>
-                                        <td className="px-2 py-2 text-right text-slate-800 whitespace-nowrap">{row.vehicleCount}</td>
-                                        <td className="px-2 py-2 text-right text-slate-800 whitespace-nowrap">{row.visitorCount}</td>
-                                        <td className="px-2 py-2 text-right text-slate-800 whitespace-nowrap">{row.managerCount}</td>
-                                        <td className="px-2 py-2 text-right text-slate-800 whitespace-nowrap">{row.fireAlarmCount}</td>
-                                        <td className="px-2 py-2 text-right text-slate-800 whitespace-nowrap">{row.sgkCount}</td>
-                                        <td className="px-2 py-2 text-right font-semibold text-blue-700 whitespace-nowrap">{row.totalCount}</td>
-                                    </tr>
-                                ))}
+                                {rows.map((row, index) => {
+                                    let rankBadge = null;
+                                    if (index === 0) {
+                                        rankBadge = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300 shadow-sm">1</span>;
+                                    } else if (index === 1) {
+                                        rankBadge = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-bold border border-slate-400 shadow-sm">2</span>;
+                                    } else if (index === 2) {
+                                        rankBadge = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold border border-orange-300 shadow-sm">3</span>;
+                                    } else {
+                                        rankBadge = <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-50 text-slate-500 text-[10px] font-medium border border-slate-200">{index + 1}</span>;
+                                    }
+
+                                    return (
+                                        <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/70 transition-colors">
+                                            <td className="px-2 py-3 text-slate-700">{rankBadge}</td>
+                                            <td className="px-2 py-3 min-w-0">
+                                                <div className="font-bold text-slate-850 text-xs sm:text-sm truncate">{row.firstName} {row.lastName}</div>
+                                                <div className="text-xs text-slate-500 truncate">@{row.username}</div>
+                                            </td>
+                                            <td className="px-2 py-3 text-right text-slate-800 whitespace-nowrap font-medium">{row.vehicleCount}</td>
+                                            <td className="px-2 py-3 text-right text-slate-800 whitespace-nowrap font-medium">{row.visitorCount}</td>
+                                            <td className="px-2 py-3 text-right text-slate-800 whitespace-nowrap font-medium">{row.managerCount}</td>
+                                            <td className="px-2 py-3 text-right text-slate-800 whitespace-nowrap font-medium">{row.fireAlarmCount}</td>
+                                            <td className="px-2 py-3 text-right text-slate-800 whitespace-nowrap font-medium">{row.sgkCount}</td>
+                                            <td className="px-2 py-3 text-right font-bold text-blue-700 whitespace-nowrap">{row.totalCount}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                             <tfoot className="bg-slate-50 border-t border-slate-200">
                                 <tr>
-                                    <td className="px-2 py-2" colSpan={2}>
-                                        <span className="font-semibold text-gray-800">Genel Toplam</span>
+                                    <td className="px-2 py-3" colSpan={2}>
+                                        <span className="font-bold text-slate-800">Genel Toplam</span>
                                     </td>
-                                    <td className="px-2 py-2 text-right font-semibold text-slate-900 whitespace-nowrap">{totals.vehicleCount}</td>
-                                    <td className="px-2 py-2 text-right font-semibold text-slate-900 whitespace-nowrap">{totals.visitorCount}</td>
-                                    <td className="px-2 py-2 text-right font-semibold text-slate-900 whitespace-nowrap">{totals.managerCount}</td>
-                                    <td className="px-2 py-2 text-right font-semibold text-slate-900 whitespace-nowrap">{totals.fireAlarmCount}</td>
-                                    <td className="px-2 py-2 text-right font-semibold text-slate-900 whitespace-nowrap">{totals.sgkCount}</td>
-                                    <td className="px-2 py-2 text-right font-bold text-blue-800 whitespace-nowrap">{totals.totalCount}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{totals.vehicleCount}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{totals.visitorCount}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{totals.managerCount}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{totals.fireAlarmCount}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-slate-900 whitespace-nowrap">{totals.sgkCount}</td>
+                                    <td className="px-2 py-3 text-right font-extrabold text-blue-800 whitespace-nowrap">{totals.totalCount}</td>
                                 </tr>
                             </tfoot>
                         </table>

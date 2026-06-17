@@ -157,6 +157,40 @@ export const normalizePhone = (phone: string | null | undefined): string | null 
 };
 
 /**
+ * Telefon numarasını okunabilir formatta biçimlendirir.
+ * Örnek: +905321234567 -> +90 532 123 45 67 veya 05321234567 -> 0532 123 45 67
+ */
+export const formatPhoneNumber = (phone: string | null | undefined): string => {
+    if (!phone) return '-';
+    // Boşlukları ve özel karakterleri temizleyelim
+    const clean = String(phone).replace(/[^\d+]/g, '').trim();
+    
+    // +90 ile başlıyorsa ve 13 haneliyse (+90 5XX XXX XX XX)
+    if (clean.startsWith('+90') && clean.length === 13) {
+        return `+90 ${clean.substring(3, 6)} ${clean.substring(6, 9)} ${clean.substring(9, 11)} ${clean.substring(11, 13)}`;
+    }
+    // 90 ile başlıyorsa ve 12 haneliyse (90 5XX XXX XX XX)
+    if (clean.startsWith('90') && clean.length === 12) {
+        return `+90 ${clean.substring(2, 5)} ${clean.substring(5, 8)} ${clean.substring(8, 10)} ${clean.substring(10, 12)}`;
+    }
+    // 0 ile başlıyorsa ve 11 haneliyse (05XX XXX XX XX)
+    if (clean.startsWith('0') && clean.length === 11) {
+        return `${clean.substring(0, 4)} ${clean.substring(4, 7)} ${clean.substring(7, 9)} ${clean.substring(9, 11)}`;
+    }
+    // 0 olmadan 10 haneliyse (5XX XXX XX XX)
+    if (clean.length === 10 && clean.startsWith('5')) {
+        return `${clean.substring(0, 3)} ${clean.substring(3, 6)} ${clean.substring(6, 8)} ${clean.substring(8, 10)}`;
+    }
+    
+    // Eğer 7 haneliyse (şehir içi numara gibi: XXX XX XX)
+    if (clean.length === 7) {
+        return `${clean.substring(0, 3)} ${clean.substring(3, 5)} ${clean.substring(5, 7)}`;
+    }
+    
+    return phone;
+};
+
+/**
  * Validation sonucu tipi
  */
 export interface ValidationResult {
@@ -420,6 +454,7 @@ export default {
     isEmptyOrWhitespace,
     normalizePlate,
     normalizePhone,
+    formatPhoneNumber,
     validateFields,
     validateVisitorForm,
     validateVehicleForm,
