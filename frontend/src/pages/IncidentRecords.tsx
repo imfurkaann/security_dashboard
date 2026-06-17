@@ -514,7 +514,9 @@ export default function IncidentRecords() {
                                                         <div className="text-xs text-gray-900">{record.gate || '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 align-top">
-                                                        {renderPreviewText(record.description, 'Açıklama')}
+                                                        <div className="text-xs text-gray-900 break-words whitespace-pre-wrap">
+                                                            {record.description || '-'}
+                                                        </div>
                                                     </td>
                                                     <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.reported_by}</div>
