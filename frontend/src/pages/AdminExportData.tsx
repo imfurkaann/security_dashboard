@@ -262,8 +262,7 @@ export default function AdminExportData() {
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div className="min-w-0">
-                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
-                                <FileDown className="w-8 h-8 text-blue-500" />
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words">
                                 Veri Dışa Aktarma Merkezi
                             </h1>
                             <p className="text-sm text-slate-300 mt-1">
@@ -343,7 +342,7 @@ export default function AdminExportData() {
                         <button
                             onClick={fetchPreview}
                             disabled={previewLoading || !startDate || !endDate}
-                            className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-655 hover:from-blue-700 hover:to-indigo-755 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all hover:scale-[1.02] text-sm shadow-sm"
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-sm shadow-sm"
                         >
                             {previewLoading ? (
                                 <>
@@ -542,7 +541,7 @@ export default function AdminExportData() {
                     <button
                         onClick={handleExport}
                         disabled={downloading || !startDate || !endDate || noneSelected}
-                        className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-655 hover:from-emerald-700 hover:to-teal-755 text-white rounded-xl font-bold text-base disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2.5 shadow-sm"
+                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-base disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2.5 shadow-sm"
                     >
                         {downloading ? (
                             <>

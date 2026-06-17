@@ -475,28 +475,28 @@ export default function FireAlarms() {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel Yangın Alarmları Kayıt Sayfası</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel yangın alarm kayıtlarını yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Yangın Alarmları Kayıt Sayfası</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel yangın alarm kayıtlarını yönetin.</p>
                             </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
-                            <button onClick={() => navigate('/fire-alarm-records')} className="flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 w-full lg:w-auto">
+                            <button onClick={() => navigate('/fire-alarm-records')} className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold w-full sm:w-auto">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                                 </svg>
                                 Kayıt Filtrele
                             </button>
-                            <button onClick={openModalForNew} className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button onClick={openModalForNew} className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold w-full sm:w-auto">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                 </svg>
                                 Yeni Alarm Kaydı
@@ -506,33 +506,33 @@ export default function FireAlarms() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 pb-14 flex flex-col gap-4 overflow-hidden">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 <div className="w-full">
-                    <div className={`${dashboardCardBase} border-orange-500 bg-gradient-to-br from-orange-500 to-orange-700 mb-3`}>
-                        <div className="flex items-center gap-3 min-h-[48px]">
-                            <div className={`${dashboardIconBase} border-orange-300/60`}>
-                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
+                    <div className="rounded-xl shadow-sm p-2.5 border border-orange-500 bg-gradient-to-br from-orange-500 to-orange-700 mb-2.5">
+                        <div className="flex items-center justify-between px-2">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-white/20 rounded-lg border border-orange-300/60 shrink-0 text-white">
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                                <span className="text-xs font-bold text-white/95 uppercase tracking-wider">Bugün Çalan Alarm Sayısı</span>
                             </div>
-                            <div className="min-w-0 flex-1 text-center">
-                                <p className={dashboardLabelBase}>Bugün Çalan Alarm Sayısı</p>
-                                <p className={dashboardValueBase}>{stats.todayAlarms}</p>
-                            </div>
+                            <span className="text-xl font-extrabold text-white">{stats.todayAlarms}</span>
                         </div>
                     </div>
 
                     {/* Filters */}
-                    <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                    <div className="bg-white rounded-lg shadow px-3 py-1.5 mb-2.5 w-full">
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                            <button onClick={() => setFilter('today')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            <button onClick={() => setFilter('today')} className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'today' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Bugünün Alarmları ({stats.todayAlarms})
                             </button>
-                            <button onClick={() => setFilter('active')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'active' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            <button onClick={() => setFilter('active')} className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'active' ? 'bg-yellow-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Aktif Alarmlar ({stats.activeAlarms})
                             </button>
                             {/* "Çözülen Alarmlar" tab removed as requested */}
-                            <button onClick={() => setFilter('deleted')} className={`px-3 sm:px-3.5 py-1.5 rounded-md transition text-sm ${filter === 'deleted' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                            <button onClick={() => setFilter('deleted')} className={`px-3 py-1 rounded-md transition text-xs sm:text-sm ${filter === 'deleted' ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                                 Silinen Kayıtlar ({todayDeletedRecords.length})
                             </button>
 

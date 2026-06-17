@@ -354,30 +354,30 @@ export default function IncidentRecords() {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
                             <button
                                 onClick={() => navigate('/incidents')}
-                                className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0"
                             >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Olay Kayıtları</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Olay Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
                         <button
                             onClick={handleDownloadRecords}
                             disabled={isExporting || loading || filteredRecords.length === 0}
-                            className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                            className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                         >
                             {isExporting ? (
                                 <>
-                                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                     </svg>
@@ -385,7 +385,7 @@ export default function IncidentRecords() {
                                 </>
                             ) : (
                                 <>
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                     </svg>
                                     Rapor İndir
@@ -396,9 +396,9 @@ export default function IncidentRecords() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 {/* Filters Panel */}
-                <div className="bg-white rounded-lg shadow px-3 py-2 mb-3 w-full">
+                <div className="bg-white rounded-lg shadow px-3 py-1.5 mb-2.5 w-full">
                     <div className="flex justify-between items-center mb-3">
                         <h2 className="text-base font-bold text-gray-900">Filtreler</h2>
                         <button

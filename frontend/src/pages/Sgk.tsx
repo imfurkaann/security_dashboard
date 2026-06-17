@@ -644,24 +644,24 @@ export default function Sgk() {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header */}
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-                            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-slate-800 rounded-lg transition shrink-0">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <button onClick={() => navigate('/dashboard')} className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Otel SGK Belge Kayıt Sayfası</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Otel SGK belgelerini yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel SGK Belge Kayıt Sayfası</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel SGK belgelerini yönetin.</p>
                             </div>
                         </div>
                         <button
                             onClick={() => { resetUploadForm(); setShowUploadModal(true); }}
-                            className="flex items-center justify-center gap-2 bg-slate-600 hover:bg-slate-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base w-full sm:w-auto"
+                            className="flex w-full lg:w-auto items-center justify-center gap-1.5 bg-slate-600 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition shadow-sm text-xs sm:text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
                             SGK Belgesi Kaydet
@@ -670,22 +670,22 @@ export default function Sgk() {
                 </div>
             </header>
 
-            <main className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-4">
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3 overflow-hidden">
                 {/* Filter Section */}
-                <div className="w-full bg-white rounded-lg shadow border border-gray-200 p-4 sm:p-5 mb-2">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
-                        <h2 className="text-xl font-bold text-gray-900">
+                <div className="w-full bg-white rounded-lg shadow border border-gray-200 px-3 py-1.5 mb-2.5">
+                    <div className="flex justify-between items-center mb-3">
+                        <h2 className="text-base font-bold text-gray-900">
                             SGK Belgeleri
-                            <span className="block sm:inline sm:ml-3 text-sm font-normal text-gray-500">
+                            <span className="block sm:inline sm:ml-2 text-xs font-normal text-gray-500">
                                 ({filteredRecords.length} kayıt{hasActiveFilters && ` - ${allRecords.length} toplam`})
                             </span>
                         </h2>
                         {hasActiveFilters && (
                             <button
                                 onClick={resetFilters}
-                                className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                                 Filtreleri Temizle

@@ -281,8 +281,7 @@ export default function AdminGateEquipmentConfig() {
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
-                                    <Layers className="w-8 h-8 text-blue-500" />
+                                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words">
                                     Kapı ve Ekipman Yönetimi
                                 </h1>
                                 <p className="text-sm text-slate-300 mt-1">
@@ -294,7 +293,7 @@ export default function AdminGateEquipmentConfig() {
                         <button
                             type="button"
                             onClick={openCreateModal}
-                            className="w-full lg:w-auto bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+                            className="w-full lg:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors"
                         >
                             <Plus className="w-5 h-5" />
                             Yeni Kapı Ekle
@@ -406,7 +405,7 @@ export default function AdminGateEquipmentConfig() {
                                                         type="button"
                                                         onClick={handleGateUpdate}
                                                         disabled={saving}
-                                                        className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-50 transition-all hover:scale-[1.02]"
+                                                        className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold flex items-center gap-2 disabled:opacity-50 transition-colors"
                                                     >
                                                         <Save className="w-4 h-4" />
                                                         Kaydet
@@ -481,7 +480,7 @@ export default function AdminGateEquipmentConfig() {
                                                     type="button"
                                                     onClick={addEquipmentToSelectedGate}
                                                     disabled={saving}
-                                                    className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-650 hover:from-emerald-700 hover:to-teal-750 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 transition-all hover:scale-[1.02]"
+                                                    className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
                                                 >
                                                     Atama Ekle
                                                 </button>
@@ -583,7 +582,7 @@ export default function AdminGateEquipmentConfig() {
                                 <button
                                     type="submit"
                                     disabled={saving}
-                                    className="px-5 py-2 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white rounded-xl text-sm font-semibold transition"
+                                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-colors"
                                 >
                                     Kapıyı Kaydet
                                 </button>

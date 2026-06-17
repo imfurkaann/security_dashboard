@@ -115,8 +115,7 @@ export default function AdminParkingManagement() {
                             <ArrowLeft className="w-5 h-5" />
                         </button>
                         <div className="min-w-0">
-                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words flex items-center gap-2.5">
-                                <Car className="w-8 h-8 text-blue-500" />
+                            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white leading-tight break-words">
                                 Otopark Yönetimi
                             </h1>
                             <p className="text-sm text-slate-300 mt-1">
@@ -271,7 +270,7 @@ export default function AdminParkingManagement() {
                         <div className="pt-2 border-t border-slate-100">
                             <button
                                 type="submit"
-                                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-750 text-white px-6 py-3 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98] shadow-sm text-sm"
+                                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-colors shadow-sm text-sm"
                             >
                                 Yapılandırmayı Kaydet
                             </button>
