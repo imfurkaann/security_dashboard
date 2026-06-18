@@ -219,7 +219,7 @@ export default function EquipmentCheck() {
                 const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
                 const reason = response.data?.reason || 'Bilinmeyen hata';
                 const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
-                alert(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+                message.error(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
             }
         } catch (err: any) {
             setAutoSendFailed(true);
@@ -227,7 +227,7 @@ export default function EquipmentCheck() {
             const details = isTimeout
                 ? 'Otomatik gönderim zaman aşımına uğradı.'
                 : (err.response?.data?.message || err.message);
-            alert(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            message.error(`WhatsApp mesajı gönderilemedi: ${details} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
         } finally {
             setSendingWhatsApp(false);
         }
@@ -235,7 +235,7 @@ export default function EquipmentCheck() {
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
-        window.open(whatsappUrl, '_blank');
+        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
         // Modal'ı hemen kapat
         setAutoSendFailed(false);
         handleWhatsAppClose();

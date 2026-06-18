@@ -7,6 +7,7 @@ import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { message, Modal } from 'antd';
+import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
 
 // Tag options for dropdowns
@@ -575,6 +576,83 @@ export default function Visitors() {
         });
     }, [nonDeletedRecords, todayDeletedRecords, filter, columnFilters]);
 
+    const isFormDirty = useMemo(() => {
+        return (
+            formData.vehicle_plate !== '' ||
+            formData.full_name !== '' ||
+            formData.company_name !== '' ||
+            formData.visiting_person !== '' ||
+            formData.person_count !== '' ||
+            formData.children_count !== '' ||
+            formData.phone !== '' ||
+            formData.notes !== '' ||
+            formData.highlight_color !== 'none' ||
+            formData.subcontractor_worker !== false ||
+            formData.for_electric_station !== false ||
+            formData.daily_guest !== false ||
+            formData.entry_tag !== false ||
+            formData.exit_tag !== false ||
+            formData.tour_entry !== false ||
+            formData.tour_exit !== false ||
+            formData.meeting !== false ||
+            formData.delivery !== false ||
+            formData.entry_time !== '' ||
+            formData.exit_time !== ''
+        );
+    }, [formData]);
+
+    const isEditFormDirty = useMemo(() => {
+        if (!editingId) return false;
+        const originalRecord = records.find(r => r.id === editingId);
+        if (!originalRecord) return false;
+
+        const initialEditData = {
+            vehicle_plate: originalRecord.vehicle_plate || '',
+            full_name: originalRecord.full_name || '',
+            company_name: originalRecord.company_name || '',
+            visiting_person: originalRecord.visiting_person || '',
+            person_count: originalRecord.person_count ?? '',
+            children_count: originalRecord.children_count ?? 0,
+            phone: originalRecord.phone || '',
+            notes: originalRecord.notes || '',
+            highlight_color: originalRecord.highlight_color || 'none',
+            subcontractor_worker: originalRecord.subcontractor_worker ?? false,
+            for_electric_station: originalRecord.for_electric_station ?? false,
+            daily_guest: originalRecord.daily_guest ?? false,
+            entry_tag: originalRecord.entry_tag ?? false,
+            exit_tag: originalRecord.exit_tag ?? false,
+            tour_entry: originalRecord.tour_entry ?? false,
+            tour_exit: originalRecord.tour_exit ?? false,
+            meeting: originalRecord.meeting ?? false,
+            delivery: originalRecord.delivery ?? false,
+            entry_time: originalRecord.entry_time ? formatTime(originalRecord.entry_time) : '',
+            exit_time: originalRecord.exit_time ? formatTime(originalRecord.exit_time) : ''
+        };
+
+        return (
+            formData.vehicle_plate !== initialEditData.vehicle_plate ||
+            formData.full_name !== initialEditData.full_name ||
+            formData.company_name !== initialEditData.company_name ||
+            formData.visiting_person !== initialEditData.visiting_person ||
+            formData.person_count !== initialEditData.person_count ||
+            formData.children_count !== initialEditData.children_count ||
+            formData.phone !== initialEditData.phone ||
+            formData.notes !== initialEditData.notes ||
+            formData.highlight_color !== initialEditData.highlight_color ||
+            formData.subcontractor_worker !== initialEditData.subcontractor_worker ||
+            formData.for_electric_station !== initialEditData.for_electric_station ||
+            formData.daily_guest !== initialEditData.daily_guest ||
+            formData.entry_tag !== initialEditData.entry_tag ||
+            formData.exit_tag !== initialEditData.exit_tag ||
+            formData.tour_entry !== initialEditData.tour_entry ||
+            formData.tour_exit !== initialEditData.tour_exit ||
+            formData.meeting !== initialEditData.meeting ||
+            formData.delivery !== initialEditData.delivery ||
+            formData.entry_time !== initialEditData.entry_time ||
+            formData.exit_time !== initialEditData.exit_time
+        );
+    }, [formData, editingId, records]);
+
     const renderPreviewText = (value: string | null | undefined, title: string) => {
         const text = (value || '-').toString();
         const isLong = text.length > 15;
@@ -1000,246 +1078,225 @@ export default function Visitors() {
                 </div>
             </div>
 
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center gap-4 mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Ziyaretçi Düzenle' : 'Yeni Ziyaretçi'}</h2>
-                                <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                        {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() => setFormData({ ...formData, highlight_color: option.value })}
-                                                className={`w-6 h-6 rounded-full border-2 transition ${formData.highlight_color === option.value ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
-                                                style={{ backgroundColor: option.color }}
-                                                title={option.label}
-                                                aria-label={option.label}
-                                            />
-                                        ))}
-                                    </div>
-                                        {/* WhatsApp toggle removed from header; placed with other tag checkboxes below */}
-                                        <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    </button>
-                                </div>
+            {/* Modal */}
+            <CustomModal
+                isOpen={showModal}
+                onClose={() => { setShowModal(false); resetForm(); }}
+                size="2xl"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isEditing ? isEditFormDirty : isFormDirty}
+            >
+                <div className="flex items-center gap-2 mb-4 justify-start">
+                    <span className="text-xs font-semibold text-gray-600 mr-2">Vurgu Rengi:</span>
+                    {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, highlight_color: option.value })}
+                            className={`w-6 h-6 rounded-full border-2 transition ${formData.highlight_color === option.value ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                            style={{ backgroundColor: option.color }}
+                            title={option.label}
+                            aria-label={option.label}
+                        />
+                    ))}
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad</label>
+                            <input value={formData.full_name || ''} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} placeholder="Ziyaretçinin adı soyadı" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Plaka</label>
+                            <input value={formData.vehicle_plate || ''} onChange={(e) => setFormData({ ...formData, vehicle_plate: e.target.value })} placeholder="TR 34 XXX 34" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Firma</label>
+                            <input value={formData.company_name || ''} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} placeholder="Firma adı" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Ziyaret Edilen</label>
+                            <input value={formData.visiting_person || ''} onChange={(e) => setFormData({ ...formData, visiting_person: e.target.value })} placeholder="İsim veya departman" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Kişi Sayısı</label>
+                            <input type="number" value={formData.person_count || ''} onChange={(e) => setFormData({ ...formData, person_count: e.target.value })} placeholder="1" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Çocuk Sayısı</label>
+                            <input
+                                type="number"
+                                min={0}
+                                value={formData.children_count ?? ''}
+                                onChange={(e) => setFormData({ ...formData, children_count: e.target.value })}
+                                placeholder="0"
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Telefon</label>
+                            <input value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="05xx..." className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Giriş Saati</label>
+                            <input
+                                type="time"
+                                value={formData.entry_time || ''}
+                                onChange={(e) => setFormData({ ...formData, entry_time: e.target.value })}
+                                style={{ colorScheme: 'light' }}
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Boş bırakırsanız mevcut saat kullanılır</p>
+                        </div>
+
+                        {isEditing && records.find(r => r.id === editingId)?.status === 'exited' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Çıkış Saati</label>
+                                <input
+                                    type="time"
+                                    value={formData.exit_time || ''}
+                                    onChange={(e) => setFormData({ ...formData, exit_time: e.target.value })}
+                                    style={{ colorScheme: 'light' }}
+                                    className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Çıkış kaydı için saat belirtebilirsiniz</p>
                             </div>
+                        )}
 
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ad Soyad</label>
-                                        <input value={formData.full_name || ''} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} placeholder="Ziyaretçinin adı soyadı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Plaka</label>
-                                        <input value={formData.vehicle_plate || ''} onChange={(e) => setFormData({ ...formData, vehicle_plate: e.target.value })} placeholder="TR 34 XXX 34" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Firma</label>
-                                        <input value={formData.company_name || ''} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} placeholder="Firma adı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ziyaret Edilen</label>
-                                        <input value={formData.visiting_person || ''} onChange={(e) => setFormData({ ...formData, visiting_person: e.target.value })} placeholder="İsim veya departman" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Kişi Sayısı</label>
-                                        <input type="number" value={formData.person_count || ''} onChange={(e) => setFormData({ ...formData, person_count: e.target.value })} placeholder="1" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çocuk Sayısı</label>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            value={formData.children_count ?? ''}
-                                            onChange={(e) => setFormData({ ...formData, children_count: e.target.value })}
-                                            placeholder="0"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
-                                        <input value={formData.phone || ''} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="05xx..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
-                                        <input
-                                            type="time"
-                                            value={formData.entry_time || ''}
-                                            onChange={(e) => setFormData({ ...formData, entry_time: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">Boş bırakırsanız mevcut saat kullanılır</p>
-                                    </div>
-
-                                    {isEditing && records.find(r => r.id === editingId)?.status === 'exited' && (
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Çıkış Saati</label>
-                                            <input
-                                                type="time"
-                                                value={formData.exit_time || ''}
-                                                onChange={(e) => setFormData({ ...formData, exit_time: e.target.value })}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">Çıkış kaydı için saat belirtebilirsiniz</p>
+                        {/* Tags Dropdown and Description in a grid */}
+                        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                            {/* Tags Dropdown */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Etiketler</label>
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setOpenTagsDropdown(!openTagsDropdown)}
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
+                                    >
+                                        <span className="text-sm">
+                                            {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.meeting && 'Görüşme', formData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                        </span>
+                                        <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                        </svg>
+                                    </button>
+                                    {openTagsDropdown && (
+                                        <div className="absolute z-20 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                            {VISITOR_TAGS_OPTIONS.map((option) => (
+                                                <label key={option.id} className="flex items-center px-4 py-2 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={!!formData[option.id as keyof VisitorFormData]}
+                                                        onChange={(e) => {
+                                                            setFormData({ ...formData, [option.id]: e.target.checked });
+                                                        }}
+                                                        className="mr-3 w-4 h-4 cursor-pointer"
+                                                    />
+                                                    <span className="text-sm text-gray-700">{option.label}</span>
+                                                </label>
+                                            ))}
                                         </div>
                                     )}
-
-                                    {/* Tags Dropdown and Description in a grid */}
-                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Tags Dropdown */}
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
-                                            <div className="relative">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setOpenTagsDropdown(!openTagsDropdown)}
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
-                                                >
-                                                    <span className="text-sm">
-                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.meeting && 'Görüşme', formData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
-                                                    </span>
-                                                    <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                                    </svg>
-                                                </button>
-                                                {openTagsDropdown && (
-                                                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                                                        {VISITOR_TAGS_OPTIONS.map((option) => (
-                                                            <label key={option.id} className="flex items-center px-4 py-2 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={!!formData[option.id as keyof VisitorFormData]}
-                                                                    onChange={(e) => {
-                                                                        setFormData({ ...formData, [option.id]: e.target.checked });
-                                                                    }}
-                                                                    className="mr-3 w-4 h-4 cursor-pointer"
-                                                                />
-                                                                <span className="text-sm text-gray-700">{option.label}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Description / Notes */}
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>
-                                            <textarea value={formData.notes || ''} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={3} placeholder="Notlar..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                                        </div>
-                                    </div>
-
-                                    {/* WhatsApp Checkbox */}
-                                    <div className="md:col-span-2 flex items-center gap-3">
-                                        <label className="inline-flex items-center">
-                                            <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
-                                            <span className="text-sm">WhatsApp Mesajı Gönder</span>
-                                        </label>
-                                    </div>
                                 </div>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
-                                    <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
-                                </div>
-                            </form>
+                            {/* Description / Notes */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama / Not</label>
+                                <textarea value={formData.notes || ''} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={2} placeholder="Notlar..." className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                            </div>
+                        </div>
+
+                        {/* WhatsApp Checkbox */}
+                        <div className="md:col-span-2 flex items-center gap-3">
+                            <label className="inline-flex items-center">
+                                <input type="checkbox" checked={!!formData.send_whatsapp} onChange={(e) => setFormData({ ...formData, send_whatsapp: e.target.checked })} className="mr-2" />
+                                <span className="text-sm">WhatsApp Mesajı Gönder</span>
+                            </label>
                         </div>
                     </div>
-                </div>
-            )}
 
-            {textPreview && (
-                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                Kapat
-                            </button>
-                        </div>
-                        <div className="px-4 py-4">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
-                        </div>
+                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                        <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
+                        <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-medium transition">İptal</button>
                     </div>
-                </div>
-            )}
+                </form>
+            </CustomModal>
+
+            {/* Text Preview Modal */}
+            <CustomModal
+                isOpen={!!textPreview}
+                onClose={() => setTextPreview(null)}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                {textPreview && (
+                    <div className="py-2">
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed font-sans">{textPreview.value}</p>
+                    </div>
+                )}
+            </CustomModal>
 
             {/* WhatsApp Modal */}
-            {showWhatsAppModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                                </svg>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">WhatsApp ile Paylaş</h3>
-                        </div>
-
-                        <p className="text-gray-600 mb-4">Kayıt başarıyla oluşturuldu. WhatsApp'tan paylaşmak ister misiniz?</p>
-
-                        <div className="bg-gray-50 rounded-lg p-4 mb-4 max-h-48 overflow-y-auto">
-                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
-                        </div>
-
-                        <div className="flex flex-col gap-2">
-                            {!autoSendFailed && (
-                                <button
-                                    type="button"
-                                    onClick={handleSendWhatsAppAutomatic}
-                                    disabled={sendingWhatsApp}
-                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
-                                >
-                                    {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleSendWhatsAppManual}
-                                disabled={sendingWhatsApp}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
-                            >
-                                Manuel Mesaj Gönder
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setAutoSendFailed(false);
-                                    setShowWhatsAppModal(false);
-                                }}
-                                disabled={sendingWhatsApp}
-                                className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"
-                            >
-                                Kapat
-                            </button>
-                        </div>
-
-                        {autoSendFailed && (
-                            <p className="text-sm text-red-600 mt-3">
-                                Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
-                            </p>
-                        )}
+            <CustomModal
+                isOpen={showWhatsAppModal}
+                onClose={() => { setAutoSendFailed(false); setShowWhatsAppModal(false); }}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                <div className="space-y-4">
+                    <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 max-h-44 overflow-y-auto">
+                        <pre className="text-xs text-slate-800 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
                     </div>
+
+                    <div className="flex flex-col gap-2 pt-2">
+                        {!autoSendFailed && (
+                            <button
+                                type="button"
+                                onClick={handleSendWhatsAppAutomatic}
+                                disabled={sendingWhatsApp}
+                                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
+                            >
+                                {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
+                            </button>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleSendWhatsAppManual}
+                            disabled={sendingWhatsApp}
+                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
+                        >
+                            Manuel Mesaj Gönder
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAutoSendFailed(false);
+                                setShowWhatsAppModal(false);
+                            }}
+                            disabled={sendingWhatsApp}
+                            className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"
+                        >
+                            Kapat
+                        </button>
+                    </div>
+
+                    {autoSendFailed && (
+                        <p className="text-sm text-red-600 mt-3 text-center">
+                            Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
+                        </p>
+                    )}
                 </div>
-            )}
+            </CustomModal>
         </div>
     );
 }

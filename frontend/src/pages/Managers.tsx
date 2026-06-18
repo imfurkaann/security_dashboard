@@ -8,6 +8,7 @@ import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { message, Modal } from 'antd';
+import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
 
 interface CompactActionButtonProps {
@@ -306,6 +307,17 @@ export default function Managers() {
             return true;
         });
     }, [nonDeletedRecords, filterMode, todayDeletedRecords]);
+
+    const isFormDirty = useMemo(() => {
+        return (
+            selectedManagerId !== null ||
+            notes !== '' ||
+            entryDate !== '' ||
+            exitDate !== '' ||
+            entryTime !== '' ||
+            exitTime !== ''
+        );
+    }, [selectedManagerId, notes, entryDate, exitDate, entryTime, exitTime]);
 
     // Memoized available managers for select
     const selectManagers = useMemo(() => {
@@ -641,130 +653,120 @@ export default function Managers() {
                 </div>
             </div>
 
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">{isEditing ? 'Müdür Düzenle' : (isAdminPage ? 'Müdür Giriş Kaydı' : 'Müdür Kaydı Aç')}</h2>
-                                <button onClick={() => { setShowModal(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+            {/* Müdür Modal */}
+            <CustomModal
+                isOpen={showModal}
+                onClose={() => { setShowModal(false); resetForm(); }}
+                size="2xl"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isFormDirty}
+            >
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Personel Seç</label>
+                        <select required value={selectedManagerId || ''} onChange={(e) => {
+                            const id = e.target.value || null;
+                            setSelectedManagerId(id);
+                        }} className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">-- Lütfen bir müdür seçin --</option>
+                            {selectManagers.map(p => (
+                                <option key={p.id} value={p.id}>{p.first_name ? `${p.first_name} ${p.last_name} - ${p.title}` : p.full_name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Entry Time */}
+                    {isAdminPage && !isEditing && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Giriş Tarihi
+                                </label>
+                                <input
+                                    type="date"
+                                    value={entryDate}
+                                    onChange={(e) => setEntryDate(e.target.value)}
+                                    className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    style={{ colorScheme: 'light' }}
+                                />
                             </div>
-
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Personel Seç</label>
-                                    <select required value={selectedManagerId || ''} onChange={(e) => {
-                                        const id = e.target.value || null;
-                                        setSelectedManagerId(id);
-                                    }} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                                        <option value="">-- Lütfen bir müdür seçin --</option>
-                                        {selectManagers.map(p => (
-                                            <option key={p.id} value={p.id}>{p.first_name ? `${p.first_name} ${p.last_name} - ${p.title}` : p.full_name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Entry Time */}
-                                {isAdminPage && !isEditing && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Giriş Tarihi
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={entryDate}
-                                                onChange={(e) => setEntryDate(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Çıkış Tarihi (isteğe bağlı)
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={exitDate}
-                                                onChange={(e) => setExitDate(e.target.value)}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Giriş Saati (isteğe bağlı)
-                                    </label>
-                                    <input
-                                        type="time"
-                                        value={entryTime}
-                                        onChange={(e) => setEntryTime(e.target.value)}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
-                                    <p className="mt-1 text-xs text-gray-500">Boş bırakırsanız anlık saat kaydedilir</p>
-                                </div>
-
-                                {/* Exit Time - only show when editing exited records */}
-                                {(isAdminPage || (isEditing && records.find(r => r.id === editingId)?.status === 'exited')) && (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Çıkış Saati (isteğe bağlı)
-                                        </label>
-                                        <input
-                                            type="time"
-                                            value={exitTime}
-                                            onChange={(e) => setExitTime(e.target.value)}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">Çıkış saatini düzenleyebilirsiniz</p>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama (isteğe bağlı)</label>
-                                    <textarea
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        rows={3}
-                                        placeholder="Not veya açıklama (zorunlu değil)"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
-                                    <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
-                                </div>
-                            </form>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Çıkış Tarihi (isteğe bağlı)
+                                </label>
+                                <input
+                                    type="date"
+                                    value={exitDate}
+                                    onChange={(e) => setExitDate(e.target.value)}
+                                    className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    style={{ colorScheme: 'light' }}
+                                />
+                            </div>
                         </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Giriş Saati (isteğe bağlı)
+                        </label>
+                        <input
+                            type="time"
+                            value={entryTime}
+                            onChange={(e) => setEntryTime(e.target.value)}
+                            className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            style={{ colorScheme: 'light' }}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">Boş bırakırsanız anlık saat kaydedilir</p>
                     </div>
-                </div>
-            )}
 
-            {textPreview && (
-                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                Kapat
-                            </button>
+                    {/* Exit Time - only show when editing exited records */}
+                    {(isAdminPage || (isEditing && records.find(r => r.id === editingId)?.status === 'exited')) && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Çıkış Saati (isteğe bağlı)
+                            </label>
+                            <input
+                                type="time"
+                                value={exitTime}
+                                onChange={(e) => setExitTime(e.target.value)}
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                style={{ colorScheme: 'light' }}
+                            />
+                            <p className="mt-1 text-xs text-gray-500">Çıkış saatini düzenleyebilirsiniz</p>
                         </div>
-                        <div className="px-4 py-4">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
-                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama (isteğe bağlı)</label>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            rows={2}
+                            placeholder="Not veya açıklama (zorunlu değil)"
+                            className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        />
                     </div>
-                </div>
-            )}
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                        <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
+                        <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-medium transition">İptal</button>
+                    </div>
+                </form>
+            </CustomModal>
+
+            {/* Text Preview Modal */}
+            <CustomModal
+                isOpen={!!textPreview}
+                onClose={() => setTextPreview(null)}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                {textPreview && (
+                    <div className="py-2">
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed font-sans">{textPreview.value}</p>
+                    </div>
+                )}
+            </CustomModal>
         </div>
     );
 }

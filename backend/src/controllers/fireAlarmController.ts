@@ -372,11 +372,19 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
         let whatsappMessage = '';
         try {
             const resolutionDate = new Date(result.rows[0].resolution_time);
-            const timeString = resolutionDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            const resolutionTimeString = resolutionDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+
+            // Orijinal alarm saatini de al
+            const alarmDateTime = existing.rows[0].alarm_time;
+            const alarmTimeString = alarmDateTime
+                ? new Date(alarmDateTime).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+                : undefined;
+
             whatsappMessage = createFireAlarmResolveMessage({
                 alarmNumber: result.rows[0].alarm_number || 'Belirtilmemiş',
                 location: result.rows[0].location,
-                resolutionTime: timeString,
+                alarmTime: alarmTimeString,
+                resolutionTime: resolutionTimeString,
                 resolutionNotes: sanitizedNotes || undefined,
                 falseAlarm: !!false_alarm
             });

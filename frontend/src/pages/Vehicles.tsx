@@ -4,7 +4,9 @@ import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import type { Vehicle, VehicleUsage, Manager, VehicleFormData, VehicleFilterType } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-import { message, Modal } from 'antd';
+import { message, Modal as AntdModal } from 'antd';
+import Modal from '../components/Modal';
+import { Car, Pencil, AlertCircle, FileText } from 'lucide-react';
 import 'antd/dist/reset.css';
 
 // Initial form state
@@ -29,10 +31,10 @@ interface CompactActionButtonProps {
 }
 
 const actionVariantClasses = {
-    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30',
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800/30',
-    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30',
-    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 dark:bg-gray-800/40 dark:text-gray-300 dark:border-gray-700/50'
+    primary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100',
+    success: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+    danger: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100',
+    neutral: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
 };
 
 function CompactActionButton({
@@ -116,7 +118,12 @@ export default function Vehicles() {
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const response = await api.post('/vehicles/records', formData);
+            const submitData = {
+                ...formData,
+                manager_id: (formData.manager_id && formData.manager_id !== 'custom') ? formData.manager_id : null,
+                manager_name: formData.manager_id === 'custom' ? formData.manager_name : ''
+            };
+            const response = await api.post('/vehicles/records', submitData);
             setShowModal(false);
             setFormData(INITIAL_FORM_DATA);
             setShowCustomManager(false);
@@ -138,7 +145,7 @@ export default function Vehicles() {
 
     // Vehicle return handler
     const handleReturn = useCallback(async (usageId: string) => {
-        Modal.confirm({
+        AntdModal.confirm({
             title: 'Teslim Al',
             content: 'Aracın iadesini kaydetmek istediğinize emin misiniz?',
             okText: 'Evet',
@@ -165,7 +172,7 @@ export default function Vehicles() {
     }, [fetchData]);
 
     const handleUndoReturn = useCallback(async (usageId: string) => {
-        Modal.confirm({
+        AntdModal.confirm({
             title: 'Teslim Almayı Geri Al',
             content: 'Yanlış teslim alma işlemini geri almak istediğinize emin misiniz?',
             okText: 'Evet',
@@ -184,7 +191,7 @@ export default function Vehicles() {
     }, [fetchData]);
 
     const handleDeleteRecord = useCallback(async (usageId: string) => {
-        Modal.confirm({
+        AntdModal.confirm({
             title: 'Kaydı Sil',
             content: 'Bu kaydı silmek istediğinize emin misiniz?',
             okText: 'Evet',
@@ -303,8 +310,8 @@ export default function Vehicles() {
         try {
             await api.put(`/vehicles/records/${editingUsage.id}`, {
                 vehicle_id: formData.vehicle_id,
-                manager_id: formData.manager_id || null,
-                manager_name: formData.manager_name || null,
+                manager_id: (formData.manager_id && formData.manager_id !== 'custom') ? formData.manager_id : null,
+                manager_name: formData.manager_id === 'custom' ? formData.manager_name : null,
                 destination: formData.destination,
                 notes: formData.notes || null,
                 given_time: formData.given_time || null,
@@ -339,6 +346,50 @@ export default function Vehicles() {
         if (filter === 'deleted') return todayDeletedUsages; // Bugün soft silinen kayıtlar
         return usages;
     }, [usages, filter, todayUsages, todayDeletedUsages]);
+
+    const isFormDirty = useMemo(() => {
+        return (
+            formData.vehicle_id !== '' ||
+            formData.manager_id !== '' ||
+            formData.manager_name !== '' ||
+            formData.destination !== '' ||
+            formData.notes !== '' ||
+            formData.given_time !== '' ||
+            formData.return_time !== ''
+        );
+    }, [formData]);
+
+    const isEditFormDirty = useMemo(() => {
+        if (!editingUsage) return false;
+        
+        const vehicleMatch = vehicles.find(v => v.plate === editingUsage.vehicle_plate);
+        const vehicleId = vehicleMatch?.id || '';
+        
+        const managerMatch = managers.find(m =>
+            `${m.first_name} ${m.last_name}` === editingUsage.manager
+        );
+        const managerId = managerMatch?.id || '';
+        
+        const initialEditData = {
+            vehicle_id: vehicleId,
+            manager_id: managerId,
+            manager_name: managerId ? '' : editingUsage.manager || '',
+            destination: editingUsage.destination || '',
+            notes: editingUsage.notes || '',
+            given_time: editingUsage.given_time ? formatTime(editingUsage.given_time) : '',
+            return_time: editingUsage.return_time ? formatTime(editingUsage.return_time) : ''
+        };
+
+        return (
+            formData.vehicle_id !== initialEditData.vehicle_id ||
+            formData.manager_id !== initialEditData.manager_id ||
+            formData.manager_name !== initialEditData.manager_name ||
+            formData.destination !== initialEditData.destination ||
+            formData.notes !== initialEditData.notes ||
+            formData.given_time !== initialEditData.given_time ||
+            formData.return_time !== initialEditData.return_time
+        );
+    }, [formData, editingUsage, vehicles, managers]);
 
     const normalizeVehiclePlate = useCallback(
         (plate: string | null | undefined) => (plate || '').trim().toLocaleUpperCase('tr-TR').replace(/\s+/g, ''),
@@ -555,7 +606,7 @@ export default function Vehicles() {
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                         </div>
                     ) : filteredUsages.length === 0 ? (
-                        <div className="text-center h-full min-h-[240px] flex items-center justify-center py-12">
+                        <div className="text-center h-full min-h-[240px] flex flex-col items-center justify-center py-12">
                             <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                             </svg>
@@ -707,429 +758,371 @@ export default function Vehicles() {
             </div>
 
             {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">
-                                    Araç Kullanımı Kaydı
-                                </h2>
-                                <button
-                                    onClick={() => { setShowModal(false); resetForm(); }}
-                                    className="text-gray-400 hover:text-gray-600"
+            <Modal
+                isOpen={showModal}
+                onClose={() => { setShowModal(false); resetForm(); }}
+                size="lg"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isFormDirty}
+            >
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                Araç Seçin <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                                required
+                                value={formData.vehicle_id}
+                                onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                            >
+                                <option value="" className="text-slate-500">Araç seçiniz...</option>
+                                {availableVehicles.map(vehicle => (
+                                    <option key={vehicle.id} value={vehicle.id}>
+                                        {vehicle.plate} - {vehicle.brand}
+                                    </option>
+                                ))}
+                            </select>
+                            {availableVehicles.length === 0 && (
+                                <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1 font-semibold">
+                                    <AlertCircle className="w-4 h-4" /> Müsait araç bulunmamaktadır
+                                </p>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                Aracı Alan Müdür <span className="text-red-500">*</span>
+                            </label>
+                            <div className="space-y-2.5">
+                                <select
+                                    required
+                                    value={formData.manager_id || (formData.manager_name ? 'custom' : '')}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === 'custom') {
+                                            setFormData({ ...formData, manager_id: 'custom', manager_name: '' });
+                                        } else {
+                                            setFormData({ ...formData, manager_id: val, manager_name: '' });
+                                        }
+                                    }}
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
                                 >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
+                                    <option value="" className="text-slate-500">Müdür seçiniz...</option>
+                                    {managers.map(manager => (
+                                        <option key={manager.id} value={manager.id}>
+                                            {manager.first_name} {manager.last_name} - {manager.title}
+                                        </option>
+                                    ))}
+                                    <option value="custom">🔽 Listede Yok - Elle Gir</option>
+                                </select>
 
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Araç Seçin <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            required
-                                            value={formData.vehicle_id}
-                                            onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        >
-                                            <option value="">Araç seçiniz...</option>
-                                            {availableVehicles.map(vehicle => (
-                                                <option key={vehicle.id} value={vehicle.id}>
-                                                    {vehicle.plate} - {vehicle.brand}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {availableVehicles.length === 0 && (
-                                            <p className="text-sm text-red-600 mt-1">Müsait araç bulunmamaktadır</p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Aracı Alan Müdür <span className="text-red-500">*</span>
-                                        </label>
-                                        {!showCustomManager ? (
-                                            <>
-                                                <select
-                                                    required={!showCustomManager}
-                                                    value={formData.manager_id}
-                                                    onChange={(e) => {
-                                                        if (e.target.value === 'custom') {
-                                                            setShowCustomManager(true);
-                                                            setFormData({ ...formData, manager_id: '', manager_name: '' });
-                                                        } else {
-                                                            setFormData({ ...formData, manager_id: e.target.value, manager_name: '' });
-                                                        }
-                                                    }}
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                >
-                                                    <option value="">Müdür seçiniz...</option>
-                                                    {managers.map(manager => (
-                                                        <option key={manager.id} value={manager.id}>
-                                                            {manager.first_name} {manager.last_name} - {manager.title}
-                                                        </option>
-                                                    ))}
-                                                    <option value="custom">🔽 Listede Yok - Elle Gir</option>
-                                                </select>
-                                            </>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <input
-                                                    type="text"
-                                                    required={showCustomManager}
-                                                    value={formData.manager_name}
-                                                    onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
-                                                    placeholder="Müdür adı soyadı"
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setShowCustomManager(false);
-                                                        setFormData({ ...formData, manager_id: '', manager_name: '' });
-                                                    }}
-                                                    className="text-sm text-blue-600 hover:text-blue-800"
-                                                >
-                                                    ← Listeye Dön
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Gidilen Yer <span className="text-red-500">*</span>
-                                        </label>
+                                {(formData.manager_id === 'custom' || (formData.manager_name && !formData.manager_id)) && (
+                                    <div className="animate-fadeIn">
                                         <input
                                             type="text"
                                             required
-                                            value={formData.destination}
-                                            onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                                            placeholder="Örn: Havalimanı, Şehir Merkezi"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            value={formData.manager_name}
+                                            onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
+                                            placeholder="Müdür adı soyadı"
+                                            className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
                                         />
                                     </div>
+                                )}
+                            </div>
+                        </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Teslim Saati
-                                        </label>
-                                        <input
-                                            type="time"
-                                            value={formData.given_time}
-                                            onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
-                                            step="60"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            style={{ colorScheme: 'light' }}
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Boş bırakırsanız anlık saat kaydedilir
-                                        </p>
-                                    </div>
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                Gidilen Yer <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                value={formData.destination}
+                                onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                                placeholder="Örn: Havalimanı, Şehir Merkezi"
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                            />
+                        </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Açıklama / Not
-                                        </label>
-                                        <textarea
-                                            value={formData.notes}
-                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                            rows={3}
-                                            placeholder="Kullanım amacı, ek notlar..."
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                    </div>
-                                </div>
+                        <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                Teslim Saati
+                            </label>
+                            <input
+                                type="time"
+                                value={formData.given_time}
+                                onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
+                                step="60"
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                style={{ colorScheme: 'light' }}
+                            />
+                            <p className="text-[11px] text-slate-500 mt-1.5">
+                                Boş bırakırsanız anlık saat kaydedilir
+                            </p>
+                        </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="submit"
-                                        disabled={availableVehicles.length === 0}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                    >
-                                        Araç Teslim Et
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowModal(false); resetForm(); }}
-                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
-                                    >
-                                        İptal
-                                    </button>
-                                </div>
-                            </form>
+                        <div className="md:col-span-2">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                Açıklama / Not
+                            </label>
+                            <textarea
+                                value={formData.notes}
+                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                rows={2}
+                                placeholder="Kullanım amacı, ek notlar..."
+                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                            />
                         </div>
                     </div>
-                </div>
-            )}
+
+                    <div className="flex items-center gap-3 pt-3 border-t border-slate-200">
+                        <button
+                            type="button"
+                            onClick={() => { setShowModal(false); resetForm(); }}
+                            className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-sm border border-slate-200"
+                        >
+                            İptal
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={availableVehicles.length === 0}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-transparent text-white py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 disabled:cursor-not-allowed"
+                        >
+                            Araç Teslim Et
+                        </button>
+                    </div>
+                </form>
+            </Modal>
 
             {/* Edit Modal */}
-            {showEditModal && editingUsage && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">
-                                    Araç Kaydını Düzenle
-                                </h2>
-                                <button
-                                    onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
-                                    className="text-gray-400 hover:text-gray-600"
+            <Modal
+                isOpen={showEditModal && !!editingUsage}
+                onClose={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
+                size="lg"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isEditFormDirty}
+            >
+                {editingUsage && (
+                    <form onSubmit={handleEditSubmit} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                    Araç Seçin <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    required
+                                    value={formData.vehicle_id}
+                                    onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
+                                    disabled={editingUsage?.status === 'returned'}
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed"
                                 >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                                    <option value="" className="text-slate-500">Araç seçiniz...</option>
+                                    {vehicles.map(vehicle => (
+                                        <option key={vehicle.id} value={vehicle.id}>
+                                            {vehicle.plate} - {vehicle.brand}
+                                        </option>
+                                    ))}
+                                </select>
+                                {editingUsage?.status === 'returned' && (
+                                    <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1 font-semibold">
+                                        <AlertCircle className="w-3.5 h-3.5" /> Teslim alınmış kayıtlarda araç değiştirilemez
+                                    </p>
+                                )}
                             </div>
 
-                            <form onSubmit={handleEditSubmit} className="space-y-4">
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Araç Seçin <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            required
-                                            value={formData.vehicle_id}
-                                            onChange={(e) => setFormData({ ...formData, vehicle_id: e.target.value })}
-                                            disabled={editingUsage?.status === 'returned'}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-                                        >
-                                            <option value="">Araç seçiniz...</option>
-                                            {vehicles.map(vehicle => (
-                                                <option key={vehicle.id} value={vehicle.id}>
-                                                    {vehicle.plate} - {vehicle.brand}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        {editingUsage?.status === 'returned' && (
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Teslim alınmış kayıtlarda araç değiştirilemez
-                                            </p>
-                                        )}
-                                    </div>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                    Aracı Alan Müdür <span className="text-red-500">*</span>
+                                </label>
+                                <div className="space-y-2.5">
+                                    <select
+                                        required
+                                        value={formData.manager_id || (formData.manager_name ? 'custom' : '')}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            if (val === 'custom') {
+                                                setFormData({ ...formData, manager_id: 'custom', manager_name: '' });
+                                            } else {
+                                                setFormData({ ...formData, manager_id: val, manager_name: '' });
+                                            }
+                                        }}
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                    >
+                                        <option value="" className="text-slate-500">Müdür seçiniz...</option>
+                                        {managers.map(manager => (
+                                            <option key={manager.id} value={manager.id}>
+                                                {manager.first_name} {manager.last_name} - {manager.title}
+                                            </option>
+                                        ))}
+                                        <option value="custom">🔽 Listede Yok - Elle Gir</option>
+                                    </select>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Aracı Alan Müdür <span className="text-red-500">*</span>
-                                        </label>
-                                        {!showCustomManager ? (
-                                            <>
-                                                <select
-                                                    required={!showCustomManager}
-                                                    value={formData.manager_id}
-                                                    onChange={(e) => {
-                                                        if (e.target.value === 'custom') {
-                                                            setShowCustomManager(true);
-                                                            setFormData({ ...formData, manager_id: '', manager_name: '' });
-                                                        } else {
-                                                            setFormData({ ...formData, manager_id: e.target.value, manager_name: '' });
-                                                        }
-                                                    }}
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                >
-                                                    <option value="">Müdür seçiniz...</option>
-                                                    {managers.map(manager => (
-                                                        <option key={manager.id} value={manager.id}>
-                                                            {manager.first_name} {manager.last_name} - {manager.title}
-                                                        </option>
-                                                    ))}
-                                                    <option value="custom">🔽 Listede Yok - Elle Gir</option>
-                                                </select>
-                                            </>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                <input
-                                                    type="text"
-                                                    required={showCustomManager}
-                                                    value={formData.manager_name}
-                                                    onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
-                                                    placeholder="Müdür adı soyadı"
-                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setShowCustomManager(false);
-                                                        setFormData({ ...formData, manager_id: '', manager_name: '' });
-                                                    }}
-                                                    className="text-sm text-blue-600 hover:text-blue-800"
-                                                >
-                                                    ← Listeye Dön
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Gidilen Yer <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={formData.destination}
-                                            onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                                            placeholder="Örn: Havalimanı, Şehir Merkezi"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Teslim Saati
-                                        </label>
-                                        <input
-                                            type="time"
-                                            value={formData.given_time}
-                                            onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
-                                            step="60"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            style={{ colorScheme: 'light' }}
-                                        />
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Boş bırakırsanız mevcut saat korunur
-                                        </p>
-                                    </div>
-
-                                    {editingUsage && editingUsage.status === 'returned' && (
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Teslim Alınma Saati
-                                            </label>
+                                    {(formData.manager_id === 'custom' || (formData.manager_name && !formData.manager_id)) && (
+                                        <div className="animate-fadeIn">
                                             <input
-                                                type="time"
-                                                value={formData.return_time}
-                                                onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
-                                                step="60"
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                style={{ colorScheme: 'light' }}
+                                                type="text"
+                                                required
+                                                value={formData.manager_name}
+                                                onChange={(e) => setFormData({ ...formData, manager_name: e.target.value })}
+                                                placeholder="Müdür adı soyadı"
+                                                className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
                                             />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                Boş bırakırsanız mevcut saat korunur
-                                            </p>
                                         </div>
                                     )}
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Açıklama / Not
-                                        </label>
-                                        <textarea
-                                            value={formData.notes}
-                                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                            rows={3}
-                                            placeholder="Kullanım amacı, ek notlar..."
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                    </div>
                                 </div>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
-                                    >
-                                        Güncelle
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
-                                        className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
-                                    >
-                                        İptal
-                                    </button>
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                    Gidilen Yer <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={formData.destination}
+                                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                                    placeholder="Örn: Havalimanı, Şehir Merkezi"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                    Teslim Saati
+                                </label>
+                                <input
+                                    type="time"
+                                    value={formData.given_time}
+                                    onChange={(e) => setFormData({ ...formData, given_time: e.target.value })}
+                                    step="60"
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                    style={{ colorScheme: 'light' }}
+                                />
+                                <p className="text-[11px] text-slate-500 mt-1.5">
+                                    Boş bırakırsanız mevcut saat korunur
+                                </p>
+                            </div>
+
+                            {editingUsage.status === 'returned' && (
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                        Teslim Alınma Saati
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={formData.return_time}
+                                        onChange={(e) => setFormData({ ...formData, return_time: e.target.value })}
+                                        step="60"
+                                        className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                        style={{ colorScheme: 'light' }}
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1.5">
+                                        Boş bırakırsanız mevcut saat korunur
+                                    </p>
                                 </div>
-                            </form>
+                            )}
+
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                                    Açıklama / Not
+                                </label>
+                                <textarea
+                                    value={formData.notes}
+                                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                    rows={2}
+                                    placeholder="Kullanım amacı, ek notlar..."
+                                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-slate-900 shadow-sm focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all duration-200"
+                                />
+                            </div>
                         </div>
-                    </div>
-                </div>
-            )}
+
+                        <div className="flex items-center gap-3 pt-3 border-t border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => { setShowEditModal(false); setEditingUsage(null); resetForm(); }}
+                                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-sm border border-slate-200"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20"
+                            >
+                                Güncelle
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
 
             {/* WhatsApp Modal */}
-            {showWhatsAppModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                                </svg>
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-900">WhatsApp ile Paylaş</h3>
-                        </div>
+            <Modal
+                isOpen={showWhatsAppModal}
+                onClose={() => { setAutoSendFailed(false); setShowWhatsAppModal(false); }}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                <div className="space-y-4">
+                    <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 max-h-44 overflow-y-auto">
+                        <pre className="text-xs text-slate-800 whitespace-pre-wrap font-mono leading-relaxed">{whatsappMessage}</pre>
+                    </div>
 
-                        <p className="text-gray-600 mb-4">Kayıt başarıyla oluşturuldu. WhatsApp'tan paylaşmak ister misiniz?</p>
-
-                        <div className="bg-gray-50 rounded-lg p-4 mb-4 max-h-48 overflow-y-auto">
-                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
-                        </div>
-
-                        <div className="flex flex-col gap-2">
-                            {!autoSendFailed && (
-                                <button
-                                    type="button"
-                                    onClick={handleSendWhatsAppAutomatic}
-                                    disabled={sendingWhatsApp}
-                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
-                                >
-                                    {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
-                                </button>
-                            )}
+                    <div className="flex flex-col gap-2.5 pt-2">
+                        {!autoSendFailed && (
                             <button
                                 type="button"
-                                onClick={handleSendWhatsAppManual}
+                                onClick={handleSendWhatsAppAutomatic}
                                 disabled={sendingWhatsApp}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-transparent text-white py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-md shadow-emerald-500/10 hover:shadow-emerald-500/20 disabled:cursor-not-allowed"
                             >
-                                Manuel Mesaj Gönder
+                                {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setAutoSendFailed(false);
-                                    setShowWhatsAppModal(false);
-                                }}
-                                disabled={sendingWhatsApp}
-                                className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"
-                            >
-                                Kapat
-                            </button>
-                        </div>
-
-                        {autoSendFailed && (
-                            <p className="text-sm text-red-600 mt-3">
-                                Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
-                            </p>
                         )}
+                        <button
+                            type="button"
+                            onClick={handleSendWhatsAppManual}
+                            disabled={sendingWhatsApp}
+                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-transparent text-white py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 disabled:cursor-not-allowed"
+                        >
+                            Manuel Mesaj Gönder
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAutoSendFailed(false);
+                                setShowWhatsAppModal(false);
+                            }}
+                            disabled={sendingWhatsApp}
+                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 shadow-sm border border-slate-200"
+                        >
+                            Kapat
+                        </button>
                     </div>
-                </div>
-            )}
 
-            {textPreview && (
-                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                Kapat
-                            </button>
-                        </div>
-                        <div className="px-4 py-4">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
-                        </div>
-                    </div>
+                    {autoSendFailed && (
+                        <p className="text-xs text-red-500 mt-2 text-center font-medium">
+                            Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder seçeneğini kullanın.
+                        </p>
+                    )}
                 </div>
-            )}
+            </Modal>
+            
+            {/* Text Preview Modal */}
+            <Modal
+                isOpen={!!textPreview}
+                onClose={() => setTextPreview(null)}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                {textPreview && (
+                    <div className="py-2">
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed font-sans">{textPreview.value}</p>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 }

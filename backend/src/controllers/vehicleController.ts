@@ -875,6 +875,7 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
                     vr.manager_name,
                     vr.destination,
                     vr.return_time,
+                    vr.notes,
                     v.plate,
                     GREATEST(
                         FLOOR(
@@ -892,6 +893,7 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
                 const vehiclePlate = recordInfo.rows[0].plate || 'Bilinmeyen';
                 const managerName = recordInfo.rows[0].manager_name || 'Bilinmeyen';
                 const destination = recordInfo.rows[0].destination || undefined;
+                const notes = recordInfo.rows[0].notes || undefined;
                 const timeString = recordInfo.rows[0].return_time || new Date().toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul' });
                 const returnTime = timeString.substring(0, 5);
                 const driveDuration = formatDriveDuration(Number(recordInfo.rows[0].drive_minutes || 0));
@@ -901,7 +903,8 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
                     managerName,
                     returnTime,
                     destination,
-                    driveDuration
+                    driveDuration,
+                    notes
                 });
             }
         } catch (error) {

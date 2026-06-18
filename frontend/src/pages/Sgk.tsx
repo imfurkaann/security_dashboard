@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
+import CustomModal from '../components/Modal';
 import api from '../utils/api';
 import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
@@ -217,6 +218,30 @@ export default function Sgk() {
             return true;
         });
     }, [allRecords, filters]);
+
+    const isFormDirty = useMemo(() => {
+        return (
+            formData.tc_no !== '' ||
+            formData.passport_no !== '' ||
+            formData.full_name !== '' ||
+            formData.company_name !== '' ||
+            formData.notes !== '' ||
+            formData.pdf_files.length > 0
+        );
+    }, [formData]);
+
+    const isEditFormDirty = useMemo(() => {
+        if (!editingRecord) return false;
+        return (
+            formData.tc_no !== '' ||
+            formData.passport_no !== '' ||
+            formData.full_name !== editingRecord.full_name ||
+            formData.company_name !== (editingRecord.company_name || '') ||
+            formData.notes !== (editingRecord.notes || '') ||
+            editAppendFiles.length > 0 ||
+            editReplaceFiles.length > 0
+        );
+    }, [formData, editingRecord, editAppendFiles, editReplaceFiles]);
 
     // Check if any filter is active
     const hasActiveFilters = useMemo(() => {
@@ -877,177 +902,170 @@ export default function Sgk() {
             </main>
 
             {/* Upload Modal */}
-            {showUploadModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">SGK Belgesi Kaydet</h2>
-                                <button onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
+            <CustomModal
+                isOpen={showUploadModal}
+                onClose={() => {
+                    setShowUploadModal(false);
+                    resetUploadForm();
+                }}
+                size="md"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isFormDirty}
+            >
+                <form onSubmit={handleUploadSubmit} className="space-y-3">
+                    <div className="flex flex-col gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                TC Kimlik No
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.tc_no}
+                                onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
+                                placeholder="11 haneli TC No"
+                                maxLength={11}
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
+                        </div>
 
-                            <form onSubmit={handleUploadSubmit} className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            TC Kimlik No
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.tc_no}
-                                            onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
-                                            placeholder="11 haneli TC No"
-                                            maxLength={11}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
-                                    </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Pasaport Numarası
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.passport_no}
+                                onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
+                                placeholder="Pasaport No (6-20 karakter)"
+                                maxLength={20}
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
+                        </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Pasaport Numarası
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.passport_no}
-                                            onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
-                                            placeholder="Pasaport No (6-20 karakter)"
-                                            maxLength={20}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
-                                    </div>
-                                </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Ad Soyad <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.full_name}
+                                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                placeholder="Tam ad soyad"
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                required
+                            />
+                        </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Ad Soyad <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.full_name}
-                                        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                                        placeholder="Tam ad soyad"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                        required
-                                    />
-                                </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Firma Adı</label>
+                            <input
+                                type="text"
+                                value={formData.company_name}
+                                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                                placeholder="Firma adı (opsiyonel)"
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Firma Adı</label>
-                                    <input
-                                        type="text"
-                                        value={formData.company_name}
-                                        onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                                        placeholder="Firma adı (opsiyonel)"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                    />
-                                </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Belge Dosyaları (PDF, JPG, PNG) <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="file"
+                                accept="application/pdf,image/jpeg,image/jpg,image/png"
+                                multiple
+                                onChange={handleUploadFileChange}
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                required
+                            />
+                            {formData.pdf_files.length > 0 && (
+                                <p className="mt-1 text-xs text-gray-600">
+                                    Seçili dosyalar: {formData.pdf_files.length} adet
+                                </p>
+                            )}
+                        </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Belge Dosyaları (PDF, JPG, PNG) <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="file"
-                                        accept="application/pdf,image/jpeg,image/jpg,image/png"
-                                        multiple
-                                        onChange={handleUploadFileChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                        required
-                                    />
-                                    {formData.pdf_files.length > 0 && (
-                                        <p className="mt-2 text-sm text-gray-600">
-                                            Seçili dosyalar: {formData.pdf_files.length} adet
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
-                                    <textarea
-                                        value={formData.notes}
-                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        rows={3}
-                                        placeholder="Ek notlar..."
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div className="flex gap-3 pt-4">
-                                    <ActionButton type="submit" variant="primary" className="flex-1 py-3 text-sm">
-                                        Kaydet
-                                    </ActionButton>
-                                    <ActionButton type="button" variant="neutral" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 py-3 text-sm">
-                                        İptal
-                                    </ActionButton>
-                                </div>
-                            </form>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Notlar</label>
+                            <textarea
+                                value={formData.notes}
+                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                rows={2}
+                                placeholder="Ek notlar..."
+                                className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
                         </div>
                     </div>
-                </div>
-            )}
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                        <ActionButton type="submit" variant="primary" className="flex-1 py-2.5 text-sm">
+                            Kaydet
+                        </ActionButton>
+                        <ActionButton type="button" variant="neutral" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 py-2.5 text-sm">
+                            İptal
+                        </ActionButton>
+                    </div>
+                </form>
+            </CustomModal>
 
             {/* Edit Modal */}
-            {showEditModal && editingRecord && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">SGK Kaydını Düzenle</h2>
-                                <button onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
+            <CustomModal
+                isOpen={showEditModal && !!editingRecord}
+                onClose={() => {
+                    setShowEditModal(false);
+                    setEditingRecord(null);
+                    resetUploadForm();
+                }}
+                size="md"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isEditFormDirty}
+            >
+                {editingRecord && (
+                    <div className="space-y-3">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                            <p className="text-xs text-yellow-800 leading-normal">
+                                <strong>Not:</strong> TC/Pasaport güncellemek için tekrar girmeniz gerekiyor.
+                                Dosya işlemleri için aşağıdaki iki seçenekten yalnızca birini kullanın.
+                            </p>
+                        </div>
 
-                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                                <p className="text-sm text-yellow-800">
-                                    <strong>Not:</strong> TC/Pasaport güncellemek için tekrar girmeniz gerekiyor.
-                                    Dosya işlemleri için aşağıdaki iki seçenekten yalnızca birini kullanın.
-                                </p>
-                            </div>
-
-                            <form onSubmit={handleEditSubmit} className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            TC Kimlik No
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.tc_no}
-                                            onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
-                                            placeholder="11 haneli TC No"
-                                            maxLength={11}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Pasaport Numarası
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.passport_no}
-                                            onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
-                                            placeholder="Pasaport No (6-20 karakter)"
-                                            maxLength={20}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
-                                    </div>
+                        <form onSubmit={handleEditSubmit} className="space-y-3">
+                            <div className="flex flex-col gap-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        TC Kimlik No
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.tc_no}
+                                        onChange={(e) => setFormData({ ...formData, tc_no: e.target.value, passport_no: '' })}
+                                        placeholder="11 haneli TC No"
+                                        maxLength={11}
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">TC veya Pasaport seçiniz</p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Pasaport Numarası
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.passport_no}
+                                        onChange={(e) => setFormData({ ...formData, passport_no: e.target.value, tc_no: '' })}
+                                        placeholder="Pasaport No (6-20 karakter)"
+                                        maxLength={20}
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">TC vatandaşı değilse</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Ad Soyad <span className="text-red-500">*</span>
                                     </label>
                                     <input
@@ -1055,24 +1073,24 @@ export default function Sgk() {
                                         value={formData.full_name}
                                         onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                                         placeholder="Tam ad soyad"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Firma Adı</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Firma Adı</label>
                                     <input
                                         type="text"
                                         value={formData.company_name}
                                         onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
                                         placeholder="Firma adı (opsiyonel)"
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Yeni Dosya Ekle (Mevcutlar silinmez) <span className="text-gray-500">(Opsiyonel)</span>
                                     </label>
                                     <input
@@ -1081,21 +1099,21 @@ export default function Sgk() {
                                         multiple
                                         disabled={editReplaceFiles.length > 0}
                                         onChange={handleEditAppendFilesChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
                                     />
                                     {editAppendFiles.length > 0 ? (
-                                        <p className="mt-2 text-sm text-green-600">
+                                        <p className="mt-1 text-xs text-green-600">
                                             Eklenecek yeni dosyalar: {editAppendFiles.length} adet
                                         </p>
                                     ) : (
-                                        <p className="mt-2 text-sm text-gray-600">
+                                        <p className="mt-1 text-xs text-gray-600">
                                             Mevcut dosya: {editingRecord.file_count || editingRecord.files?.length || 0} adet
                                         </p>
                                     )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Dosyaları Yeniden Yükle (Tümünü değiştir) <span className="text-gray-500">(Opsiyonel)</span>
                                     </label>
                                     <input
@@ -1104,91 +1122,91 @@ export default function Sgk() {
                                         multiple
                                         disabled={editAppendFiles.length > 0}
                                         onChange={handleEditReplaceFilesChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
                                     />
                                     {editReplaceFiles.length > 0 && (
-                                        <p className="mt-2 text-sm text-red-600">
+                                        <p className="mt-1 text-xs text-red-600">
                                             Yeniden yüklenecek dosyalar: {editReplaceFiles.length} adet (mevcut dosyalar silinir)
                                         </p>
                                     )}
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Notlar</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Notlar</label>
                                     <textarea
                                         value={formData.notes}
                                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        rows={3}
+                                        rows={2}
                                         placeholder="Ek notlar..."
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     />
                                 </div>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <ActionButton
-                                        type="submit"
-                                        variant="primary"
-                                        disabled={loading}
-                                        className="flex-1 py-3 text-sm"
-                                    >
-                                        {loading ? 'Güncelleniyor...' : 'Güncelle'}
-                                    </ActionButton>
-                                    <ActionButton
-                                        type="button"
-                                        variant="neutral"
-                                        onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }}
-                                        className="flex-1 py-3 text-sm"
-                                    >
-                                        İptal
-                                    </ActionButton>
-                                </div>
-                            </form>
-                        </div>
+                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                                <ActionButton
+                                    type="submit"
+                                    variant="primary"
+                                    disabled={loading}
+                                    className="flex-1 py-2.5 text-sm"
+                                >
+                                    {loading ? 'Güncelleniyor...' : 'Güncelle'}
+                                </ActionButton>
+                                <ActionButton
+                                    type="button"
+                                    variant="neutral"
+                                    onClick={() => { setShowEditModal(false); setEditingRecord(null); resetUploadForm(); }}
+                                    className="flex-1 py-2.5 text-sm"
+                                >
+                                    İptal
+                                </ActionButton>
+                            </div>
+                        </form>
                     </div>
-                </div>
-            )}
+                )}
+            </CustomModal>
 
             {/* Preview Modal */}
-            {showPreviewModal && previewRecord && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-2 sm:p-4 z-50">
-                    <div className="bg-white rounded-none sm:rounded-lg max-w-5xl w-full h-[95vh] sm:h-[90vh] flex flex-col">
-                        <div className="p-3 sm:p-4 border-b border-gray-200 flex justify-between items-start gap-3">
+            <CustomModal
+                isOpen={showPreviewModal && !!previewRecord}
+                onClose={() => {
+                    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+                    setShowPreviewModal(false);
+                    setPdfUrl('');
+                    setPreviewRecord(null);
+                    setPreviewContentType('');
+                    setSelectedFileIndex(0);
+                }}
+                size="5xl"
+                closeOnBackdropClick={true}
+            >
+                {previewRecord && (
+                    <div className="h-[75vh] flex flex-col">
+                        <div className="pb-3 border-b border-gray-200 flex justify-between items-start gap-3">
                             <div className="min-w-0">
-                                <h2 className="text-base sm:text-xl font-bold text-gray-900 break-words">{previewRecord.full_name} - SGK Belgesi</h2>
+                                <h2 className="text-base sm:text-lg font-bold text-gray-900 break-words">{previewRecord.full_name} - SGK Belgesi</h2>
                                 <p className="text-xs sm:text-sm text-gray-600 break-words">{previewRecord.company_name || 'Firma belirtilmemiş'}</p>
                                 {previewFiles.length > 0 && (
-                                    <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                                    <p className="text-xs text-gray-500 mt-1">
                                         Dosya {selectedFileIndex + 1} / {previewFiles.length}
                                     </p>
                                 )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div>
                                 {(previewContentType.includes('pdf') || (selectedPreviewFile?.file_name || '').match(/\.pdf$/i)) && pdfUrl && (
                                     <a
                                         href={pdfUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-xs sm:text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+                                        className="inline-block text-xs px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
                                     >
                                         Yeni Sekmede Aç
                                     </a>
                                 )}
-                                <button onClick={() => {
-                                    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-                                    setShowPreviewModal(false);
-                                    setPdfUrl('');
-                                    setPreviewRecord(null);
-                                    setPreviewContentType('');
-                                    setSelectedFileIndex(0);
-                                }} className="text-gray-400 hover:text-gray-600">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
                             </div>
                         </div>
                         {previewFiles.length > 1 && (
-                            <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 overflow-x-auto">
+                            <div className="border-b border-gray-200 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
                                 {previewFiles.map((file, index) => (
                                     <button
                                         key={file.id || `${file.file_name}-${index}`}
@@ -1200,11 +1218,10 @@ export default function Sgk() {
                                 ))}
                             </div>
                         )}
-                        <div className="flex-1 min-h-0 overflow-auto bg-gray-100 flex items-center justify-center">
+                        <div className="flex-1 min-h-0 overflow-auto bg-gray-100 flex items-center justify-center rounded-xl mt-3">
                             {previewLoading ? (
-                                <div className="text-gray-700 text-sm sm:text-base">Belge yükleniyor...</div>
+                                <div className="text-gray-700 text-sm">Belge yükleniyor...</div>
                             ) : (previewContentType.startsWith('image/') || (selectedPreviewFile?.file_name || '').match(/\.(jpg|jpeg|png)$/i)) ? (
-                                // Resim dosyası için img tag kullan
                                 <img
                                     src={pdfUrl}
                                     alt={previewRecord.full_name}
@@ -1219,13 +1236,13 @@ export default function Sgk() {
                             ) : (previewContentType.includes('pdf') || (selectedPreviewFile?.file_name || '').match(/\.pdf$/i)) ? (
                                 isMobilePreview ? (
                                     <div className="text-center p-6 sm:p-8">
-                                        <p className="text-gray-700 mb-3">Mobil cihazlarda PDF yeni sekmede açılır.</p>
+                                        <p className="text-gray-700 mb-3 text-sm">Mobil cihazlarda PDF yeni sekmede açılır.</p>
                                         {pdfUrl && (
                                             <a
                                                 href={pdfUrl}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition text-sm"
+                                                className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition text-xs"
                                             >
                                                 PDF'i Yeni Sekmede Aç
                                             </a>
@@ -1234,21 +1251,21 @@ export default function Sgk() {
                                 ) : (
                                     <iframe
                                         src={pdfUrl}
-                                        className="w-full h-full"
+                                        className="w-full h-full border-none"
                                         title="SGK PDF Önizleme"
                                     />
                                 )
                             ) : (
                                 <iframe
                                     src={pdfUrl}
-                                    className="w-full h-full"
+                                    className="w-full h-full border-none"
                                     title="SGK Belgesi Önizleme"
                                 />
                             )}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </CustomModal>
         </div>
     );
 }

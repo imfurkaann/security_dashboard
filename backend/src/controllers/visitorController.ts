@@ -622,7 +622,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
              WHERE id = $1 AND deleted_at IS NULL
              RETURNING full_name, company_name, visiting_person, vehicle_plate, 
                        person_count, children_count, gate, phone, subcontractor_worker, 
-                       for_electric_station, daily_guest, notes, exit_time, send_whatsapp`,
+                       for_electric_station, daily_guest, meeting, delivery, notes, exit_time, send_whatsapp`,
             [id, personnel_id, exit_time || null]
         );
 
@@ -657,6 +657,8 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                     subcontractorWorker: Boolean(record.subcontractor_worker),
                     forElectricStation: Boolean(record.for_electric_station),
                     dailyGuest: Boolean(record.daily_guest),
+                    meeting: Boolean(record.meeting),
+                    delivery: Boolean(record.delivery),
                     notes: record.notes || undefined,
                     exitTime
                 });
