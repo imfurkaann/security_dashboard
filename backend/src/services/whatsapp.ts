@@ -26,14 +26,15 @@ export const createVehicleRecordMessage = (data: {
     notes?: string;
 }): string => {
     const konumSatir = data.destination ? `Konum: ${data.destination}\n` : '';
-    const aciklamaSatir = data.notes ? `Açıklama: ${data.notes}\n` : '';
+    const aciklamaSatir = data.notes ? `A\u00e7\u0131klama: ${data.notes}\n` : '';
 
-    return `🔑 ARAÇ TESLİM BİLDİRİMİ 🔑
-Araç: ${data.vehiclePlate}
-Kişi: ${data.managerName}
+    return `\uD83D\uDD11 ARA\u00c7 TESL\u0130M B\u0130LD\u0130R\u0130M\u0130
+Ara\u00e7: ${data.vehiclePlate}
+Ki\u015fi: ${data.managerName}
+Tarih: ${data.givenDate}
 ${konumSatir}${aciklamaSatir}Saat: ${data.givenTime}
 
-Teslim edilmiştir.`;
+Teslim edilmi\u015ftir.`;
 };
 
 /**
@@ -45,16 +46,18 @@ export const createVehicleReturnMessage = (data: {
     returnTime: string;
     destination?: string;
     driveDuration?: string;
+    notes?: string;
 }): string => {
     const locationLine = data.destination ? `Konum: ${data.destination}\n` : '';
-    const durationLine = data.driveDuration ? `Sürüş Süresi: ${data.driveDuration}\n` : '';
+    const durationLine = data.driveDuration ? `S\u00fcr\u00fc\u015f S\u00fcresi: ${data.driveDuration}\n` : '';
+    const notesLine = data.notes ? `A\u00e7\u0131klama: ${data.notes}\n` : '';
 
-    return `🚗 ARAÇ TESLİM ALMA BİLDİRİMİ 🚗
-Araç: ${data.vehiclePlate}
-Kişi: ${data.managerName}
-${locationLine}${durationLine}Saat: ${data.returnTime}
+    return `\uD83D\uDE97 ARA\u00c7 TESL\u0130M ALMA B\u0130LD\u0130R\u0130M\u0130
+Ara\u00e7: ${data.vehiclePlate}
+Ki\u015fi: ${data.managerName}
+${locationLine}${durationLine}${notesLine}Saat: ${data.returnTime}
 
-Teslim alınmıştır.`;
+Teslim al\u0131nm\u0131\u015ft\u0131r.`;
 };
 
 /**
@@ -79,7 +82,7 @@ export const createVisitorRecordMessage = (data: {
     notes?: string;
 }): string => {
     // Mesaj satırlarını dinamik olarak oluştur
-    const lines: string[] = ['🟢 ZİYARETÇİ GİRİŞ BİLDİRİMİ 🟢', ''];
+    const lines: string[] = ['🟢 ZİYARETÇİ GİRİŞ BİLDİRİMİ', ''];
 
     // Ad Soyad (zorunlu)
     if (data.fullName) {
@@ -168,10 +171,12 @@ export const createVisitorExitMessage = (data: {
     subcontractorWorker?: boolean;
     forElectricStation?: boolean;
     dailyGuest?: boolean;
+    meeting?: boolean;
+    delivery?: boolean;
     notes?: string;
     exitTime: string;
 }): string => {
-    const lines: string[] = ['🔴 ZİYARETÇİ ÇIKIŞ BİLDİRİMİ 🔴', ''];
+    const lines: string[] = ['🔴 ZİYARETÇİ ÇIKIŞ BİLDİRİMİ', ''];
 
     // Ad Soyad
     if (data.fullName) {
@@ -213,16 +218,22 @@ export const createVisitorExitMessage = (data: {
         lines.push(`Telefon: ${data.phone}`);
     }
 
-    // Özel Durumlar
+    // \u00d6zel Durumlar
     const specialTags: string[] = [];
     if (data.subcontractorWorker) {
-        specialTags.push('Taşeron İşçi');
+        specialTags.push('Ta\u015feron \u0130\u015f\u00e7i');
     }
     if (data.forElectricStation) {
-        specialTags.push('Şarj İstasyonu');
+        specialTags.push('\u015earj \u0130stasyonu');
     }
     if (data.dailyGuest) {
-        specialTags.push('Günübirlik Misafir');
+        specialTags.push('G\u00fcn\u00fcbirlik Misafir');
+    }
+    if (data.meeting) {
+        specialTags.push('G\u00f6r\u00fc\u015fme');
+    }
+    if (data.delivery) {
+        specialTags.push('Teslimat');
     }
     if (specialTags.length > 0) {
         lines.push(`Etiket: ${specialTags.join(', ')}`);
@@ -250,7 +261,7 @@ export const createFireAlarmMessage = (data: {
 }): string => {
     const notesInfo = data.notes ? `\nNot: ${data.notes}` : "";
 
-    return `🔥 YANGIN ALARMI BİLDİRİMİ 🔥
+    return `🔥 YANGIN ALARMI BİLDİRİMİ
 
 Alarm Numarası: ${data.alarmNumber}
 Konum: ${data.location}
@@ -263,18 +274,16 @@ Saat: ${data.alarmTime}${notesInfo}`;
 export const createFireAlarmResolveMessage = (data: {
     alarmNumber: string;
     location: string;
+    alarmTime?: string;
     resolutionTime: string;
     resolutionNotes?: string;
     falseAlarm: boolean;
 }): string => {
     const alarmType = data.falseAlarm
-        ? '⚠️ YANLIŞ ALARM ⚠️'
-        : '🆗 ALARM KONTROL EDİLDİ 🆗';
-    const notesInfo = data.resolutionNotes ? `\nÇözüm Açıklaması: ${data.resolutionNotes}` : "";
+        ? '\u26a0\ufe0f YANLI\u015e ALARM \u26a0\ufe0f'
+        : '\uD83C\uDD97 ALARM KONTROL ED\u0130LD\u0130 \uD83C\uDD97';
+    const alarmTimeLine = data.alarmTime ? `\nAlarm Saati: ${data.alarmTime}` : '';
+    const notesInfo = data.resolutionNotes ? `\n\u00c7\u00f6z\u00fcm A\u00e7\u0131klamas\u0131: ${data.resolutionNotes}` : '';
 
-    return `${alarmType}
-
-Alarm Numarası: ${data.alarmNumber}
-Konum: ${data.location}
-Çözüm Saati: ${data.resolutionTime}${notesInfo}`;
+    return `${alarmType}\n\nAlarm Numaras\u0131: ${data.alarmNumber}\nKonum: ${data.location}${alarmTimeLine}\n\u00c7\u00f6z\u00fcm Saati: ${data.resolutionTime}${notesInfo}`;
 };

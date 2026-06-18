@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message, Checkbox } from 'antd';
 import api from '../utils/api';
 import { isValidLength } from '../utils/validation';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import CustomModal from '../components/Modal';
+import ActionButton from '../components/ActionButton';
 
 
 // Vardiya tanımları
@@ -95,6 +97,24 @@ export default function Incidents() {
         other: false
     });
     const navigate = useNavigate();
+
+    const isFormDirty = useMemo(() => {
+        if (!existingReportId) {
+            return reportContent.trim() !== '';
+        }
+        const originalReport = selectedShift ? shiftReports[selectedShift] : null;
+        if (!originalReport) return reportContent.trim() !== '';
+
+        const originalContent = originalReport.report_content || '';
+        if (reportContent !== originalContent) return true;
+
+        const originalCategories = originalReport.categories || {};
+        for (const key of Object.keys(categories)) {
+            if (!!categories[key] !== !!originalCategories[key]) return true;
+        }
+
+        return false;
+    }, [existingReportId, reportContent, selectedShift, shiftReports, categories]);
 
     // Bugünkü vardiya raporlarını yükle
     const loadShiftReports = useCallback(async () => {
@@ -436,282 +456,307 @@ export default function Incidents() {
             </main>
 
             {/* Rapor Modal */}
-            {showReportModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-2xl font-bold text-gray-900">
-                                    {existingReportId ? 'Raporu Düzenle' : 'Yeni Rapor'} - {selectedShift}
-                                </h2>
-                                <button
-                                    onClick={() => {
-                                        setShowReportModal(false);
-                                        setExistingReportId(null);
-                                    }}
-                                    className="text-gray-400 hover:text-gray-600"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
-                            </div>
+            <CustomModal
+                isOpen={showReportModal}
+                onClose={() => {
+                    setShowReportModal(false);
+                    setExistingReportId(null);
+                }}
+                size="xl"
+                closeOnBackdropClick={false}
+                hasUnsavedChanges={isFormDirty}
+            >
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                            {selectedShift} Vardiya Raporu
+                        </span>
+                        {existingReportId && (
+                            <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2 py-1 rounded-md">
+                                Kayıtlı Rapor Düzenleniyor
+                            </span>
+                        )}
+                    </div>
 
-                            {/* Basit Textarea */}
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Rapor İçeriği
-                                </label>
-                                <textarea
-                                    value={reportContent}
-                                    onChange={(e) => setReportContent(e.target.value)}
-                                    placeholder="Vardiya raporu içeriğini buraya yazın..."
-                                    className="w-full min-h-[400px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-vertical"
-                                    style={{ fontFamily: 'inherit' }}
-                                />
-                                <p className="text-sm text-gray-500 mt-2">
-                                    {reportContent.length} / 50000 karakter
-                                </p>
-                            </div>
+                    {/* Basit Textarea */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            Rapor İçeriği
+                        </label>
+                        <textarea
+                            value={reportContent}
+                            onChange={(e) => setReportContent(e.target.value)}
+                            placeholder="Vardiya raporu içeriğini buraya yazın..."
+                            className="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical text-sm"
+                            style={{ fontFamily: 'inherit' }}
+                        />
+                        <p className="text-[11px] text-gray-500 mt-1">
+                            {reportContent.length} / 50000 karakter
+                        </p>
+                    </div>
 
-                            {/* Olay Kategorileri */}
-                            <div className="mb-6">
-                                <h3 className="text-lg font-semibold text-gray-800 mb-4">Olay Kategorileri</h3>
-                                <p className="text-sm text-gray-600 mb-4">Raporda bahsettiğiniz olayları aşağıdan işaretleyin:</p>
+                    {/* Olay Kategorileri */}
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-800 mb-1">Olay Kategorileri</h3>
+                        <p className="text-xs text-gray-500 mb-3">Raporda bahsettiğiniz olayları aşağıdan işaretleyin:</p>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {/* HIRSIZLIK */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">HIRSIZLIK</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.theft_guest_property}
-                                                onChange={(e) => setCategories({ ...categories, theft_guest_property: e.target.checked })}
-                                            >
-                                                Misafir Eşyası Çalınması
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.theft_hotel_property}
-                                                onChange={(e) => setCategories({ ...categories, theft_hotel_property: e.target.checked })}
-                                            >
-                                                Otel Mülkiyeti Çalınması
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.theft_personnel}
-                                                onChange={(e) => setCategories({ ...categories, theft_personnel: e.target.checked })}
-                                            >
-                                                Personel Hırsızlığı
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* Saldırı & KAVGA */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">Saldırı & KAVGA</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.assault_physical}
-                                                onChange={(e) => setCategories({ ...categories, assault_physical: e.target.checked })}
-                                            >
-                                                Fiziksel Saldırı
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.assault_verbal}
-                                                onChange={(e) => setCategories({ ...categories, assault_verbal: e.target.checked })}
-                                            >
-                                                Sözlü/Davranışsal Taciz
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.assault_mass_fight}
-                                                onChange={(e) => setCategories({ ...categories, assault_mass_fight: e.target.checked })}
-                                            >
-                                                Toplu Kavga/İzdiham
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* MADDE KULLANIMI */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">MADDE KULLANIMI</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.substance_personnel}
-                                                onChange={(e) => setCategories({ ...categories, substance_personnel: e.target.checked })}
-                                            >
-                                                Personelin Görevde Alkol/Uyuşturucu Kullanımı
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.substance_property}
-                                                onChange={(e) => setCategories({ ...categories, substance_property: e.target.checked })}
-                                            >
-                                                Mülkte Yasak Madde Bulunması
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* VANDALİZM & HASAR */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">VANDALİZM & HASAR</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.vandalism_room}
-                                                onChange={(e) => setCategories({ ...categories, vandalism_room: e.target.checked })}
-                                            >
-                                                Misafirin Oda Eşyalara Kasıtlı Zarar Vermesi
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.vandalism_common_area}
-                                                onChange={(e) => setCategories({ ...categories, vandalism_common_area: e.target.checked })}
-                                            >
-                                                Misafirin Ortak Alan Eşyalarına Kasıtlı Zarar Vermesi
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* İZİNSİZ GİRİŞ */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">İZİNSİZ GİRİŞ</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.unauthorized_room}
-                                                onChange={(e) => setCategories({ ...categories, unauthorized_room: e.target.checked })}
-                                            >
-                                                Yetkisiz Oda Girişi
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.unauthorized_restricted_area}
-                                                onChange={(e) => setCategories({ ...categories, unauthorized_restricted_area: e.target.checked })}
-                                            >
-                                                Kısıtlı Alan İhlali
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* KAZA & YARALANMA */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">KAZA & YARALANMA</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.accident_slip_fall}
-                                                onChange={(e) => setCategories({ ...categories, accident_slip_fall: e.target.checked })}
-                                            >
-                                                Kayma/Düşme Kazası
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.accident_equipment}
-                                                onChange={(e) => setCategories({ ...categories, accident_equipment: e.target.checked })}
-                                            >
-                                                Ekipman/Cihaz Kazası
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.accident_work}
-                                                onChange={(e) => setCategories({ ...categories, accident_work: e.target.checked })}
-                                            >
-                                                İş Kazası
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* TIBBİ ACİL */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">TIBBİ ACİL</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.medical_serious}
-                                                onChange={(e) => setCategories({ ...categories, medical_serious: e.target.checked })}
-                                            >
-                                                Ciddi Tıbbi Durum
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.medical_first_aid}
-                                                onChange={(e) => setCategories({ ...categories, medical_first_aid: e.target.checked })}
-                                            >
-                                                İlk Yardım Müdahalesi
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.medical_ambulance}
-                                                onChange={(e) => setCategories({ ...categories, medical_ambulance: e.target.checked })}
-                                            >
-                                                Ambulans
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* YANGIN & TAHLİYE */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">YANGIN & TAHLİYE</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.fire_real}
-                                                onChange={(e) => setCategories({ ...categories, fire_real: e.target.checked })}
-                                            >
-                                                Gerçek Yangın Olayı
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.fire_false_alarm}
-                                                onChange={(e) => setCategories({ ...categories, fire_false_alarm: e.target.checked })}
-                                            >
-                                                Hatalı Yangın Alarmı
-                                            </Checkbox>
-                                            <Checkbox
-                                                checked={categories.fire_evacuation}
-                                                onChange={(e) => setCategories({ ...categories, fire_evacuation: e.target.checked })}
-                                            >
-                                                Tahliye Gerektiren Durum
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* GÜVENLİK TEKNİK */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">GÜVENLİK TEKNİK</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.security_cctv_malfunction}
-                                                onChange={(e) => setCategories({ ...categories, security_cctv_malfunction: e.target.checked })}
-                                            >
-                                                CCTV Arızası/Kayıt Kesintisi
-                                            </Checkbox>
-                                        </div>
-                                    </div>
-
-                                    {/* Diğer (Güvenlik) */}
-                                    <div className="border border-gray-200 rounded-lg p-4">
-                                        <h4 className="font-semibold text-gray-700 mb-3">Diğer (Güvenlik)</h4>
-                                        <div className="flex flex-col gap-2">
-                                            <Checkbox
-                                                checked={categories.other}
-                                                onChange={(e) => setCategories({ ...categories, other: e.target.checked })}
-                                            >
-                                                Diğer
-                                            </Checkbox>
-                                        </div>
-                                    </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* HIRSIZLIK */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">HIRSIZLIK</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.theft_guest_property}
+                                        onChange={(e) => setCategories({ ...categories, theft_guest_property: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Misafir Eşyası Çalınması
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.theft_hotel_property}
+                                        onChange={(e) => setCategories({ ...categories, theft_hotel_property: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Otel Mülkiyeti Çalınması
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.theft_personnel}
+                                        onChange={(e) => setCategories({ ...categories, theft_personnel: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Personel Hırsızlığı
+                                    </Checkbox>
                                 </div>
                             </div>
 
-                            {/* Actions */}
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={handleReportSubmit}
-                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition"
-                                >
-                                    {existingReportId ? 'Güncelle ve Yeni Word Oluştur' : 'Raporu Kaydet ve Word\'e Çevir'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setShowReportModal(false);
-                                        setExistingReportId(null);
-                                    }}
-                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition"
-                                >
-                                    İptal
-                                </button>
+                            {/* Saldırı & KAVGA */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">Saldırı & KAVGA</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.assault_physical}
+                                        onChange={(e) => setCategories({ ...categories, assault_physical: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Fiziksel Saldırı
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.assault_verbal}
+                                        onChange={(e) => setCategories({ ...categories, assault_verbal: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Sözlü/Davranışsal Taciz
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.assault_mass_fight}
+                                        onChange={(e) => setCategories({ ...categories, assault_mass_fight: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Toplu Kavga/İzdiham
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* MADDE KULLANIMI */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">MADDE KULLANIMI</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.substance_personnel}
+                                        onChange={(e) => setCategories({ ...categories, substance_personnel: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Personelin Görevde Alkol/Uyuşturucu Kullanımı
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.substance_property}
+                                        onChange={(e) => setCategories({ ...categories, substance_property: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Mülkte Yasak Madde Bulunması
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* VANDALİZM & HASAR */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">VANDALİZM & HASAR</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.vandalism_room}
+                                        onChange={(e) => setCategories({ ...categories, vandalism_room: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Misafirin Oda Eşyalara Kasıtlı Zarar Vermesi
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.vandalism_common_area}
+                                        onChange={(e) => setCategories({ ...categories, vandalism_common_area: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Misafirin Ortak Alan Eşyalarına Kasıtlı Zarar Vermesi
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* İZİNSİZ GİRİŞ */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">İZİNSİZ GİRİŞ</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.unauthorized_room}
+                                        onChange={(e) => setCategories({ ...categories, unauthorized_room: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Yetkisiz Oda Girişi
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.unauthorized_restricted_area}
+                                        onChange={(e) => setCategories({ ...categories, unauthorized_restricted_area: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Kısıtlı Alan İhlali
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* KAZA & YARALANMA */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">KAZA & YARALANMA</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.accident_slip_fall}
+                                        onChange={(e) => setCategories({ ...categories, accident_slip_fall: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Kayma/Düşme Kazası
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.accident_equipment}
+                                        onChange={(e) => setCategories({ ...categories, accident_equipment: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Ekipman/Cihaz Kazası
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.accident_work}
+                                        onChange={(e) => setCategories({ ...categories, accident_work: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        İş Kazası
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* TIBBİ ACİL */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">TIBBİ ACİL</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.medical_serious}
+                                        onChange={(e) => setCategories({ ...categories, medical_serious: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Ciddi Tıbbi Durum
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.medical_first_aid}
+                                        onChange={(e) => setCategories({ ...categories, medical_first_aid: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        İlk Yardım Müdahalesi
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.medical_ambulance}
+                                        onChange={(e) => setCategories({ ...categories, medical_ambulance: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Ambulans
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* YANGIN & TAHLİYE */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">YANGIN & TAHLİYE</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.fire_real}
+                                        onChange={(e) => setCategories({ ...categories, fire_real: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Gerçek Yangın Olayı
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.fire_false_alarm}
+                                        onChange={(e) => setCategories({ ...categories, fire_false_alarm: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Hatalı Yangın Alarmı
+                                    </Checkbox>
+                                    <Checkbox
+                                        checked={categories.fire_evacuation}
+                                        onChange={(e) => setCategories({ ...categories, fire_evacuation: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Tahliye Gerektiren Durum
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* GÜVENLİK TEKNİK */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">GÜVENLİK TEKNİK</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.security_cctv_malfunction}
+                                        onChange={(e) => setCategories({ ...categories, security_cctv_malfunction: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        CCTV Arızası/Kayıt Kesintisi
+                                    </Checkbox>
+                                </div>
+                            </div>
+
+                            {/* Diğer (Güvenlik) */}
+                            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                                <h4 className="font-bold text-xs text-gray-700 mb-2 uppercase tracking-wider">Diğer (Güvenlik)</h4>
+                                <div className="flex flex-col gap-1.5">
+                                    <Checkbox
+                                        checked={categories.other}
+                                        onChange={(e) => setCategories({ ...categories, other: e.target.checked })}
+                                        className="text-xs font-normal"
+                                    >
+                                        Diğer
+                                    </Checkbox>
+                                </div>
                             </div>
                         </div>
                     </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-3 pt-4 border-t border-gray-200">
+                        <ActionButton
+                            onClick={handleReportSubmit}
+                            variant="primary"
+                            className="flex-1 py-2.5 text-sm"
+                        >
+                            {existingReportId ? 'Güncelle ve Word Dosyasını Yenile' : 'Kaydet ve Word Dosyasına Çevir'}
+                        </ActionButton>
+                        <ActionButton
+                            onClick={() => {
+                                setShowReportModal(false);
+                                setExistingReportId(null);
+                            }}
+                            variant="neutral"
+                            className="flex-1 py-2.5 text-sm"
+                        >
+                            İptal
+                        </ActionButton>
+                    </div>
                 </div>
-            )}
+            </CustomModal>
         </div>
     );
 }

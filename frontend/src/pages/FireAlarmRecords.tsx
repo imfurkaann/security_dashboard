@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DatePicker, message, Modal } from 'antd';
 import dayjs from '../utils/dayjsConfig';
 import 'antd/dist/reset.css';
+import CustomModal from '../components/Modal';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
@@ -769,25 +770,19 @@ export default function FireAlarmRecords() {
                 </div>
             </div>
 
-            {textPreview && (
-                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                Kapat
-                            </button>
-                        </div>
-                        <div className="px-4 py-4">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{textPreview.value}</p>
-                        </div>
+            {/* Text Preview Modal */}
+            <CustomModal
+                isOpen={!!textPreview}
+                onClose={() => setTextPreview(null)}
+                size="sm"
+                closeOnBackdropClick={true}
+            >
+                {textPreview && (
+                    <div className="py-2">
+                        <p className="text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed font-sans">{textPreview.value}</p>
                     </div>
-                </div>
-            )}
+                )}
+            </CustomModal>
         </div>
     );
 }
