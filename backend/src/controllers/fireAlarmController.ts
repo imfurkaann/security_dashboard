@@ -54,23 +54,23 @@ export const getFireAlarms = async (req: Request, res: Response) => {
         }
 
         if (alarm_number) {
-            whereClauses.push(`translate(lower(fa.alarm_number), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
-            queryParams.push(`%${alarm_number.toLowerCase()}%`);
+            whereClauses.push(`LOWER(translate(fa.alarm_number, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${alarm_number}%`);
         }
 
         if (location) {
-            whereClauses.push(`translate(lower(fa.location), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
-            queryParams.push(`%${location.toLowerCase()}%`);
+            whereClauses.push(`LOWER(translate(fa.location, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${location}%`);
         }
 
         if (recorded_by) {
-            whereClauses.push(`translate(lower(pr.first_name || ' ' || pr.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
-            queryParams.push(`%${recorded_by.toLowerCase()}%`);
+            whereClauses.push(`LOWER(translate(pr.first_name || ' ' || pr.last_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${recorded_by}%`);
         }
 
         if (resolved_by) {
-            whereClauses.push(`translate(lower(ps.first_name || ' ' || ps.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
-            queryParams.push(`%${resolved_by.toLowerCase()}%`);
+            whereClauses.push(`LOWER(translate(ps.first_name || ' ' || ps.last_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${resolved_by}%`);
         }
 
         if (gate && gate !== 'all') {

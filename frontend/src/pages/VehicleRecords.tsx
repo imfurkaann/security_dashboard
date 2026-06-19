@@ -11,10 +11,6 @@ import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 export default function VehicleRecords() {
     const [records, setRecords] = useState<VehicleUsage[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -765,7 +761,11 @@ export default function VehicleRecords() {
                                                         <div className="text-xs text-gray-900 whitespace-nowrap">{record.returned_by || '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        {record.status === 'in_use' ? (
+                                                        {record.deleted_at ? (
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                                                Silindi
+                                                            </span>
+                                                        ) : record.status === 'in_use' ? (
                                                             <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                                                                 Kullanımda
                                                             </span>

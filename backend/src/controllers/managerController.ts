@@ -34,18 +34,18 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
 
         // Apply query filters
         if (req.query.manager_name) {
-            filters.push(`(mr.manager_name ILIKE $${paramIndex} OR CONCAT(m.first_name, ' ', m.last_name) ILIKE $${paramIndex})`);
+            filters.push(`(LOWER(translate(mr.manager_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(m.first_name, ' ', m.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.manager_name}%`);
             paramIndex++;
         }
 
         if (req.query.entry_by) {
-            filters.push(`CONCAT(pe.first_name, ' ', pe.last_name) ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(CONCAT(pe.first_name, ' ', pe.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.entry_by}%`);
         }
 
         if (req.query.exit_by) {
-            filters.push(`CONCAT(px.first_name, ' ', px.last_name) ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(CONCAT(px.first_name, ' ', px.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.exit_by}%`);
         }
 

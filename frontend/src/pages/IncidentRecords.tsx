@@ -53,10 +53,6 @@ function CompactActionButton({
 
 const { RangePicker } = DatePicker;
 
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 interface IncidentRecord {
     id: string;
     description: string;
@@ -72,6 +68,7 @@ interface IncidentRecord {
     resolution_notes: string | null;
     resolved_at: string | null;
     reported_by: string;
+    deleted_at?: string | null;
 }
 
 export default function IncidentRecords() {
@@ -502,10 +499,13 @@ export default function IncidentRecords() {
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {dayGroup.records.map((record) => (
-                                                <tr key={record.id} className="hover:bg-gray-50">
+                                                <tr key={record.id} className={`hover:bg-gray-50 ${record.deleted_at ? 'opacity-60' : ''}`}>
                                                     <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{formatDate(record.report_date || record.created_at)}</div>
                                                         <div className="text-[10px] text-gray-500 mt-0.5">{formatTime(record.incident_time || record.created_at)}</div>
+                                                        {record.deleted_at && (
+                                                            <span className="mt-1 px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-red-100 text-red-700">Silindi</span>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.shift_label || '-'}</div>

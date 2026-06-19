@@ -11,11 +11,6 @@ import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 import { formatPhoneNumber } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
-
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 const getVisitorTags = (record: VisitorRecord): string[] => {
     const tags: string[] = [];
     if (record.subcontractor_worker) tags.push('Taşeron İşçi');

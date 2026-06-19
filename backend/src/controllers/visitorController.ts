@@ -58,38 +58,38 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
 
         // Apply query filters
         if (req.query.full_name) {
-            filters.push(`vr.full_name ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.full_name}%`);
         }
 
         if (req.query.vehicle_plate) {
-            filters.push(`vr.vehicle_plate ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.vehicle_plate, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.vehicle_plate}%`);
         }
 
         if (req.query.company_name) {
-            filters.push(`vr.company_name ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.company_name}%`);
         }
 
         if (req.query.visiting_person) {
-            filters.push(`vr.visiting_person ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.visiting_person, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.visiting_person}%`);
         }
 
         if (req.query.phone) {
-            filters.push(`vr.phone ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.phone, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.phone}%`);
         }
 
         if (req.query.entry_by) {
-            filters.push(`(vr.entry_by_name ILIKE $${paramIndex} OR CONCAT(pe.first_name, ' ', pe.last_name) ILIKE $${paramIndex})`);
+            filters.push(`(LOWER(translate(vr.entry_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(pe.first_name, ' ', pe.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.entry_by}%`);
             paramIndex++;
         }
 
         if (req.query.exit_by) {
-            filters.push(`(vr.exit_by_name ILIKE $${paramIndex} OR CONCAT(px.first_name, ' ', px.last_name) ILIKE $${paramIndex})`);
+            filters.push(`(LOWER(translate(vr.exit_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(px.first_name, ' ', px.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.exit_by}%`);
             paramIndex++;
         }
