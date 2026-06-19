@@ -53,8 +53,8 @@ export const getIncidentRecords = async (req: Request, res: Response) => {
         }
 
         if (reported_by) {
-            whereClauses.push(`translate(lower(p.first_name || ' ' || p.last_name), 'çğıöşüı', 'cgiosui') LIKE $${paramCounter++}`);
-            queryParams.push(`%${reported_by.toLowerCase()}%`);
+            whereClauses.push(`LOWER(translate(p.first_name || ' ' || p.last_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${reported_by}%`);
         }
 
         if (hasGate && gate) {
@@ -104,6 +104,7 @@ export const getIncidentRecords = async (req: Request, res: Response) => {
                 i.resolved,
                 i.resolution_notes,
                 i.resolved_at,
+                i.deleted_at,
                 p.first_name || ' ' || p.last_name as reported_by
             FROM incidents i
             LEFT JOIN personnel p ON i.recorded_by = p.id

@@ -96,23 +96,23 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
         }
 
         if (req.query.manager) {
-            filters.push(`(vr.manager_name ILIKE $${paramIndex} OR CONCAT(m.first_name, ' ', m.last_name) ILIKE $${paramIndex})`);
+            filters.push(`(LOWER(translate(vr.manager_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(m.first_name, ' ', m.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.manager}%`);
             paramIndex++;
         }
 
         if (req.query.destination) {
-            filters.push(`vr.destination ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(vr.destination, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.destination}%`);
         }
 
         if (req.query.given_by) {
-            filters.push(`CONCAT(pg.first_name, ' ', pg.last_name) ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(CONCAT(pg.first_name, ' ', pg.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.given_by}%`);
         }
 
         if (req.query.returned_by) {
-            filters.push(`CONCAT(pr.first_name, ' ', pr.last_name) ILIKE $${paramIndex++}`);
+            filters.push(`LOWER(translate(CONCAT(pr.first_name, ' ', pr.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
             queryParams.push(`%${req.query.returned_by}%`);
         }
 

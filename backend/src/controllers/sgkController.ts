@@ -164,8 +164,41 @@ const sendStoredFile = (res: Response, fileName: string): void => {
  * Get all SGK records
  * GET /api/sgk/records
  */
-export const getSgkRecords = async (_req: Request, res: Response): Promise<void> => {
+export const getSgkRecords = async (req: Request, res: Response): Promise<void> => {
     try {
+        const limitQuery = req.query.limit;
+        const offsetQuery = req.query.offset;
+        const unlimited = req.query.unlimited === 'true';
+
+        const full_name = typeof req.query.full_name === 'string' ? req.query.full_name.trim() : '';
+        const company_name = typeof req.query.company_name === 'string' ? req.query.company_name.trim() : '';
+
+        const whereClauses: string[] = [];
+        const queryParams: any[] = [];
+        let paramCounter = 1;
+
+        whereClauses.push(`sr.deleted_at IS NULL`);
+
+        if (full_name) {
+            whereClauses.push(`LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${full_name}%`);
+        }
+
+        if (company_name) {
+            whereClauses.push(`LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            queryParams.push(`%${company_name}%`);
+        }
+
+        const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        let paginationString = '';
+        if (!unlimited) {
+            const limit = Math.max(Number(limitQuery) || 200, 1);
+            const offset = Math.max(Number(offsetQuery) || 0, 0);
+            paginationString = `LIMIT $${paramCounter++} OFFSET $${paramCounter++}`;
+            queryParams.push(limit, offset);
+        }
+
         const query = `
             SELECT 
                 sr.id,
@@ -181,11 +214,11 @@ export const getSgkRecords = async (_req: Request, res: Response): Promise<void>
                 p.last_name as personnel_last_name
             FROM sgk_records sr
             LEFT JOIN personnel p ON sr.personnel_id = p.id
-            WHERE sr.deleted_at IS NULL
+            ${whereString}
             ORDER BY sr.upload_date DESC
-            LIMIT 1000
+            ${paginationString}
         `;
-        const result = await pool.query(query);
+        const result = await pool.query(query, queryParams);
 
         const recordIds = result.rows.map((row: any) => row.id);
         const fileMap = await getRecordFilesByIds(recordIds);
@@ -451,7 +484,7 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             }
 
             const sanitizedName = sanitizeInput(full_name, 100);
-            query += ' AND LOWER(sr.full_name) LIKE LOWER($1)';
+            query += ` AND LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`;
             params.push(`%${sanitizedName}%`);
 
         } else if (search_type === 'company') {
@@ -461,7 +494,7 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             }
 
             const sanitizedCompany = sanitizeInput(company_name, 100);
-            query += ' AND LOWER(sr.company_name) LIKE LOWER($1)';
+            query += ` AND LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`;
             params.push(`%${sanitizedCompany}%`);
         }
 

@@ -11,10 +11,6 @@ import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 
 const { RangePicker } = DatePicker;
 
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 export default function ManagerRecords() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [loading, setLoading] = useState(true);
@@ -678,9 +674,15 @@ export default function ManagerRecords() {
                                                         <div className="text-xs text-gray-900">{record.exit_by || '-'}</div>
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap align-top">
-                                                        <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
-                                                            {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
-                                                        </span>
+                                                        {record.deleted_at ? (
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                                                Silindi
+                                                            </span>
+                                                        ) : (
+                                                            <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                                                {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}

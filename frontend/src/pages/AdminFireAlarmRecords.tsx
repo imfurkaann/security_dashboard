@@ -853,7 +853,9 @@ export default function AdminFireAlarmRecords() {
                                                         {renderPreviewText(record.resolution_notes, 'Notlar')}
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        {record.resolved ? (
+                                                        {record.deleted_at ? (
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] font-semibold rounded-full bg-red-100 text-red-700">Silindi</span>
+                                                        ) : record.resolved ? (
                                                             <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] font-semibold rounded-full bg-green-100 text-green-800">Cozuldu</span>
                                                         ) : (
                                                             <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] font-semibold rounded-full bg-red-100 text-red-800">Aktif</span>

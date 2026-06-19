@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import CustomModal from '../components/Modal';
@@ -80,11 +80,12 @@ const normalizeDisplayFileName = (value: string): string => {
     }
 };
 
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 export default function Sgk() {
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const PAGE_SIZE = 200;
+    const containerRef = useRef<HTMLDivElement>(null);
+
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -184,40 +185,46 @@ export default function Sgk() {
     const [searchMode, setSearchMode] = useState<'all' | 'tc' | 'passport'>('all');
     const [searching, setSearching] = useState(false);
 
-    const fetchAllSgkRecords = useCallback(async () => {
+    const fetchData = useCallback(async (offset = 0, append = false) => {
         try {
-            const response = await api.get('/sgk/records');
-            setAllRecords(response.data || []);
+            const params: Record<string, string | number | boolean> = {
+                limit: PAGE_SIZE,
+                offset,
+                _t: Date.now()
+            };
+
+            if (filters.full_name) params.full_name = filters.full_name;
+            if (filters.company_name) params.company_name = filters.company_name;
+
+            const response = await api.get('/sgk/records', { params });
+            const fetched = response.data || [];
+
+            if (append) {
+                setAllRecords(prev => [...prev, ...fetched]);
+            } else {
+                setAllRecords(fetched);
+            }
+
+            setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
             console.error('SGK kayıtları yüklenemedi:', error);
-        }
-    }, []);
-
-    // Fetch all records on mount
-    useEffect(() => {
-        const fetchRecords = async () => {
-            await fetchAllSgkRecords();
+            message.error('SGK kayıtları yüklenemedi');
+        } finally {
             setLoading(false);
-        };
-        void fetchRecords();
-    }, [fetchAllSgkRecords]);
+            setLoadingMore(false);
+        }
+    }, [filters.full_name, filters.company_name]);
 
-    // Filtered records with useMemo
-    const filteredRecords = useMemo(() => {
-        return allRecords.filter(record => {
-            // Full name filter
-            if (filters.full_name && !normalizeSearchText(record.full_name).includes(normalizeSearchText(filters.full_name))) {
-                return false;
-            }
+    // Fetch all records on mount and filter changes
+    useEffect(() => {
+        if (searchMode === 'all') {
+            setLoading(true);
+            void fetchData(0, false);
+        }
+    }, [fetchData, searchMode]);
 
-            // Company name filter
-            if (filters.company_name && !normalizeSearchText(record.company_name).includes(normalizeSearchText(filters.company_name))) {
-                return false;
-            }
-
-            return true;
-        });
-    }, [allRecords, filters]);
+    // Filtered records (now server-side filtered)
+    const filteredRecords = allRecords;
 
     const isFormDirty = useMemo(() => {
         return (
@@ -305,15 +312,14 @@ export default function Sgk() {
     const resetToAllRecords = useCallback(async () => {
         setSearchMode('all');
         setLoading(true);
-        await fetchAllSgkRecords();
-        setLoading(false);
-    }, [fetchAllSgkRecords]);
+        await fetchData(0, false);
+    }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['sgk'],
         onMutation: async () => {
             if (searchMode !== 'all') return;
-            await fetchAllSgkRecords();
+            await fetchData(0, false);
         },
         enabled: true,
     });
@@ -330,6 +336,46 @@ export default function Sgk() {
             resetToAllRecords();
         }
     }, [searchMode, resetToAllRecords]);
+
+    // Infinite scroll: load more when near bottom
+    useEffect(() => {
+        if (searchMode !== 'all') return;
+
+        const node = containerRef.current;
+        if (!node) return;
+
+        const onScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 300;
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(allRecords.length, true);
+            }
+        };
+
+        node.addEventListener('scroll', onScroll);
+
+        const onWindowScroll = () => {
+            if (loadingMore || !hasMore) return;
+            const threshold = 400;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const remaining = docHeight - windowHeight - scrollTop;
+            if (remaining < threshold) {
+                setLoadingMore(true);
+                void fetchData(allRecords.length, true);
+            }
+        };
+
+        window.addEventListener('scroll', onWindowScroll);
+
+        return () => {
+            node.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onWindowScroll);
+        };
+    }, [fetchData, loadingMore, hasMore, allRecords.length, searchMode]);
 
     // Reset upload form
     const resetUploadForm = useCallback(() => {
@@ -558,8 +604,7 @@ export default function Sgk() {
                     message.success('Kayıt ve belge başarıyla silindi');
 
                     // Listeyi yenile
-                    const response = await api.get('/sgk/records');
-                    setAllRecords(response.data || []);
+                    void fetchData(0, false);
                 } catch (error) {
                     const err = error as { response?: { data?: { message?: string } } };
                     message.error(err?.response?.data?.message || 'Silme işlemi sırasında hata oluştu');
@@ -655,8 +700,7 @@ export default function Sgk() {
             resetUploadForm();
 
             // Listeyi yenile
-            const recordsResponse = await api.get('/sgk/records');
-            setAllRecords(recordsResponse.data || []);
+            void fetchData(0, false);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
@@ -806,7 +850,7 @@ export default function Sgk() {
                     </div>
                 ) : filteredRecords.length > 0 ? (
                     <div className="bg-white rounded-lg shadow border border-gray-200 w-full flex-1 min-h-0 overflow-hidden">
-                        <div className="p-3 sm:p-4 h-full min-h-0 overflow-auto">
+                        <div ref={containerRef} className="p-3 sm:p-4 h-full min-h-0 overflow-auto">
                             <div className="space-y-2">
                                 {filteredRecords.map((record) => (
                                     <div key={record.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition w-full">

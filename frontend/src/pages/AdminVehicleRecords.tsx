@@ -53,11 +53,6 @@ function CompactActionButton({
         </button>
     );
 }
-
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 interface VehicleEditFormData {
     vehicle_id: string;
     manager_id: string;

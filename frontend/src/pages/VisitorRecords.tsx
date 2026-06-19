@@ -12,10 +12,6 @@ import { formatPhoneNumber } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
 
-const normalizeSearchText = (value: string | null | undefined): string => {
-    return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
-};
-
 const getVisitorTags = (record: VisitorRecord): string[] => {
     const tags: string[] = [];
     if (record.subcontractor_worker) tags.push('Taşeron İşçi');
@@ -914,9 +910,15 @@ export default function VisitorRecords() {
                                                         {renderPreviewText(record.notes, 'Açıklama')}
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
-                                                        <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[11px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
-                                                            {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
-                                                        </span>
+                                                        {record.deleted_at ? (
+                                                            <span className="px-2 py-0.5 inline-flex whitespace-nowrap text-[11px] leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                                                Silindi
+                                                            </span>
+                                                        ) : (
+                                                            <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[11px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
+                                                                {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.entry_by || '-'}</div>
