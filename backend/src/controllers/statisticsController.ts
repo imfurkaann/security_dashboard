@@ -1,6 +1,23 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 
+const resolveDateRange = (query: any) => {
+    let start: string;
+    let end: string;
+    if (query.startDate && query.endDate) {
+        start = query.startDate as string;
+        end = query.endDate as string;
+    } else {
+        const days = parseInt(query.days as string) || 30;
+        const endObj = new Date();
+        const startObj = new Date();
+        startObj.setDate(endObj.getDate() - days);
+        start = startObj.toISOString().split('T')[0];
+        end = endObj.toISOString().split('T')[0];
+    }
+    return { start, end };
+};
+
 // Genel istatistikleri getir
 export const getGeneralStats = async (_req: Request, res: Response) => {
     try {
@@ -53,7 +70,8 @@ export const getGeneralStats = async (_req: Request, res: Response) => {
 // Ziyaretçi trend verileri
 export const getVisitorTrends = async (req: Request, res: Response) => {
     try {
-        const { period = 'daily', days = 30 } = req.query;
+        const { period = 'daily' } = req.query;
+        const { start, end } = resolveDateRange(req.query);
         const client = await pool.connect();
 
         try {
@@ -64,9 +82,9 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         entry_date::text as date,
                         COUNT(*) as count,
-                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
+                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
-                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                    WHERE entry_date >= $1 AND entry_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY entry_date
                     ORDER BY entry_date ASC
@@ -76,9 +94,9 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         DATE_TRUNC('week', entry_date)::date::text as date,
                         COUNT(*) as count,
-                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
+                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
-                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                    WHERE entry_date >= $1 AND entry_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY DATE_TRUNC('week', entry_date)
                     ORDER BY date ASC
@@ -88,16 +106,16 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     SELECT 
                         TO_CHAR(entry_date, 'YYYY-MM') as date,
                         COUNT(*) as count,
-                                                SUM(COALESCE(person_count, 0) + 1) as total_persons
+                        SUM(COALESCE(person_count, 0) + 1) as total_persons
                     FROM visitor_records 
-                    WHERE entry_date >= CURRENT_DATE - $1::integer
+                    WHERE entry_date >= $1 AND entry_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY TO_CHAR(entry_date, 'YYYY-MM')
                     ORDER BY date ASC
                 `;
             }
 
-            const result = await client.query(query, [days]);
+            const result = await client.query(query, [start, end]);
 
             // Saatlik yoğunluk (Gün x Saat ısı haritası için)
             const hourlyHeatmap = await client.query(`
@@ -106,14 +124,14 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     EXTRACT(DOW FROM entry_date) as day_of_week,
                     EXTRACT(HOUR FROM entry_time::time) as hour,
                     COUNT(*) as visit_count,
-                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
+                    SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                   AND entry_time IS NOT NULL
                 GROUP BY TO_CHAR(entry_date, 'Day'), EXTRACT(DOW FROM entry_date), EXTRACT(HOUR FROM entry_time::time)
                 ORDER BY day_of_week, hour
-            `, [days]);
+            `, [start, end]);
 
             // Ortalama ziyaret süresi
             const avgDuration = await client.query(`
@@ -123,12 +141,12 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     MAX(EXTRACT(EPOCH FROM (exit_time::time - entry_time::time)) / 3600) as max_hours,
                     COUNT(*) as completed_visits
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                   AND entry_time IS NOT NULL
                   AND exit_time IS NOT NULL
                   AND exit_time::time > entry_time::time
-            `, [days]);
+            `, [start, end]);
 
             // Ziyaret süresi dağılımı (histogram için)
             const durationDistribution = await client.query(`
@@ -142,56 +160,56 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     END as duration_range,
                     COUNT(*) as count
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                   AND entry_time IS NOT NULL
                   AND exit_time IS NOT NULL
                   AND exit_time::time > entry_time::time
                 GROUP BY duration_range
                 ORDER BY duration_range
-            `, [days]);
+            `, [start, end]);
 
             // Kime gelindiği bazlı dağılım
             const hostDistribution = await client.query(`
                 SELECT 
                     COALESCE(visiting_person, 'Belirtilmemiş') as host,
                     COUNT(*) as visit_count,
-                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
+                    SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                 GROUP BY visiting_person
                 ORDER BY visit_count DESC
                 LIMIT 15
-            `, [days]);
+            `, [start, end]);
 
             // Elektrik istasyonu için gelenler
             const electricStationVisitors = await client.query(`
                 SELECT 
                     entry_date::text as date,
                     COUNT(*) as count,
-                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
+                    SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                   AND for_electric_station = true
                 GROUP BY entry_date
                 ORDER BY entry_date ASC
-            `, [days]);
+            `, [start, end]);
 
             // Taşeron işçi ziyaretleri
             const subcontractorVisitors = await client.query(`
                 SELECT 
                     entry_date::text as date,
                     COUNT(*) as count,
-                                        SUM(COALESCE(person_count, 0) + 1) as total_persons
+                    SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                   AND subcontractor_worker = true
                 GROUP BY entry_date
                 ORDER BY entry_date ASC
-            `, [days]);
+            `, [start, end]);
 
             // Elektrik istasyonu vs Taşeron karşılaştırması
             const categoryComparison = await client.query(`
@@ -204,7 +222,7 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     COUNT(*) as count,
                     SUM(COALESCE(person_count, 0) + 1) as total_persons
                 FROM visitor_records 
-                WHERE entry_date >= CURRENT_DATE - $1::integer
+                WHERE entry_date >= $1 AND entry_date <= $2
                   AND deleted_at IS NULL
                 GROUP BY 
                     CASE 
@@ -213,7 +231,28 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                         ELSE 'Diğer'
                     END
                 ORDER BY count DESC
-            `, [days]);
+            `, [start, end]);
+
+            // Etiket bazlı günlük dağılım
+            const tagTrends = await client.query(`
+                SELECT 
+                    entry_date::text as date,
+                    SUM(CASE WHEN subcontractor_worker = true THEN 1 ELSE 0 END) as subcontractor_worker,
+                    SUM(CASE WHEN for_electric_station = true THEN 1 ELSE 0 END) as for_electric_station,
+                    SUM(CASE WHEN daily_guest = true THEN 1 ELSE 0 END) as daily_guest,
+                    SUM(CASE WHEN entry_tag = true THEN 1 ELSE 0 END) as entry_tag,
+                    SUM(CASE WHEN exit_tag = true THEN 1 ELSE 0 END) as exit_tag,
+                    SUM(CASE WHEN tour_entry = true THEN 1 ELSE 0 END) as tour_entry,
+                    SUM(CASE WHEN tour_exit = true THEN 1 ELSE 0 END) as tour_exit,
+                    SUM(CASE WHEN meeting = true THEN 1 ELSE 0 END) as meeting,
+                    SUM(CASE WHEN delivery = true THEN 1 ELSE 0 END) as delivery,
+                    SUM(CASE WHEN guide = true THEN 1 ELSE 0 END) as guide
+                FROM visitor_records
+                WHERE entry_date >= $1 AND entry_date <= $2
+                  AND deleted_at IS NULL
+                GROUP BY entry_date
+                ORDER BY entry_date ASC
+            `, [start, end]);
 
             res.json({
                 success: true,
@@ -225,7 +264,8 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
                     hostDistribution: hostDistribution.rows,
                     electricStationVisitors: electricStationVisitors.rows,
                     subcontractorVisitors: subcontractorVisitors.rows,
-                    categoryComparison: categoryComparison.rows
+                    categoryComparison: categoryComparison.rows,
+                    tagTrends: tagTrends.rows
                 }
             });
         } finally {
@@ -240,7 +280,8 @@ export const getVisitorTrends = async (req: Request, res: Response) => {
 // Araç kullanım istatistikleri
 export const getVehicleStats = async (req: Request, res: Response) => {
     try {
-        const { period = 'daily', days = 30 } = req.query;
+        const { period = 'daily' } = req.query;
+        const { start, end } = resolveDateRange(req.query);
         const client = await pool.connect();
 
         try {
@@ -252,7 +293,7 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                         given_date::text as date,
                         COUNT(*) as count
                     FROM vehicle_records 
-                    WHERE given_date >= CURRENT_DATE - $1::integer
+                    WHERE given_date >= $1 AND given_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY given_date
                     ORDER BY given_date ASC
@@ -263,7 +304,7 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                         DATE_TRUNC('week', given_date)::date::text as date,
                         COUNT(*) as count
                     FROM vehicle_records 
-                    WHERE given_date >= CURRENT_DATE - $1::integer
+                    WHERE given_date >= $1 AND given_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY DATE_TRUNC('week', given_date)
                     ORDER BY date ASC
@@ -274,14 +315,14 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                         TO_CHAR(given_date, 'YYYY-MM') as date,
                         COUNT(*) as count
                     FROM vehicle_records 
-                    WHERE given_date >= CURRENT_DATE - $1::integer
+                    WHERE given_date >= $1 AND given_date <= $2
                       AND deleted_at IS NULL
                     GROUP BY TO_CHAR(given_date, 'YYYY-MM')
                     ORDER BY date ASC
                 `;
             }
 
-            const trendResult = await client.query(trendQuery, [days]);
+            const trendResult = await client.query(trendQuery, [start, end]);
 
             // En çok kullanılan araçlar
             const topVehicles = await client.query(`
@@ -290,12 +331,12 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                     v.brand,
                     COUNT(vr.id) as usage_count
                 FROM vehicles v
-                LEFT JOIN vehicle_records vr ON v.id = vr.vehicle_id AND vr.deleted_at IS NULL
+                LEFT JOIN vehicle_records vr ON v.id = vr.vehicle_id AND vr.deleted_at IS NULL AND vr.given_date >= $1 AND vr.given_date <= $2
                 WHERE v.deleted_at IS NULL
                 GROUP BY v.id, v.plate, v.brand
                 ORDER BY usage_count DESC
                 LIMIT 10
-            `);
+            `, [start, end]);
 
             // En çok araç alan yöneticiler
             const topManagers = await client.query(`
@@ -305,12 +346,12 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                 FROM vehicle_records vr
                 LEFT JOIN managers m ON vr.manager_id = m.id
                 WHERE vr.deleted_at IS NULL
-                  AND vr.given_date >= CURRENT_DATE - $1::integer
+                  AND vr.given_date >= $1 AND vr.given_date <= $2
                 GROUP BY COALESCE(m.first_name || ' ' || m.last_name, vr.manager_name)
                 HAVING COALESCE(m.first_name || ' ' || m.last_name, vr.manager_name) IS NOT NULL
                 ORDER BY usage_count DESC
                 LIMIT 10
-            `, [days]);
+            `, [start, end]);
 
             // Araç durumu dağılımı
             const statusDistribution = await client.query(`
@@ -319,9 +360,9 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM vehicle_records 
                 WHERE deleted_at IS NULL
-                  AND given_date >= CURRENT_DATE - $1::integer
+                  AND given_date >= $1 AND given_date <= $2
                 GROUP BY status
-            `, [days]);
+            `, [start, end]);
 
             // Hedef lokasyon analizi (en çok gidilen yerler)
             const topDestinations = await client.query(`
@@ -332,11 +373,11 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                 WHERE deleted_at IS NULL
                   AND destination IS NOT NULL
                   AND destination != ''
-                  AND given_date >= CURRENT_DATE - $1::integer
+                  AND given_date >= $1 AND given_date <= $2
                 GROUP BY destination
                 ORDER BY count DESC
                 LIMIT 10
-            `, [days]);
+            `, [start, end]);
 
             // Saatlik kullanım yoğunluğu
             const hourlyUsage = await client.query(`
@@ -346,10 +387,10 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                 FROM vehicle_records 
                 WHERE deleted_at IS NULL
                   AND given_time IS NOT NULL
-                  AND given_date >= CURRENT_DATE - $1::integer
+                  AND given_date >= $1 AND given_date <= $2
                 GROUP BY EXTRACT(HOUR FROM given_time::time)
                 ORDER BY hour ASC
-            `, [days]);
+            `, [start, end]);
 
             // Gün x Saat ısı haritası
             const hourlyHeatmap = await client.query(`
@@ -359,12 +400,12 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                     EXTRACT(HOUR FROM given_time::time) as hour,
                     COUNT(*) as count
                 FROM vehicle_records 
-                WHERE given_date >= CURRENT_DATE - $1::integer
+                WHERE given_date >= $1 AND given_date <= $2
                   AND deleted_at IS NULL
                   AND given_time IS NOT NULL
                 GROUP BY TO_CHAR(given_date, 'Day'), EXTRACT(DOW FROM given_date), EXTRACT(HOUR FROM given_time::time)
                 ORDER BY day_of_week, hour
-            `, [days]);
+            `, [start, end]);
 
             // Personel bazlı araç kullanımı (Kim hangi aracı kullanıyor)
             const personnelVehicleUsage = await client.query(`
@@ -376,11 +417,11 @@ export const getVehicleStats = async (req: Request, res: Response) => {
                 LEFT JOIN vehicles v ON vr.vehicle_id = v.id
                 LEFT JOIN personnel p ON vr.given_by = p.id
                 WHERE vr.deleted_at IS NULL
-                  AND vr.given_date >= CURRENT_DATE - $1::integer
+                  AND vr.given_date >= $1 AND vr.given_date <= $2
                 GROUP BY p.first_name, p.last_name, v.plate
                 ORDER BY usage_count DESC
                 LIMIT 20
-            `, [days]);
+            `, [start, end]);
 
             res.json({
                 success: true,
@@ -497,7 +538,7 @@ export const getManagerStats = async (req: Request, res: Response) => {
 // Yangın alarmı istatistikleri
 export const getFireAlarmStats = async (req: Request, res: Response) => {
     try {
-        const { days = 365 } = req.query;
+        const { start, end } = resolveDateRange(req.query);
         const client = await pool.connect();
 
         try {
@@ -507,11 +548,11 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                     alarm_time::date::text as date,
                     COUNT(*) as count
                 FROM fire_alarms 
-                WHERE alarm_time::date >= CURRENT_DATE - $1::integer
+                WHERE alarm_time >= $1::timestamp AND alarm_time < ($2::date + INTERVAL '1 day')
                   AND deleted_at IS NULL
                 GROUP BY alarm_time::date
                 ORDER BY alarm_time::date ASC
-            `, [days]);
+            `, [start, end]);
 
             // Aylık alarm trendi
             const monthlyTrend = await client.query(`
@@ -521,11 +562,11 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                     SUM(CASE WHEN false_alarm = true THEN 1 ELSE 0 END) as false_alarms,
                     SUM(CASE WHEN false_alarm = false OR false_alarm IS NULL THEN 1 ELSE 0 END) as real_alarms
                 FROM fire_alarms 
-                WHERE alarm_time >= CURRENT_DATE - $1::integer
+                WHERE alarm_time >= $1::timestamp AND alarm_time < ($2::date + INTERVAL '1 day')
                   AND deleted_at IS NULL
                 GROUP BY TO_CHAR(alarm_time, 'YYYY-MM')
                 ORDER BY date ASC
-            `, [days]);
+            `, [start, end]);
 
             // Lokasyona göre dağılım
             const locationDistribution = await client.query(`
@@ -534,11 +575,11 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM fire_alarms 
                 WHERE deleted_at IS NULL
-                  AND alarm_time >= CURRENT_DATE - $1::integer
+                  AND alarm_time >= $1::timestamp AND alarm_time < ($2::date + INTERVAL '1 day')
                 GROUP BY location
                 ORDER BY count DESC
                 LIMIT 10
-            `, [days]);
+            `, [start, end]);
 
             // Çözüm durumu
             const resolutionStats = await client.query(`
@@ -547,9 +588,9 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM fire_alarms 
                 WHERE deleted_at IS NULL
-                  AND alarm_time >= CURRENT_DATE - $1::integer
+                  AND alarm_time >= $1::timestamp AND alarm_time < ($2::date + INTERVAL '1 day')
                 GROUP BY resolved
-            `, [days]);
+            `, [start, end]);
 
             // Saatlik alarm çalma trendi
             const hourlyTrend = await client.query(`
@@ -560,10 +601,10 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
                     SUM(CASE WHEN false_alarm = false OR false_alarm IS NULL THEN 1 ELSE 0 END) as real_alarms
                 FROM fire_alarms 
                 WHERE deleted_at IS NULL
-                  AND alarm_time >= CURRENT_DATE - $1::integer
+                  AND alarm_time >= $1::timestamp AND alarm_time < ($2::date + INTERVAL '1 day')
                 GROUP BY EXTRACT(HOUR FROM alarm_time)
                 ORDER BY hour ASC
-            `, [days]);
+            `, [start, end]);
 
             res.json({
                 success: true,
@@ -587,7 +628,7 @@ export const getFireAlarmStats = async (req: Request, res: Response) => {
 // Olay istatistikleri
 export const getIncidentStats = async (req: Request, res: Response) => {
     try {
-        const { days = 365 } = req.query;
+        const { start, end } = resolveDateRange(req.query);
         const client = await pool.connect();
 
         try {
@@ -597,11 +638,11 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     TO_CHAR(incident_time::date, 'YYYY-MM') as date,
                     COUNT(*) as count
                 FROM incidents 
-                WHERE incident_time::date >= CURRENT_DATE - $1::integer
+                WHERE incident_time >= $1::timestamp AND incident_time < ($2::date + INTERVAL '1 day')
                   AND deleted_at IS NULL
                 GROUP BY TO_CHAR(incident_time::date, 'YYYY-MM')
                 ORDER BY date ASC
-            `, [days]);
+            `, [start, end]);
 
             // Olay türüne göre dağılım
             const typeDistribution = await client.query(`
@@ -610,10 +651,10 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM incidents 
                 WHERE deleted_at IS NULL
-                  AND incident_time::date >= CURRENT_DATE - $1::integer
+                  AND incident_time >= $1::timestamp AND incident_time < ($2::date + INTERVAL '1 day')
                 GROUP BY incident_type
                 ORDER BY count DESC
-            `, [days]);
+            `, [start, end]);
 
             // Ciddiyet dağılımı
             const severityDistribution = await client.query(`
@@ -622,10 +663,10 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     COUNT(*) as count
                 FROM incidents 
                 WHERE deleted_at IS NULL
-                  AND incident_time::date >= CURRENT_DATE - $1::integer
+                  AND incident_time >= $1::timestamp AND incident_time < ($2::date + INTERVAL '1 day')
                 GROUP BY severity
                 ORDER BY count DESC
-            `, [days]);
+            `, [start, end]);
 
             // Kategori bazlı istatistikler
             const categoryStats = await client.query(`
@@ -667,9 +708,9 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     COUNT(DISTINCT CASE WHEN other THEN ic.incident_id END) as other_total
                 FROM incident_categories ic
                 INNER JOIN incidents i ON ic.incident_id = i.id
-                WHERE i.incident_time::date >= CURRENT_DATE - $1::integer
+                WHERE i.incident_time >= $1::timestamp AND i.incident_time < ($2::date + INTERVAL '1 day')
                   AND i.deleted_at IS NULL
-            `, [days]);
+            `, [start, end]);
 
             // Zaman bazlı kategori trendi (aylık)
             const categoryTrend = await client.query(`
@@ -687,11 +728,11 @@ export const getIncidentStats = async (req: Request, res: Response) => {
                     SUM(CASE WHEN other THEN 1 ELSE 0 END) as other_count
                 FROM incident_categories ic
                 INNER JOIN incidents i ON ic.incident_id = i.id
-                WHERE i.incident_time::date >= CURRENT_DATE - $1::integer
+                WHERE i.incident_time >= $1::timestamp AND i.incident_time < ($2::date + INTERVAL '1 day')
                   AND i.deleted_at IS NULL
                 GROUP BY TO_CHAR(i.incident_time::date, 'YYYY-MM')
                 ORDER BY date ASC
-            `, [days]);
+            `, [start, end]);
 
             res.json({
                 success: true,

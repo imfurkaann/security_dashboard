@@ -38,19 +38,20 @@ export const adminAuthMiddleware = async (
 
         const token = authHeader.substring(7);
 
-        // Debug logging
-        console.log('Admin auth - Token received:', token ? 'yes' : 'no');
-        console.log('Admin auth - Token length:', token?.length);
+        // Debug logging in development only, without printing the actual decoded payload
+        if (process.env.NODE_ENV !== 'production') {
+            console.debug('Admin auth - Token received:', token ? 'yes' : 'no');
+            console.debug('Admin auth - Token length:', token?.length);
+        }
 
         // Verify token
         const decoded = verifyToken(token);
 
-        // Debug logging
-        console.log('Admin auth - Decoded token:', decoded);
-
         // Check if token is valid
         if (!decoded) {
-            console.log('Admin auth - Token verification failed');
+            if (process.env.NODE_ENV !== 'production') {
+                console.debug('Admin auth - Token verification failed');
+            }
             res.status(401).json({
                 success: false,
                 message: 'Geçersiz veya süresi dolmuş token',

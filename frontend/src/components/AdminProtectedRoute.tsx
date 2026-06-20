@@ -29,18 +29,12 @@ export default function AdminProtectedRoute({ children }: AdminProtectedRoutePro
             }
 
             try {
-                const user = JSON.parse(adminUser);
-                if (user.role !== 'admin') {
-                    setIsAuthenticated(false);
-                    return;
-                }
-
                 // Backend'den admin doğrula
                 const response = await api.get('/admin/me');
-                if (response.data.success && response.data.data) {
+                if (response.data.success && response.data.data?.role === 'admin') {
                     setIsAuthenticated(true);
                 } else {
-                    throw new Error('Invalid response');
+                    throw new Error('Invalid response or unauthorized role');
                 }
             } catch {
                 localStorage.removeItem('adminToken');
