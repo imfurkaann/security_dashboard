@@ -49,7 +49,7 @@ const getSocket = (): Socket => {
 export const initializeRealtimeClient = (): Socket => {
     const client = getSocket();
     const currentToken = localStorage.getItem('token') || localStorage.getItem('adminToken');
-    
+
     if ((client as any)._lastToken !== currentToken) {
         (client as any)._lastToken = currentToken;
         client.auth = { token: currentToken };

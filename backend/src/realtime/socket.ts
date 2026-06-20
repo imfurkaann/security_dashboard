@@ -9,6 +9,7 @@ export type ApiMutationEvent = {
     timestamp: string;
     clientId: string | null;
     topics: string[];
+    payload?: any;
 };
 
 const TOPIC_MAP: Array<{ prefix: string; topics: string[] }> = [
