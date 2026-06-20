@@ -649,6 +649,7 @@ export const getSgkFileById = async (req: Request, res: Response): Promise<void>
  * PUT /api/sgk/records/:id
  */
 export const updateSgkRecord = async (req: Request, res: Response): Promise<void> => {
+    let committed = false;
     try {
         const { id } = req.params;
         const { tc_no, passport_no, full_name, company_name, notes } = req.body;
@@ -787,7 +788,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         const client = await pool.connect();
         let updatedRow: any;
-        let committed = false;
+        committed = false;
 
         try {
             await client.query('BEGIN');
@@ -913,8 +914,10 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         });
     } catch (error) {
         console.error('Update SGK record error:', error);
-        const uploadedFiles = extractUploadedFiles(req);
-        uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        if (!committed) {
+            const uploadedFiles = extractUploadedFiles(req);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        }
         res.status(500).json({ success: false, message: 'SGK kaydı güncellenirken hata oluştu' });
     }
 };

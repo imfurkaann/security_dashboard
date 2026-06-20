@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { subscribeToApiMutations, type ApiMutationEvent } from './socket';
+import { getRealtimeClientId } from './clientId';
 
 type UseRealtimeRefetchOptions = {
     topics: string[];
@@ -56,8 +57,10 @@ export const useRealtimeRefetch = ({
         if (!enabled) return;
 
         const unsubscribe = subscribeToApiMutations((event) => {
-            // Self-echo suppression is intentionally disabled so same-browser tabs
-            // (personnel/admin) always receive live updates.
+            // Self-echo suppression: Ignore mutations initiated by this specific browser tab
+            const myClientId = getRealtimeClientId();
+            if (event.clientId && event.clientId === myClientId) return;
+
             if (!hasTopicOverlap(event, watchedTopicsRef.current)) return;
 
             if (timeoutRef.current) {

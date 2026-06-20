@@ -8,6 +8,7 @@ export type ApiMutationEvent = {
     timestamp: string;
     clientId: string | null;
     topics?: string[];
+    payload?: any;
 };
 
 type MutationListener = (event: ApiMutationEvent) => void;

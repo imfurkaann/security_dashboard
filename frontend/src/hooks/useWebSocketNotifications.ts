@@ -37,49 +37,12 @@ export function useWebSocketNotifications() {
           event.method === 'POST' &&
           event.statusCode === 201
         ) {
-          try {
-            const res = await api.get('/visitors/records');
-            const records = res.data || [];
-
-            // Debug: log fetched visitor records
-            // eslint-disable-next-line no-console
-            console.debug('[useWebSocketNotifications] fetched visitors records', { length: records.length, sample: records[0] });
-
-            if (records.length > 0) {
-              const record = records.find((item: any) => {
-                const entryBy = typeof item?.entry_by === 'string'
-                  ? item.entry_by.toLocaleLowerCase('tr-TR')
-                  : '';
-                const entryByName = typeof item?.entry_by_name === 'string'
-                  ? item.entry_by_name.toLocaleLowerCase('tr-TR')
-                  : '';
-
-                return entryBy.includes('misafir') || entryByName.includes('misafir');
-              }) || records[0];
-
-              notify({
-                type: NotificationType.QR_VISITOR_CHECKIN,
-                title: '✓ Ziyaretçi Girişi',
-                message: `${record.full_name || 'Ziyaretçi'} giriş yaptı`,
-              });
-            } else {
-              notify({
-                type: NotificationType.QR_VISITOR_CHECKIN,
-                title: '✓ Ziyaretçi Girişi',
-                message: 'QR ile yeni ziyaretçi kaydı oluşturuldu',
-              });
-            }
-          } catch (fetchErr) {
-            // Debug: log fetch error
-            // eslint-disable-next-line no-console
-            console.debug('[useWebSocketNotifications] visitors fetch error', fetchErr);
-
-            notify({
-              type: NotificationType.QR_VISITOR_CHECKIN,
-              title: '✓ Ziyaretçi Girişi',
-              message: 'QR ile yeni ziyaretçi kaydı oluşturuldu',
-            });
-          }
+          const visitorName = event.payload?.full_name || 'Ziyaretçi';
+          notify({
+            type: NotificationType.QR_VISITOR_CHECKIN,
+            title: '✓ Ziyaretçi Girişi',
+            message: `${visitorName} giriş yaptı`,
+          });
         }
         // QR SGK Belgesi
         else if (
@@ -87,25 +50,15 @@ export function useWebSocketNotifications() {
           event.method === 'POST' &&
           event.statusCode === 201
         ) {
-          try {
-            const res = await api.get('/sgk/records');
-            const records = res.data || [];
-
-            if (records.length > 0) {
-              const record = records[0];
-              notify({
-                type: NotificationType.QR_SGK_UPLOAD,
-                title: '✓ SGK Belgesi',
-                message: `${record.full_name} - ${record.company_name} belgesi yüklendi`,
-              });
-            }
-          } catch {
-            notify({
-              type: NotificationType.QR_SGK_UPLOAD,
-              title: '✓ SGK Belgesi',
-              message: 'QR ile yeni SGK belgesi kaydı oluşturuldu',
-            });
-          }
+          const fullName = event.payload?.full_name || 'Misafir';
+          const companyName = event.payload?.company_name || '';
+          notify({
+            type: NotificationType.QR_SGK_UPLOAD,
+            title: '✓ SGK Belgesi',
+            message: companyName 
+              ? `${fullName} - ${companyName} belgesi yüklendi` 
+              : `${fullName} belgesi yüklendi`,
+          });
         }
         // Genel Hata
         else if (event.statusCode >= 500) {

@@ -1,78 +1,23 @@
-import { useState, useEffect } from 'react';
-import {
-    Users, Car, Flame, TrendingUp, TrendingDown,
-    RefreshCw, Download, X, Check
-} from 'lucide-react';
-import jsPDF from 'jspdf';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, Download, ChevronLeft } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import api from '../utils/api';
+import { jsPDF } from 'jspdf';
+import { DatePicker } from 'antd';
+import dayjs from '../utils/dayjsConfig';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
-
-// Sub-components
 import OverviewTab from '../components/statistics/OverviewTab';
 import VisitorsTab from '../components/statistics/VisitorsTab';
 import VehiclesTab from '../components/statistics/VehiclesTab';
 import FireAlarmsTab from '../components/statistics/FireAlarmsTab';
 import IncidentsTab from '../components/statistics/IncidentsTab';
 
-// Color Palette
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
-const CHART_COLORS = {
-    primary: '#3B82F6',
-    secondary: '#10B981',
-    warning: '#F59E0B',
-    danger: '#EF4444',
-    purple: '#8B5CF6'
-};
-
-const OVERVIEW_CHARTS = [
-    { id: 'comparison', label: '📊 Dönemsel Karşılaştırma' },
-    { id: 'visitor-trend', label: '👥 Ziyaretçi Trendi' },
-    { id: 'vehicle-trend', label: '🚗 Araç Kullanım Trendi' },
-    { id: 'incident-distribution', label: '🚨 Olay Kategori Dağılımı' },
-    { id: 'busy-days-visitor', label: '🏆 Ziyaretçi - En Yoğun Günler' },
-    { id: 'busy-days-vehicle', label: '🚗 Araç - En Yoğun Günler' },
-    { id: 'daily-averages', label: '📊 Günlük Ortalamalar' }
-];
-
-const VISITOR_CHARTS = [
-    { id: 'visitor-daily-trend', label: '👥 Günlük Ziyaretçi Trendi' },
-    { id: 'visitor-hourly-distribution', label: '🕐 Saatlik Dağılım' },
-    { id: 'visitor-duration-stats', label: '⏱️ Ziyaret Süresi İstatistikleri' },
-    { id: 'visitor-duration-distribution', label: '📊 Ziyaret Süresi Dağılımı' },
-    { id: 'visitor-top-managers', label: '👤 En Çok Ziyaretçi Alan Kişiler' },
-    { id: 'visitor-category-comparison', label: '📊 Ziyaretçi Kategori Dağılımı' },
-    { id: 'visitor-busy-days', label: '🏆 En Yoğun Günler' },
-    { id: 'visitor-total-stats', label: '📋 Toplam İstatistikler' }
-];
-
-const VEHICLE_CHARTS = [
-    { id: 'vehicle-daily-trend', label: '🚗 Günlük Araç Kullanım Trendi' },
-    { id: 'vehicle-top-vehicles', label: '🔝 En Çok Kullanılan Araçlar' },
-    { id: 'vehicle-top-managers', label: '👤 En Çok Araç Alan Yöneticiler' },
-    { id: 'vehicle-top-destinations', label: '📍 En Çok Gidilen Yerler' },
-    { id: 'vehicle-hourly-heatmap', label: '🔥 Araç Kullanım Yoğunluğu (Isı Haritası)' },
-    { id: 'vehicle-destinations-cloud', label: '☁️ Hedef Lokasyonlar (Kelime Bulutu)' }
-];
-
-const FIRE_ALARM_CHARTS = [
-    { id: 'fire-alarm-locations-cloud', label: '☁️ Alarm Lokasyonları (Kelime Bulutu)' },
-    { id: 'fire-alarm-locations-chart', label: '📍 En Çok Alarm Olan Lokasyonlar' },
-    { id: 'fire-alarm-daily-trend', label: '📈 Alarm Sayısı (Günlük)' },
-    { id: 'fire-alarm-hourly-trend', label: '🕔 Saatlik Alarm Çalma Trendi' }
-];
-
-const INCIDENT_CHARTS = [
-    { id: 'incident-category-distribution', label: '📊 Kategori Bazlı Olay Dağılımı' },
-    { id: 'incident-theft', label: '🚨 Hırsızlık Kategorileri' },
-    { id: 'incident-assault', label: '👊 Saldırı & Kavga Kategorileri' },
-    { id: 'incident-medical', label: '⚕️ Tıbbi Acil Kategorileri' },
-    { id: 'incident-vandalism', label: '🔨 Vandalizm & Hasar Kategorileri' },
-    { id: 'incident-accident', label: '🚑 Kaza/Yaralanma Kategorileri' },
-    { id: 'incident-substance', label: '💊 Madde Kullanımı Kategorileri' }
-];
+const { RangePicker } = DatePicker;
 
 const AdminStatistics = () => {
+    const navigate = useNavigate();
+
+    // Tarih aralığı (Varsayılan son 30 gün)
     const [startDate, setStartDate] = useState<string>(() => {
         const d = new Date();
         d.setDate(d.getDate() - 30);
@@ -80,399 +25,219 @@ const AdminStatistics = () => {
     });
     const [endDate, setEndDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
     const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'vehicles' | 'fire-alarms' | 'incidents'>('overview');
-    const [showExportModal, setShowExportModal] = useState(false);
-    const [selectedCharts, setSelectedCharts] = useState<string[]>([]);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [refetchKey, setRefetchKey] = useState(0);
 
-    // Realtime refetch setup
+    // PDF Raporlama Durumları
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [reportTitle, setReportTitle] = useState('Sistem Analitiği ve İstatistik Raporu');
+    const [exportOptions, setExportOptions] = useState({
+        overview: true,
+        visitors: true,
+        vehicles: true,
+        'fire-alarms': true,
+        incidents: true
+    });
+
+    // Gerçek zamanlı refetch desteği
     useRealtimeRefetch({
         topics: ['dashboard', 'incidents', 'sgk'],
         onMutation: () => setRefetchKey(prev => prev + 1),
     });
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const updateViewport = () => setIsMobileViewport(window.innerWidth < 768);
-        updateViewport();
-        window.addEventListener('resize', updateViewport);
-        return () => window.removeEventListener('resize', updateViewport);
-    }, []);
+    const handlePDFExport = async () => {
+        setIsExporting(true);
+        const originalActiveTab = activeTab;
 
-    const formatDate = (dateStr: string) => {
-        if (!dateStr) return '';
-        if (dateStr.includes('-') && dateStr.length === 10) {
-            const [year, month, day] = dateStr.split('-');
-            return `${day}/${month}`;
-        }
-        if (dateStr.length === 7) {
-            const [year, month] = dateStr.split('-');
-            const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-            return `${months[parseInt(month) - 1]} ${year.slice(2)}`;
-        }
-        return dateStr;
-    };
+        try {
+            const selectedTabs = Object.entries(exportOptions)
+                .filter(([_, value]) => value)
+                .map(([key]) => key);
 
-    const getRangeDays = () => {
-        if (!startDate || !endDate) return 30;
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const diffTime = Math.abs(end.getTime() - start.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
-    };
-
-    const getDaysLabel = () => {
-        const formatStr = (dateStr: string) => {
-            if (!dateStr) return '';
-            const [year, month, day] = dateStr.split('-');
-            return `${day}/${month}/${year}`;
-        };
-        return `${formatStr(startDate)} - ${formatStr(endDate)}`;
-    };
-
-    const getComparisonLabel = () => {
-        const daysCount = getRangeDays();
-        if (daysCount <= 14) return { current: 'Bu Hafta', previous: 'Geçen Hafta', type: 'weekly' };
-        if (daysCount <= 60) return { current: 'Bu Ay', previous: 'Geçen Ay', type: 'monthly' };
-        if (daysCount <= 180) return { current: 'Bu Dönem', previous: 'Önceki Dönem', type: 'quarterly' };
-        return { current: 'Bu Yıl', previous: 'Geçen Yıl', type: 'yearly' };
-    };
-
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
-                    <p className="text-sm font-medium text-gray-700">{formatDate(label)}</p>
-                    {payload.map((entry: any, index: number) => {
-                        let displayName = entry.name;
-                        if (label === 'Şarj İstasyonu' && entry.name === 'Ziyaret Sayısı') {
-                            displayName = 'Araç Sayısı';
-                        }
-                        return (
-                            <p key={index} className="text-sm" style={{ color: entry.color }}>
-                                {displayName}: {entry.value.toLocaleString('tr-TR')}
-                            </p>
-                        );
-                    })}
-                </div>
-            );
-        }
-        return null;
-    };
-
-    const getAvailableCharts = () => {
-        switch (activeTab) {
-            case 'overview':
-                return OVERVIEW_CHARTS;
-            case 'visitors':
-                return VISITOR_CHARTS;
-            case 'vehicles':
-                return VEHICLE_CHARTS;
-            case 'fire-alarms':
-                return FIRE_ALARM_CHARTS;
-            case 'incidents':
-                return INCIDENT_CHARTS;
-            default:
-                return [];
-        }
-    };
-
-    // Layout configuration for PDF export - Per-tab grid definitions
-    interface LayoutRow {
-        charts: string[];
-        cols: number;
-    }
-
-    interface LayoutConfig {
-        page1: LayoutRow[];
-        page2?: LayoutRow[];
-    }
-
-    const LAYOUT_CONFIG: Record<string, LayoutConfig> = {
-        overview: {
-            page1: [
-                { charts: ['comparison'], cols: 1 },
-                { charts: ['visitor-trend'], cols: 1 },
-                { charts: ['vehicle-trend'], cols: 1 }
-            ],
-            page2: [
-                { charts: ['incident-distribution'], cols: 1 },
-                { charts: ['busy-days-visitor', 'busy-days-vehicle'], cols: 2 },
-                { charts: ['daily-averages'], cols: 1 }
-            ]
-        },
-        visitors: {
-            page1: [
-                { charts: ['visitor-daily-trend'], cols: 1 },
-                { charts: ['visitor-hourly-distribution'], cols: 1 },
-                { charts: ['visitor-duration-stats', 'visitor-duration-distribution'], cols: 2 }
-            ],
-            page2: [
-                { charts: ['visitor-top-managers'], cols: 1 },
-                { charts: ['visitor-busy-days'], cols: 1 },
-                { charts: ['visitor-total-stats'], cols: 1 }
-            ]
-        },
-        vehicles: {
-            page1: [
-                { charts: ['vehicle-daily-trend'], cols: 1 },
-                { charts: ['vehicle-top-vehicles'], cols: 1 },
-                { charts: ['vehicle-top-managers'], cols: 1 }
-            ],
-            page2: [
-                { charts: ['vehicle-top-destinations'], cols: 1 },
-                { charts: ['vehicle-hourly-heatmap'], cols: 1 },
-                { charts: ['vehicle-destinations-cloud'], cols: 1 }
-            ]
-        },
-        'fire-alarms': {
-            page1: [
-                { charts: ['fire-alarm-locations-cloud'], cols: 1 },
-                { charts: ['fire-alarm-locations-chart'], cols: 1 },
-                { charts: ['fire-alarm-daily-trend'], cols: 1 },
-                { charts: ['fire-alarm-hourly-trend'], cols: 1 }
-            ],
-            page2: [
-                { charts: [], cols: 1 }
-            ]
-        },
-        incidents: {
-            page1: [
-                { charts: ['incident-category-distribution'], cols: 1 },
-                { charts: ['incident-theft', 'incident-assault'], cols: 2 },
-                { charts: ['incident-medical', 'incident-vandalism'], cols: 2 }
-            ],
-            page2: [
-                { charts: ['incident-accident', 'incident-substance'], cols: 2 }
-            ]
-        }
-    };
-
-    const exportToPDF = async () => {
-        if (selectedCharts.length === 0) {
-            alert('Lütfen en az bir grafik seçiniz');
-            return;
-        }
-
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
-
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 10;
-
-        const renderLayoutRow = async (
-            row: LayoutRow,
-            yPos: number,
-            pageNum: number
-        ): Promise<{ newY: number; pageNum: number }> => {
-            const selectedInRow = row.charts.filter(id => selectedCharts.includes(id));
-            if (selectedInRow.length === 0) {
-                return { newY: yPos, pageNum };
+            if (selectedTabs.length === 0) {
+                alert('Lütfen en az bir kategori seçin.');
+                setIsExporting(false);
+                return;
             }
 
-            const colWidth = (pageWidth - 2 * margin) / row.cols;
-            let currentY = yPos;
-            let currentPage = pageNum;
-            let xOffset = margin;
-            let rowHeight = 0;
+            const sectionIds: Record<string, string[]> = {
+                overview: ['overview-stats-cards', 'overview-grid-1', 'overview-grid-2', 'overview-grid-tag-trends', 'overview-grid-3'],
+                visitors: ['visitors-traffic-chart', 'visitors-duration-chart', 'visitors-heatmap', 'visitors-grid-2'],
+                vehicles: ['vehicles-trend-chart', 'vehicles-grid-1', 'vehicles-destinations', 'vehicles-heatmap', 'vehicles-wordcloud'],
+                'fire-alarms': ['fire-stats-cards', 'fire-trends', 'fire-locations'],
+                incidents: ['incident-stats-cards', 'incident-main-dist', 'incident-sub-charts']
+            };
 
-            const images: { canvas: any; colIndex: number }[] = [];
+            const capturedCanvases: { tab: string; canvas: HTMLCanvasElement }[] = [];
+            const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-            for (let i = 0; i < selectedInRow.length; i++) {
-                const chartId = selectedInRow[i];
-                const element = document.querySelector(`[data-chart-id="${chartId}"]`) as HTMLElement;
+            // Fullscreen loader shows up, so let's cycle activeTab to render hidden components
+            for (const tabKey of selectedTabs) {
+                setActiveTab(tabKey as any);
+                // Allow a brief moment for the browser to render the tab and Recharts to resize properly
+                await sleep(500);
 
-                if (!element) continue;
-
-                try {
-                    const pdfWidth = (colWidth - 2) * 3.78; // Convert mm to px
-                    const originalWidth = element.style.width;
-                    const originalDisplay = element.style.display;
-
-                    const tables = element.querySelectorAll('table');
-                    const tableOriginalStyles: { element: HTMLElement; styles: string }[] = [];
-
-                    tables.forEach(table => {
-                        tableOriginalStyles.push({
-                            element: table as HTMLElement,
-                            styles: (table as HTMLElement).getAttribute('style') || ''
+                const ids = sectionIds[tabKey] || [];
+                for (const id of ids) {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        const canvas = await html2canvas(el, {
+                            scale: 2,
+                            useCORS: true,
+                            backgroundColor: '#ffffff',
+                            logging: false
                         });
-                        (table as HTMLElement).style.fontSize = '10px';
-                        (table as HTMLElement).style.margin = '0';
-                        const cells = table.querySelectorAll('th, td');
-                        cells.forEach(cell => {
-                            (cell as HTMLElement).style.padding = '2px';
-                        });
-                    });
-
-                    element.style.width = `${pdfWidth}px`;
-                    element.style.display = 'block';
-
-                    await new Promise(resolve => setTimeout(resolve, 200));
-
-                    const canvas = await html2canvas(element, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        allowTaint: true,
-                        logging: false,
-                        proxy: undefined,
-                        imageTimeout: 0,
-                        width: pdfWidth,
-                        height: element.scrollHeight
-                    });
-
-                    element.style.width = originalWidth;
-                    element.style.display = originalDisplay;
-                    tableOriginalStyles.forEach(({ element: tableEl, styles }) => {
-                        if (styles) {
-                            tableEl.setAttribute('style', styles);
-                        } else {
-                            tableEl.removeAttribute('style');
-                        }
-                    });
-
-                    if (canvas.width > 0 && canvas.height > 0) {
-                        const imgHeight = (canvas.height / canvas.width) * (colWidth - 2);
-                        rowHeight = Math.max(rowHeight, imgHeight);
-                        images.push({ canvas, colIndex: i });
+                        capturedCanvases.push({ tab: tabKey, canvas });
                     }
-                } catch (error) {
-                    console.error(`Grafik '${chartId}' dönüştürme hatası:`, error);
                 }
             }
 
-            if (images.length === 0) {
-                return { newY: currentY, pageNum: currentPage };
-            }
+            // Restore active tab
+            setActiveTab(originalActiveTab);
+            await sleep(100);
 
-            if (currentY + rowHeight + 10 > pageHeight - margin) {
-                doc.addPage();
-                currentPage++;
-                currentY = margin;
-            }
+            // Initialize PDF
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = 210;
+            const pageHeight = 297;
+            const margin = 15;
+            const contentWidth = pageWidth - 2 * margin; // 180mm
 
-            xOffset = margin;
-            let colIndex = 0;
+            let currentY = 30; // Start printing below banner
+            let isFirstPage = true;
 
-            for (const { canvas } of images) {
-                const imgWidth = colWidth - 2;
-                const imgHeight = (canvas.height / canvas.width) * imgWidth;
-
-                doc.addImage(
-                    canvas.toDataURL('image/png'),
-                    'PNG',
-                    xOffset,
-                    currentY,
-                    imgWidth,
-                    imgHeight
-                );
-
-                xOffset += colWidth;
-                colIndex++;
-
-                if (colIndex % row.cols === 0) {
-                    xOffset = margin;
-                    currentY += imgHeight + 3;
-                    colIndex = 0;
+            const formatTurkishDate = (dateStr: string) => {
+                if (!dateStr) return '';
+                const parts = dateStr.split('-');
+                if (parts.length === 3) {
+                    return `${parts[2]}.${parts[1]}.${parts[0]}`;
                 }
+                return dateStr;
+            };
+
+            const periodText = `Rapor Dönemi: ${formatTurkishDate(startDate)} - ${formatTurkishDate(endDate)}`;
+            const printDateText = `Yazdırma Tarihi: ${new Date().toLocaleString('tr-TR')}`;
+
+            for (const item of capturedCanvases) {
+                const canvas = item.canvas;
+                const scaledWidth = contentWidth;
+                const scaledHeight = (canvas.height * scaledWidth) / canvas.width;
+
+                // Check if element height overflows page printable height (265mm limit to leave room for footer)
+                if (!isFirstPage && currentY + scaledHeight > 265) {
+                    doc.addPage();
+                    currentY = 30; // Reset Y below banner
+                }
+
+                if (isFirstPage) {
+                    isFirstPage = false;
+                }
+
+                const imgData = canvas.toDataURL('image/png');
+                doc.addImage(imgData, 'PNG', margin, currentY, scaledWidth, scaledHeight);
+                currentY += scaledHeight + 10; // add gap
             }
 
-            if (colIndex > 0 || images.length === 0) {
-                currentY += rowHeight + 3;
+            // Add Banner Header and Page Number Footers to all pages
+            const totalPages = doc.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+
+                // Top Banner Background
+                doc.setFillColor(15, 23, 42); // slate-900
+                doc.rect(0, 0, pageWidth, 18, 'F');
+
+                // Header Title
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.text(reportTitle.toUpperCase(), margin, 11);
+
+                // Header Period (aligned right)
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'normal');
+                doc.text(periodText, pageWidth - margin - doc.getTextWidth(periodText), 11);
+
+                // Subtle blue accent line below banner
+                doc.setDrawColor(59, 130, 246); // blue-500
+                doc.setLineWidth(1);
+                doc.line(0, 18, pageWidth, 18);
+
+                // Footer Line
+                doc.setDrawColor(226, 232, 240); // slate-200
+                doc.setLineWidth(0.5);
+                doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+
+                // Footer Text
+                doc.setTextColor(100, 116, 139); // slate-500
+                doc.setFontSize(7);
+                doc.text(printDateText, margin, pageHeight - 10);
+
+                const pageStr = `Sayfa ${i} / ${totalPages}`;
+                doc.text(pageStr, pageWidth - margin - doc.getTextWidth(pageStr), pageHeight - 10);
             }
 
-            return { newY: currentY, pageNum: currentPage };
-        };
-
-        // Add header
-        doc.setFontSize(16);
-        doc.text(`İstatistik Raporu - ${getDaysLabel()}`, margin, margin + 5);
-
-        doc.setFontSize(10);
-        doc.text(`Oluşturulma: ${new Date().toLocaleString('tr-TR')}`, margin, margin + 13);
-
-        let currentY = margin + 20;
-        let currentPage = 1;
-
-        const layout = LAYOUT_CONFIG[activeTab as keyof typeof LAYOUT_CONFIG];
-        if (!layout) {
-            alert('Bu sekmede grafik düzeni yapılandırılmamıştır');
-            return;
+            // Save document
+            doc.save(`${reportTitle.toLowerCase().replace(/\s+/g, '_')}_${startDate}_${endDate}.pdf`);
+            setShowExportModal(false);
+        } catch (error) {
+            console.error('PDF Dışa aktarma hatası:', error);
+            alert('PDF raporu oluşturulurken bir hata oluştu.');
+        } finally {
+            setIsExporting(false);
+            setActiveTab(originalActiveTab);
         }
-
-        if (layout.page1) {
-            for (const row of layout.page1) {
-                const result = await renderLayoutRow(row, currentY, currentPage);
-                currentY = result.newY;
-                currentPage = result.pageNum;
-            }
-        }
-
-        if (layout.page2 && layout.page2.length > 0) {
-            doc.addPage();
-            currentPage++;
-            currentY = margin;
-
-            for (const row of layout.page2) {
-                const result = await renderLayoutRow(row, currentY, currentPage);
-                currentY = result.newY;
-                currentPage = result.pageNum;
-            }
-        }
-
-        const fileName = `istatistikler-${getDaysLabel()}-${new Date().getTime()}.pdf`;
-        doc.save(fileName);
-        setShowExportModal(false);
-        setSelectedCharts([]);
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 sm:py-3">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Admin Paneli</p>
-                            <h2 className="text-lg sm:text-xl font-bold tracking-tight mt-0.5">📊 Sistem İstatistikleri</h2>
+        <div className="min-h-screen bg-gray-50 flex flex-col font-sans antialiased text-slate-800">
+            {/* Üst Header Alanı (Compacted) */}
+            <header className="bg-slate-900 text-white shadow-md border-b border-slate-700 sticky top-0 z-15">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2">
+                    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                        
+                        {/* Başlık ve Geri Dön Butonu */}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <button 
+                                onClick={() => navigate('/dashboard')} 
+                                className="p-1.5 hover:bg-slate-800 rounded-lg transition shrink-0"
+                                title="Kontrol Paneline Dön"
+                            >
+                                <ChevronLeft className="w-5 h-5" />
+                            </button>
+                            <div className="min-w-0">
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight">Sistem Analitiği ve İstatistikler</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-350 mt-0.5">Sistem verilerini ve grafiksel analizleri inceleyin</p>
+                            </div>
                         </div>
 
-                        {/* Date Pickers Container */}
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-800 p-3 rounded-2xl border border-slate-700">
-                            {/* Inputs */}
-                            <div className="flex items-center gap-2">
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-0.5">Başlangıç</span>
-                                    <input
-                                        type="date"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="bg-slate-900 border border-slate-600 rounded-lg px-2.5 py-1 text-xs text-white outline-none focus:border-blue-500 transition-colors"
-                                    />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider pl-1 mb-0.5">Bitiş</span>
-                                    <input
-                                        type="date"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="bg-slate-900 border border-slate-600 rounded-lg px-2.5 py-1 text-xs text-white outline-none focus:border-blue-500 transition-colors"
-                                    />
-                                </div>
-                            </div>
+                        {/* Filtre ve Kontrol Alanı (Compacted & Light Inputs) */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Tarih Seçici */}
+                            <RangePicker
+                                value={[
+                                    startDate ? dayjs(startDate) : null,
+                                    endDate ? dayjs(endDate) : null
+                                ]}
+                                onChange={(dates) => {
+                                    if (dates && dates[0] && dates[1]) {
+                                        setStartDate(dates[0].format('YYYY-MM-DD'));
+                                        setEndDate(dates[1].format('YYYY-MM-DD'));
+                                    }
+                                }}
+                                allowClear={false}
+                                format="DD/MM/YYYY"
+                                placeholder={['Başlangıç', 'Bitiş']}
+                                size="small"
+                                className="w-[200px] sm:w-[220px]"
+                            />
 
-                            {/* Preset buttons */}
-                            <div className="flex flex-wrap gap-1 border-t sm:border-t-0 sm:border-l border-slate-700 pt-2 sm:pt-0 sm:pl-3">
+                            {/* Hızlı Seçim Presetleri */}
+                            <div className="flex items-center gap-1 bg-slate-800/40 border border-slate-700/60 p-0.5 rounded-lg">
                                 {[
                                     { label: '7G', val: 7 },
                                     { label: '30G', val: 30 },
                                     { label: '3A', val: 90 },
-                                    { label: '6A', val: 180 },
                                     { label: '1Y', val: 365 }
                                 ].map((preset) => (
                                     <button
@@ -484,22 +249,23 @@ const AdminStatistics = () => {
                                             setStartDate(start.toISOString().split('T')[0]);
                                             setEndDate(end.toISOString().split('T')[0]);
                                         }}
-                                        className="px-2 py-1 text-[10px] font-semibold text-slate-300 bg-slate-900/60 hover:bg-slate-950 rounded-md border border-slate-700 hover:border-slate-500 transition-all"
+                                        className="px-2 py-0.5 text-[10px] font-bold text-slate-300 hover:text-white hover:bg-slate-800 rounded transition-all"
                                     >
                                         {preset.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
+
                     </div>
                 </div>
             </header>
 
-            {/* Tab navigation */}
-            <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+            {/* Navigasyon Sekmeleri (Light & Compacted) */}
+            <div className="bg-white border-b border-slate-200 sticky top-[53px] z-10 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between py-2 overflow-x-auto gap-4">
-                        <div className="flex gap-2 min-w-max">
+                    <div className="flex items-center justify-between py-1.5 overflow-x-auto gap-4 scrollbar-none">
+                        <div className="flex gap-1.5 min-w-max p-1 bg-slate-100/80 border border-slate-200/60 rounded-xl">
                             {[
                                 { key: 'overview', label: '📊 Genel Bakış' },
                                 { key: 'visitors', label: '👥 Ziyaretçiler' },
@@ -510,9 +276,9 @@ const AdminStatistics = () => {
                                 <button
                                     key={tab.key}
                                     onClick={() => setActiveTab(tab.key as any)}
-                                    className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors ${activeTab === tab.key
-                                        ? 'bg-blue-700 text-white shadow-sm'
-                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                    className={`whitespace-nowrap rounded-lg px-3 py-1 text-xs font-semibold transition-all duration-200 ${activeTab === tab.key
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                                         }`}
                                 >
                                     {tab.label}
@@ -520,173 +286,148 @@ const AdminStatistics = () => {
                             ))}
                         </div>
 
-                        {/* Export Button */}
+                        {/* PDF Dışa Aktar Butonu */}
                         <button
-                            onClick={() => {
-                                setSelectedCharts([]);
-                                setShowExportModal(true);
-                            }}
-                            className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors shrink-0"
+                            onClick={() => setShowExportModal(true)}
+                            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white border border-blue-700 px-3 py-1 text-xs font-semibold rounded-lg shrink-0 transition"
                         >
-                            <Download size={16} />
-                            <span>PDF Dışa Aktar</span>
+                            <Download size={13} className="shrink-0" />
+                            <span>PDF Rapor</span>
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* Main Area */}
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {/* Active Tab View */}
-                {activeTab === 'overview' && (
-                    <OverviewTab
-                        startDate={startDate}
-                        endDate={endDate}
-                        refetchKey={refetchKey}
-                        getDaysLabel={getDaysLabel}
-                        getComparisonLabel={getComparisonLabel}
-                        getRangeDays={getRangeDays}
-                        formatDate={formatDate}
-                        CustomTooltip={CustomTooltip}
-                    />
-                )}
-                {activeTab === 'visitors' && (
-                    <VisitorsTab
-                        startDate={startDate}
-                        endDate={endDate}
-                        refetchKey={refetchKey}
-                        getDaysLabel={getDaysLabel}
-                        formatDate={formatDate}
-                        CustomTooltip={CustomTooltip}
-                    />
-                )}
-                {activeTab === 'vehicles' && (
-                    <VehiclesTab
-                        startDate={startDate}
-                        endDate={endDate}
-                        refetchKey={refetchKey}
-                        getDaysLabel={getDaysLabel}
-                        formatDate={formatDate}
-                        CustomTooltip={CustomTooltip}
-                    />
-                )}
-                {activeTab === 'fire-alarms' && (
-                    <FireAlarmsTab
-                        startDate={startDate}
-                        endDate={endDate}
-                        refetchKey={refetchKey}
-                        getDaysLabel={getDaysLabel}
-                        formatDate={formatDate}
-                        CustomTooltip={CustomTooltip}
-                    />
-                )}
-                {activeTab === 'incidents' && (
-                    <IncidentsTab
-                        startDate={startDate}
-                        endDate={endDate}
-                        refetchKey={refetchKey}
-                        getDaysLabel={getDaysLabel}
-                        formatDate={formatDate}
-                        CustomTooltip={CustomTooltip}
-                    />
-                )}
+            {/* Ana İstatistik İçerik Alanı (Dikeyde py-3 ve gap-3 olarak küçültülmüş) */}
+            <main className="flex-1 min-h-0 w-full px-4 sm:px-6 lg:px-8 py-3 pb-14 flex flex-col gap-3">
+                {/* 1. Genel Bakış Sekmesi */}
+                <div className={activeTab === 'overview' ? 'block' : 'hidden'}>
+                    <OverviewTab startDate={startDate} endDate={endDate} refetchKey={refetchKey} />
+                </div>
 
-                {/* PDF Export Modal */}
-                {showExportModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
-                        <div className="bg-white rounded-xl shadow-2xl p-4 sm:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                            {/* Modal Header */}
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-gray-800">📊 Grafikleri Seç</h3>
-                                <button
-                                    onClick={() => {
-                                        setShowExportModal(false);
-                                        setSelectedCharts([]);
-                                    }}
-                                    className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                                >
-                                    <X size={20} className="text-gray-500" />
-                                </button>
+                {/* 2. Ziyaretçiler Sekmesi */}
+                <div className={activeTab === 'visitors' ? 'block' : 'hidden'}>
+                    <VisitorsTab startDate={startDate} endDate={endDate} refetchKey={refetchKey} />
+                </div>
+
+                {/* 3. Araç Kullanımı Sekmesi */}
+                <div className={activeTab === 'vehicles' ? 'block' : 'hidden'}>
+                    <VehiclesTab startDate={startDate} endDate={endDate} refetchKey={refetchKey} />
+                </div>
+
+                {/* 4. Yangın Alarmları Sekmesi */}
+                <div className={activeTab === 'fire-alarms' ? 'block' : 'hidden'}>
+                    <FireAlarmsTab startDate={startDate} endDate={endDate} refetchKey={refetchKey} />
+                </div>
+
+                {/* 5. Olay İstatistikleri Sekmesi */}
+                <div className={activeTab === 'incidents' ? 'block' : 'hidden'}>
+                    <IncidentsTab startDate={startDate} endDate={endDate} refetchKey={refetchKey} />
+                </div>
+            </main>
+
+            {/* PDF Export Modal */}
+            {showExportModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between border-b border-slate-800">
+                            <div className="flex items-center gap-2">
+                                <Download size={16} className="text-blue-400" />
+                                <h3 className="text-sm font-bold">PDF Rapor Oluşturucu</h3>
+                            </div>
+                            <button
+                                onClick={() => !isExporting && setShowExportModal(false)}
+                                className="text-slate-400 hover:text-white transition text-xs font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-4 space-y-4 text-slate-800 text-xs">
+                            {/* Rapor Adı */}
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Rapor Başlığı</label>
+                                <input
+                                    type="text"
+                                    value={reportTitle}
+                                    onChange={(e) => setReportTitle(e.target.value)}
+                                    disabled={isExporting}
+                                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-xs disabled:bg-slate-50 disabled:text-slate-400 font-medium"
+                                    placeholder="Rapor adını girin..."
+                                />
                             </div>
 
-                            {/* Instructions */}
-                            <p className="text-sm text-gray-600 mb-4">PDF dosyasına dâhil etmek istediğiniz grafikleri seçiniz.</p>
-
-                            {/* Select All / Deselect All Buttons */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
-                                <button
-                                    onClick={() => setSelectedCharts(getAvailableCharts().map(c => c.id))}
-                                    className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
-                                >
-                                    Tümünü Seç
-                                </button>
-                                <button
-                                    onClick={() => setSelectedCharts([])}
-                                    className="flex-1 px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium"
-                                >
-                                    Tümünü Kaldır
-                                </button>
+                            {/* Dönem Bilgisi (Readonly) */}
+                            <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between">
+                                <span className="font-semibold text-slate-500">Rapor Tarih Aralığı:</span>
+                                <span className="font-bold text-slate-800">
+                                    {startDate.split('-').reverse().join('.')} - {endDate.split('-').reverse().join('.')}
+                                </span>
                             </div>
 
-                            {/* Charts List */}
-                            <div className="space-y-2 max-h-64 overflow-y-auto mb-6 p-3 bg-gray-50 rounded-lg">
-                                {getAvailableCharts().map((chart) => (
-                                    <label key={chart.id} className="flex items-center gap-3 cursor-pointer hover:bg-white p-2 rounded-lg transition-colors">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedCharts.includes(chart.id)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                    setSelectedCharts([...selectedCharts, chart.id]);
-                                                } else {
-                                                    setSelectedCharts(selectedCharts.filter(c => c !== chart.id));
-                                                }
-                                            }}
-                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                                        />
-                                        <div className="flex items-center gap-2 flex-1">
-                                            {selectedCharts.includes(chart.id) && <Check size={16} className="text-green-600" />}
-                                            <span className="text-sm text-gray-700">{chart.label}</span>
-                                        </div>
-                                    </label>
-                                ))}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <button
-                                    onClick={() => {
-                                        setShowExportModal(false);
-                                        setSelectedCharts([]);
-                                    }}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    İptal
-                                </button>
-                                <div className="flex-1">
-                                    <button
-                                        onClick={exportToPDF}
-                                        disabled={selectedCharts.length === 0}
-                                        className={`w-full px-4 py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-all ${
-                                            selectedCharts.length === 0
-                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
-                                                : 'bg-blue-700 hover:bg-blue-800 text-white shadow-sm'
-                                        }`}
-                                    >
-                                        <Download size={18} />
-                                        PDF İndir
-                                    </button>
+                            {/* Bölüm Seçimi */}
+                            <div className="space-y-2">
+                                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dışa Aktarılacak Sayfalar</label>
+                                <div className="border border-slate-200 rounded-lg p-2.5 space-y-2 bg-white">
+                                    {[
+                                        { key: 'overview', label: '📊 Genel Bakış' },
+                                        { key: 'visitors', label: '👥 Ziyaretçi Analizleri' },
+                                        { key: 'vehicles', label: '🚗 Araç Kullanım İstatistikleri' },
+                                        { key: 'fire-alarms', label: '🔥 Yangın Alarmları' },
+                                        { key: 'incidents', label: '🚨 Olay İstatistikleri' }
+                                    ].map((opt) => (
+                                        <label
+                                            key={opt.key}
+                                            className="flex items-center gap-2.5 p-1 hover:bg-slate-50 rounded cursor-pointer transition select-none font-semibold text-slate-700"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={exportOptions[opt.key as keyof typeof exportOptions]}
+                                                onChange={() => !isExporting && setExportOptions(prev => ({ ...prev, [opt.key]: !prev[opt.key as keyof typeof exportOptions] }))}
+                                                disabled={isExporting}
+                                                className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                                            />
+                                            <span>{opt.label}</span>
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Info Text */}
-                            {selectedCharts.length === 0 && (
-                                <p className="text-xs text-gray-500 text-center mt-3">En az bir grafik seçmelisiniz</p>
-                            )}
+                        {/* Modal Actions */}
+                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowExportModal(false)}
+                                disabled={isExporting}
+                                className="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                İptal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePDFExport}
+                                disabled={isExporting}
+                                className="px-4 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                            >
+                                {isExporting ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                                        <span>Rapor Hazırlanıyor...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download size={13} />
+                                        <span>PDF Raporu İndir</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
-                )}
-            </main>
+                </div>
+            )}
         </div>
     );
 };
