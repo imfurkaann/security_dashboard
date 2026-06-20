@@ -132,6 +132,17 @@ function formatDateTime(date: Date | string | null): string {
     return `${formatDate(d)} ${formatTime(d)}`;
 }
 
+// Date nesnesini yerel saat dilimine göre YYYY-MM-DD formatında döner (timezone kaymalarını önlemek için)
+function getLocalDateString(date: Date | string | null): string {
+    if (!date) return '1970-01-01';
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return '1970-01-01';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Excel stil tanımları
 function getHeaderStyle(): Partial<ExcelJS.Style> {
     return {
@@ -598,8 +609,10 @@ async function createManagersExcel(records: any[], date: string): Promise<ExcelJ
 
     // Verileri saate göre sırala
     records.sort((a, b) => {
-        const dateA = new Date(`${a.entry_date}T${a.entry_time || '00:00:00'}`);
-        const dateB = new Date(`${b.entry_date}T${b.entry_time || '00:00:00'}`);
+        const dateStrA = getLocalDateString(a.entry_date);
+        const dateStrB = getLocalDateString(b.entry_date);
+        const dateA = new Date(`${dateStrA}T${a.entry_time || '00:00:00'}`);
+        const dateB = new Date(`${dateStrB}T${b.entry_time || '00:00:00'}`);
         return dateA.getTime() - dateB.getTime();
     });
 
@@ -657,8 +670,10 @@ async function createVehiclesExcel(records: any[], date: string): Promise<ExcelJ
     headerRow.height = 25;
 
     records.sort((a, b) => {
-        const dateA = new Date(`${a.given_date}T${a.given_time || '00:00:00'}`);
-        const dateB = new Date(`${b.given_date}T${b.given_time || '00:00:00'}`);
+        const dateStrA = getLocalDateString(a.given_date);
+        const dateStrB = getLocalDateString(b.given_date);
+        const dateA = new Date(`${dateStrA}T${a.given_time || '00:00:00'}`);
+        const dateB = new Date(`${dateStrB}T${b.given_time || '00:00:00'}`);
         return dateA.getTime() - dateB.getTime();
     });
 
@@ -720,26 +735,28 @@ async function createVisitorsExcel(records: any[], date: string): Promise<ExcelJ
     headerRow.height = 25;
 
     records.sort((a, b) => {
-        const dateA = new Date(`${a.entry_date}T${a.entry_time || '00:00:00'}`);
-        const dateB = new Date(`${b.entry_date}T${b.entry_time || '00:00:00'}`);
+        const dateStrA = getLocalDateString(a.entry_date);
+        const dateStrB = getLocalDateString(b.entry_date);
+        const dateA = new Date(`${dateStrA}T${a.entry_time || '00:00:00'}`);
+        const dateB = new Date(`${dateStrB}T${b.entry_time || '00:00:00'}`);
         return dateA.getTime() - dateB.getTime();
     });
 
     records.forEach((record) => {
-        // Etiket: her kayıt için tek değer
-        // Öncelik: Günübirlik Misafir -> Şarj İstasyonu -> Taşeron İşçi -> Giriş -> Çıkış
-        let tag = '';
-        if (record.daily_guest) {
-            tag = 'Günübirlik Misafir';
-        } else if (record.for_electric_station) {
-            tag = 'Şarj İstasyonu';
-        } else if (record.subcontractor_worker) {
-            tag = 'Taşeron İşçi';
-        } else if (record.entry_tag) {
-            tag = 'Giriş';
-        } else if (record.exit_tag) {
-            tag = 'Çıkış';
-        }
+        // Etiket: kaydın tüm aktif etiketlerini virgülle ayrılmış şekilde birleştir
+        const tagsList: string[] = [];
+        if (record.daily_guest) tagsList.push('Günübirlik Misafir');
+        if (record.for_electric_station) tagsList.push('Şarj İstasyonu');
+        if (record.subcontractor_worker) tagsList.push('Taşeron İşçi');
+        if (record.entry_tag) tagsList.push('Giriş');
+        if (record.exit_tag) tagsList.push('Çıkış');
+        if (record.tour_entry) tagsList.push('Tur Giriş');
+        if (record.tour_exit) tagsList.push('Tur Çıkış');
+        if (record.guide) tagsList.push('Rehber');
+        if (record.meeting) tagsList.push('Görüşme');
+        if (record.delivery) tagsList.push('Teslimat');
+        
+        const tag = tagsList.join(', ');
 
         const row = worksheet.addRow({
             plate: record.vehicle_plate || '-',
@@ -820,57 +837,6 @@ async function createFireAlarmsExcel(records: any[], date: string): Promise<Exce
     return workbook;
 }
 
-// Olay kayıtlarını vardiyaya göre Excel'e yaz
-async function createIncidentsExcel(records: any[], date: string, shift: typeof SHIFTS[0]): Promise<ExcelJS.Workbook> {
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Güvenlik Dashboard';
-    workbook.created = new Date();
-
-    const worksheet = workbook.addWorksheet(`${shift.name}`);
-
-    worksheet.columns = [
-        { header: 'Saat', key: 'time', width: 12 },
-        { header: 'Olay Türü', key: 'type', width: 20 },
-        { header: 'Açıklama', key: 'description', width: 50 },
-        { header: 'Personel', key: 'personnel', width: 20 }
-    ];
-
-    const headerRow = worksheet.getRow(1);
-    headerRow.eachCell((cell) => {
-        Object.assign(cell, { style: getHeaderStyle() });
-    });
-    headerRow.height = 25;
-
-    // Vardiyadaki kayıtları filtrele
-    const shiftRecords = records.filter(record => {
-        const hour = new Date(record.created_at || record.report_date).getHours();
-        if (shift.startHour < shift.endHour) {
-            return hour >= shift.startHour && hour < shift.endHour;
-        } else {
-            // Gece vardiyası (00-08)
-            return hour >= shift.startHour || hour < shift.endHour;
-        }
-    });
-
-    shiftRecords.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-    shiftRecords.forEach((record) => {
-        const row = worksheet.addRow({
-            time: formatTime(record.created_at),
-            type: record.incident_type || record.shift_label || 'Genel',
-            description: record.report_content || record.description || '-',
-            personnel: record.personnel_name || '-'
-        });
-        row.eachCell((cell) => {
-            Object.assign(cell, { style: getDataStyle() });
-        });
-    });
-
-    worksheet.addRow([]);
-    worksheet.addRow([`Toplam Kayıt: ${shiftRecords.length}`, '', `Oluşturulma: ${formatDateTime(new Date())}`]);
-
-    return workbook;
-}
 
 // ÖZET RAPOR oluştur
 async function createSummaryReport(

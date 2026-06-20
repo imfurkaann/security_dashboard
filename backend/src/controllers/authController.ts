@@ -193,7 +193,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const { username, password } = req.body;
 
         // GÜVENLİK: Input sanitization
-        const sanitizedUsername = sanitizeInput(username, 50);
+        const sanitizedUsername = sanitizeInput(username, 100);
 
         if (!sanitizedUsername || !password) {
             await logLoginAttempt(null, username || 'unknown', false, clientIp, userAgent);
@@ -205,7 +205,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         }
 
         // GÜVENLİK: Kullanıcı adı uzunluk kontrolü
-        if (!isValidLength(sanitizedUsername, 3, 50)) {
+        if (!isValidLength(sanitizedUsername, 3, 100)) {
             await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
             res.status(400).json({
                 success: false,

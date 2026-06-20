@@ -1,44 +1,25 @@
 import { useState, useEffect } from 'react';
 import {
-    BarChart, Bar, PieChart, Pie, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Cell
+    BarChart, Bar, PieChart, Pie, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, Cell, Legend
 } from 'recharts';
 import api from '../../utils/api';
-import WordCloud from '../WordCloud';
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
 interface IncidentsTabProps {
     startDate: string;
     endDate: string;
-    getDaysLabel: () => string;
-    formatDate: (dateStr: string) => string;
-    CustomTooltip: any;
     refetchKey: number;
 }
 
-export default function IncidentsTab({
-    startDate,
-    endDate,
-    getDaysLabel,
-    CustomTooltip,
-    refetchKey
-}: IncidentsTabProps) {
+export default function IncidentsTab({ startDate, endDate, refetchKey }: IncidentsTabProps) {
     const [loading, setLoading] = useState(true);
-    const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [incidentStats, setIncidentStats] = useState<any>({
         monthlyTrend: [],
         typeDistribution: [],
         severityDistribution: [],
         categoryStats: {}
     });
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const updateViewport = () => setIsMobileViewport(window.innerWidth < 768);
-        updateViewport();
-        window.addEventListener('resize', updateViewport);
-        return () => window.removeEventListener('resize', updateViewport);
-    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -50,7 +31,7 @@ export default function IncidentsTab({
                     setIncidentStats(res.data.data);
                 }
             } catch (error) {
-                console.error('Olay istatistik yükleme hatası:', error);
+                console.error('Olay verileri yüklenirken hata oluştu:', error);
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -62,336 +43,244 @@ export default function IncidentsTab({
         };
     }, [startDate, endDate, refetchKey]);
 
-    const getWordCloudWidth = () => {
-        if (typeof window === 'undefined') return 320;
-        return Math.max(window.innerWidth - (isMobileViewport ? 40 : 120), 280);
+    const CustomTooltip = ({ active, payload }: any) => {
+        if (active && payload && payload.length) {
+            return (
+                <div className="bg-white p-2 border border-slate-200 shadow-md rounded-lg text-xs font-semibold text-slate-800">
+                    {payload.map((entry: any, index: number) => (
+                        <p key={index} className="flex items-center gap-1.5" style={{ color: entry.color || entry.payload?.fill }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: entry.color || entry.payload?.fill }} />
+                            {entry.name || entry.payload?.name}: {entry.value}
+                        </p>
+                    ))}
+                </div>
+            );
+        }
+        return null;
     };
 
     if (loading && !incidentStats.categoryStats) {
         return (
-            <div className="flex items-center justify-center h-96">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="flex items-center justify-center h-64 bg-white border border-slate-200 rounded-xl">
+                <div className="flex flex-col items-center gap-2">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
+                    <span className="text-xs font-bold text-slate-500">Olay Verileri Yükleniyor...</span>
+                </div>
             </div>
         );
     }
 
+    const stats = incidentStats.categoryStats || {};
+
+    const summaryCards = [
+        { label: 'Hırsızlık', value: parseInt(stats.theft_total) || 0, color: 'border-red-500 bg-gradient-to-br from-red-500 to-red-600 text-white', icon: '🚨' },
+        { label: 'Saldırı/Kavga', value: parseInt(stats.assault_total) || 0, color: 'border-orange-500 bg-gradient-to-br from-orange-500 to-orange-600 text-white', icon: '👊' },
+        { label: 'Tıbbi Acil', value: parseInt(stats.medical_total) || 0, color: 'border-amber-500 bg-gradient-to-br from-amber-500 to-amber-600 text-white', icon: '⚕️' },
+        { label: 'Vandalizm', value: parseInt(stats.vandalism_total) || 0, color: 'border-purple-500 bg-gradient-to-br from-purple-500 to-purple-600 text-white', icon: '🔨' },
+        { label: 'Kaza', value: parseInt(stats.accident_total) || 0, color: 'border-emerald-500 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white', icon: '🚑' },
+        { label: 'Madde Kullanımı', value: parseInt(stats.substance_total) || 0, color: 'border-pink-500 bg-gradient-to-br from-pink-500 to-pink-600 text-white', icon: '💊' }
+    ];
+
+    const mainPieData = [
+        { name: 'Hırsızlık', value: parseInt(stats.theft_total) || 0 },
+        { name: 'Saldırı/Kavga', value: parseInt(stats.assault_total) || 0 },
+        { name: 'Tıbbi Acil', value: parseInt(stats.medical_total) || 0 },
+        { name: 'Vandalizm', value: parseInt(stats.vandalism_total) || 0 },
+        { name: 'Kaza', value: parseInt(stats.accident_total) || 0 },
+        { name: 'Madde Kullanımı', value: parseInt(stats.substance_total) || 0 }
+    ].filter(item => item.value > 0);
+
     return (
-        <div className="space-y-6">
-            {/* Dönem Bilgisi Başlık */}
-            <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                <p className="text-sm font-medium text-slate-600">📅 {getDaysLabel()} verilerini görüntülüyorsunuz</p>
+        <div className="flex flex-col gap-3">
+            {/* 1. Yatay Özet Kartları (UI Compaction) */}
+            <div id="incident-stats-cards" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                {summaryCards.map((card, i) => (
+                    <div key={i} className={`rounded-xl shadow-sm p-2.5 border text-white ${card.color}`}>
+                        <div className="flex items-center justify-between px-1">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-sm shrink-0">{card.icon}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">{card.label}</span>
+                            </div>
+                            <span className="text-lg font-extrabold">{card.value}</span>
+                        </div>
+                    </div>
+                ))}
             </div>
 
-            {/* Kategori İstatistikleri - Ana Kartlar */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-red-100 rounded-lg">
-                            <span className="text-2xl">🚨</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Hırsızlık</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.theft_total) || 0}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-orange-100 rounded-lg">
-                            <span className="text-2xl">👊</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Saldırı/Kavga</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.assault_total) || 0}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-yellow-100 rounded-lg">
-                            <span className="text-2xl">⚕️</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Tıbbi Acil</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.medical_total) || 0}
-                            </p>
+            {/* 2. Ana Dağılım Donut Grafiği */}
+            <div id="incident-main-dist" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col items-center">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 self-start">
+                    📊 Genel Olay Kategori Dağılımı
+                </h3>
+                {mainPieData.length > 0 ? (
+                    <div className="w-full max-w-lg h-[180px] flex items-center justify-center relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={mainPieData}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={50}
+                                    outerRadius={70}
+                                    paddingAngle={3}
+                                    dataKey="value"
+                                >
+                                    {mainPieData.map((_, index) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend wrapperStyle={{ fontSize: 9, fontWeight: 600 }} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute flex flex-col items-center justify-center">
+                            <span className="text-xl font-extrabold text-slate-800">
+                                {mainPieData.reduce((sum, item) => sum + item.value, 0)}
+                            </span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Olay</span>
                         </div>
                     </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                            <span className="text-2xl">🔨</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Vandalizm</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.vandalism_total) || 0}
-                            </p>
-                        </div>
+                ) : (
+                    <div className="w-full py-8 text-center text-xs font-bold text-slate-400 border border-dashed border-slate-200 rounded-lg">
+                        Seçilen tarih aralığında olay kaydı bulunamadı.
                     </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <span className="text-2xl">🚑</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Kaza</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.accident_total) || 0}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-pink-100 rounded-lg">
-                            <span className="text-2xl">💊</span>
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Madde Kullanımı</p>
-                            <p className="text-2xl font-bold text-gray-900">
-                                {parseInt(incidentStats?.categoryStats?.substance_total) || 0}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                )}
             </div>
 
-            {/* Ana Kategori Dağılımı - Pasta Grafiği */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-category-distribution">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">📊 Kategori Bazlı Olay Dağılımı ({getDaysLabel()})</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                    <PieChart>
-                        <Pie
-                            data={[
-                                { name: 'Hırsızlık', value: parseInt(incidentStats?.categoryStats?.theft_total) || 0 },
-                                { name: 'Saldırı/Kavga', value: parseInt(incidentStats?.categoryStats?.assault_total) || 0 },
-                                { name: 'Tıbbi Acil', value: parseInt(incidentStats?.categoryStats?.medical_total) || 0 },
-                                { name: 'Vandalizm', value: parseInt(incidentStats?.categoryStats?.vandalism_total) || 0 },
-                                { name: 'Kaza/Yaralanma', value: parseInt(incidentStats?.categoryStats?.accident_total) || 0 },
-                                { name: 'Madde Kullanımı', value: parseInt(incidentStats?.categoryStats?.substance_total) || 0 }
-                            ]}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                            outerRadius={120}
-                            dataKey="value"
-                        >
-                            <Cell fill="#EF4444" />
-                            <Cell fill="#F59E0B" />
-                            <Cell fill="#3B82F6" />
-                            <Cell fill="#8B5CF6" />
-                            <Cell fill="#10B981" />
-                            <Cell fill="#EC4899" />
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                    </PieChart>
-                </ResponsiveContainer>
-            </div>
+            {/* 3. Alt Kategori Detayları Grid'i */}
+            {mainPieData.length > 0 && (
+                <div id="incident-sub-charts" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Hırsızlık Detayı */}
+                    {parseInt(stats.theft_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">🚨 Hırsızlık Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Misafir Eşyası', count: parseInt(stats.theft_guest_property) || 0 },
+                                        { name: 'Otel Mülkiyeti', count: parseInt(stats.theft_hotel_property) || 0 },
+                                        { name: 'Personel Hırsızlığı', count: parseInt(stats.theft_personnel) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#ef4444" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Hırsızlık Detayı */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-theft">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">🚨 Hırsızlık Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={[
-                            { name: 'Misafir Eşyası', count: parseInt(incidentStats?.categoryStats?.theft_guest_property) || 0 },
-                            { name: 'Otel Mülkiyeti', count: parseInt(incidentStats?.categoryStats?.theft_hotel_property) || 0 },
-                            { name: 'Personel Hırsızlığı', count: parseInt(incidentStats?.categoryStats?.theft_personnel) || 0 }
-                        ]}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                            <YAxis />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="count" name="Olay Sayısı" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
+                    {/* Saldırı/Kavga Detayı */}
+                    {parseInt(stats.assault_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">👊 Saldırı & Kavga Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Fiziksel Saldırı', count: parseInt(stats.assault_physical) || 0 },
+                                        { name: 'Sözlü Taciz', count: parseInt(stats.assault_verbal) || 0 },
+                                        { name: 'Toplu Kavga', count: parseInt(stats.assault_mass_fight) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#f59e0b" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Saldırı/Kavga Detayı */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-assault">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">👊 Saldırı & Kavga Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={[
-                            { name: 'Fiziksel Saldırı', count: parseInt(incidentStats?.categoryStats?.assault_physical) || 0 },
-                            { name: 'Sözlü Taciz', count: parseInt(incidentStats?.categoryStats?.assault_verbal) || 0 },
-                            { name: 'Toplu Kavga', count: parseInt(incidentStats?.categoryStats?.assault_mass_fight) || 0 }
-                        ]}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                            <YAxis />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="count" name="Olay Sayısı" fill="#F59E0B" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
+                    {/* Tıbbi Acil Detayı */}
+                    {parseInt(stats.medical_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">⚕️ Tıbbi Acil Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Ciddi Durum', count: parseInt(stats.medical_serious) || 0 },
+                                        { name: 'İlk Yardım', count: parseInt(stats.medical_first_aid) || 0 },
+                                        { name: 'Ambulans', count: parseInt(stats.medical_ambulance) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#3b82f6" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Tıbbi Acil Detayı */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-medical">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">⚕️ Tıbbi Acil Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={[
-                                    { name: 'Ciddi Tıbbi Durum', value: parseInt(incidentStats?.categoryStats?.medical_serious) || 0 },
-                                    { name: 'İlk Yardım', value: parseInt(incidentStats?.categoryStats?.medical_first_aid) || 0 },
-                                    { name: 'Ambulans Çağrısı', value: parseInt(incidentStats?.categoryStats?.medical_ambulance) || 0 }
-                                ]}
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={100}
-                                dataKey="value"
-                                labelLine={false}
-                                label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                            >
-                                <Cell fill="#3B82F6" />
-                                <Cell fill="#10B981" />
-                                <Cell fill="#F59E0B" />
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
+                    {/* Vandalizm Detayı */}
+                    {parseInt(stats.vandalism_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">🔨 Vandalizm & Hasar Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Oda Hasarı', count: parseInt(stats.vandalism_room) || 0 },
+                                        { name: 'Ortak Alan Hasarı', count: parseInt(stats.vandalism_common_area) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#8b5cf6" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Vandalizm Kategorileri */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-vandalism">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">🔨 Vandalizm & Hasar Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={[
-                            { name: 'Oda Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_room) || 0 },
-                            { name: 'Ortak Alan Hasarı', count: parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0 }
-                        ]}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="name" />
-                            <YAxis />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="count" name="Olay Sayısı" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
+                    {/* Kaza Detayı */}
+                    {parseInt(stats.accident_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">🚑 Kaza & Yaralanma Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Kayma/Düşme', count: parseInt(stats.accident_slip_fall) || 0 },
+                                        { name: 'Ekipman', count: parseInt(stats.accident_equipment) || 0 },
+                                        { name: 'İş Kazası', count: parseInt(stats.accident_work) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#10b981" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
 
-                {/* Madde Kullanımı Kategorileri */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-substance">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">💊 Madde Kullanımı Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                            <Pie
-                                data={[
-                                    { name: 'Personel (Görevde)', value: parseInt(incidentStats?.categoryStats?.substance_personnel) || 0 },
-                                    { name: 'Mülkte Bulunma', value: parseInt(incidentStats?.categoryStats?.substance_property) || 0 }
-                                ]}
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={100}
-                                dataKey="value"
-                                labelLine={false}
-                                label={({ name, percent }) => (percent && percent > 0) ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
-                            >
-                                <Cell fill="#EC4899" />
-                                <Cell fill="#F472B6" />
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
+                    {/* Madde Kullanımı Detayı */}
+                    {parseInt(stats.substance_total) > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">💊 Madde Kullanımı Alt Detayları</h3>
+                            <div className="w-full h-[140px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                        { name: 'Personel (Görevde)', count: parseInt(stats.substance_personnel) || 0 },
+                                        { name: 'Mülkte Bulunma', count: parseInt(stats.substance_property) || 0 }
+                                    ]}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="count" name="Olay" fill="#ec4899" radius={[3, 3, 0, 0]} barSize={16} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    )}
                 </div>
-
-                {/* Kaza/Yaralanma Detayı */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-chart-id="incident-accident">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">🚑 Kaza & Yaralanma Kategorileri ({getDaysLabel()})</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={[
-                            { name: 'Kayma/Düşme', count: parseInt(incidentStats?.categoryStats?.accident_slip_fall) || 0 },
-                            { name: 'Ekipman Kazası', count: parseInt(incidentStats?.categoryStats?.accident_equipment) || 0 },
-                            { name: 'İş Kazası', count: parseInt(incidentStats?.categoryStats?.accident_work) || 0 }
-                        ]}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                            <XAxis dataKey="name" angle={-15} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
-                            <YAxis />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="count" name="Olay Sayısı" fill="#10B981" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-
-                {/* Diğer Kategoriler */}
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 Diğer Kategoriler ({getDaysLabel()})</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">💊</span>
-                                <span className="text-sm font-medium text-gray-700">Madde (Personel)</span>
-                            </div>
-                            <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_personnel) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-pink-50 to-pink-100 rounded-xl border border-pink-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">💊</span>
-                                <span className="text-sm font-medium text-gray-700">Madde (Mülk)</span>
-                            </div>
-                            <span className="text-lg font-bold text-pink-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.substance_property) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">🔨</span>
-                                <span className="text-sm font-medium text-gray-700">Vandalizm (Oda)</span>
-                            </div>
-                            <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_room) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border border-purple-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">🔨</span>
-                                <span className="text-sm font-medium text-gray-700">Vandalizm (Alan)</span>
-                            </div>
-                            <span className="text-lg font-bold text-purple-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.vandalism_common_area) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">🚪</span>
-                                <span className="text-sm font-medium text-gray-700">İzinsiz Giriş (Oda)</span>
-                            </div>
-                            <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_room) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-amber-100 rounded-xl border border-amber-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">🚪</span>
-                                <span className="text-sm font-medium text-gray-700">İzinsiz (Kısıtlı)</span>
-                            </div>
-                            <span className="text-lg font-bold text-amber-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.unauthorized_restricted_area) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl border border-blue-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">📹</span>
-                                <span className="text-sm font-medium text-gray-700">CCTV Arızası</span>
-                            </div>
-                            <span className="text-lg font-bold text-blue-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.security_cctv_malfunction) || 0}</span>
-                        </div>
-                        <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xl">📝</span>
-                                <span className="text-sm font-medium text-gray-700">Diğer</span>
-                            </div>
-                            <span className="text-lg font-bold text-gray-600 bg-white px-2 py-1 rounded-lg shadow-sm">{parseInt(incidentStats?.categoryStats?.other) || 0}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 }
