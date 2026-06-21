@@ -7,7 +7,10 @@ import {
     undoVisitorExit,
     deleteVisitorRecord,
     restoreVisitorRecord,
-    sendVisitorWhatsAppMessage
+    sendVisitorWhatsAppMessage,
+    getPendingQrVisitors,
+    approvePendingQrVisitor,
+    rejectPendingQrVisitor
 } from '../controllers/visitorController';
 import { authMiddleware } from '../middleware/auth';
 
@@ -21,6 +24,15 @@ router.get('/records', getVisitorRecords);
 
 // Create new visitor record
 router.post('/records', createVisitorRecord);
+
+// Get all pending QR visitors
+router.get('/pending-qr', getPendingQrVisitors);
+
+// Approve a pending QR visitor
+router.post('/pending-qr/:id/approve', approvePendingQrVisitor);
+
+// Reject a pending QR visitor
+router.post('/pending-qr/:id/reject', rejectPendingQrVisitor);
 
 // Update visitor record
 router.put('/records/:id', updateVisitorRecord);

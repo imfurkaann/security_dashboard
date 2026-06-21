@@ -8,13 +8,23 @@ import {
     searchSgkRecords,
     getSgkFile,
     getSgkFileById,
-    deleteSgkRecord
+    deleteSgkRecord,
+    getPendingQrSgk,
+    getPendingQrSgkFile,
+    approvePendingQrSgk,
+    rejectPendingQrSgk
 } from '../controllers/sgkController';
 
 const router = express.Router();
 
 // Tüm rotalar authentication gerektirir
 router.use(authMiddleware);
+
+// Bekleyen QR Kayıtları rotaları
+router.get('/pending-qr', getPendingQrSgk);
+router.get('/pending-qr/:id/files/:fileId', getPendingQrSgkFile);
+router.post('/pending-qr/:id/approve', approvePendingQrSgk);
+router.post('/pending-qr/:id/reject', rejectPendingQrSgk);
 
 const sgkUploadAny = sgkUpload.any();
 

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
 import { validateVisitorForm, normalizePlate, normalizePhone, formatPhoneNumber } from '../utils/validation';
-import type { VisitorRecord, VisitorFormData, VisitorFilterType } from '../types';
+import type { VisitorRecord, VisitorFormData, VisitorFilterType, PredefinedVisitor } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { message, Modal } from 'antd';
@@ -166,6 +167,92 @@ export default function Visitors() {
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const [openTagsDropdown, setOpenTagsDropdown] = useState(false);
     const navigate = useNavigate();
+    const [predefinedSuggestions, setPredefinedSuggestions] = useState<PredefinedVisitor[]>([]);
+    const [showPredefinedSuggestions, setShowPredefinedSuggestions] = useState(false);
+    const [isSearchingPredefined, setIsSearchingPredefined] = useState(false);
+    const selectedPredefinedRef = useRef<string | null>(null);
+    const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!showPredefinedSuggestions || predefinedSuggestions.length === 0) return;
+        
+        const handleUpdate = () => {
+            if (inputRef.current) {
+                const rect = inputRef.current.getBoundingClientRect();
+                setDropdownStyle({
+                    position: 'fixed',
+                    left: `${rect.left}px`,
+                    width: `${rect.width}px`,
+                    bottom: `${window.innerHeight - rect.top + 4}px`,
+                    zIndex: 9999,
+                });
+            }
+        };
+
+        handleUpdate();
+
+        window.addEventListener('resize', handleUpdate, true);
+        window.addEventListener('scroll', handleUpdate, true);
+
+        return () => {
+            window.removeEventListener('resize', handleUpdate, true);
+            window.removeEventListener('scroll', handleUpdate, true);
+        };
+    }, [showPredefinedSuggestions, predefinedSuggestions]);
+    useEffect(() => {
+        if (!showModal || !formData.full_name || formData.full_name.trim().length < 2) {
+            setPredefinedSuggestions([]);
+            setShowPredefinedSuggestions(false);
+            return;
+        }
+
+        if (selectedPredefinedRef.current === formData.full_name) {
+            return;
+        }
+
+        const delayDebounceFn = setTimeout(async () => {
+            try {
+                setIsSearchingPredefined(true);
+                const response = await api.get(`/predefined-visitors/search?q=${encodeURIComponent(formData.full_name)}`);
+                if (response.data?.success) {
+                    const data = response.data.data || [];
+                    setPredefinedSuggestions(data);
+                    setShowPredefinedSuggestions(data.length > 0);
+                }
+            } catch (error) {
+                console.error('Predefined visitors search failed:', error);
+            } finally {
+                setIsSearchingPredefined(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [formData.full_name, showModal]);
+
+    const handleSelectPredefined = (visitor: PredefinedVisitor) => {
+        selectedPredefinedRef.current = visitor.full_name;
+        setFormData((prev) => ({
+            ...prev,
+            full_name: visitor.full_name,
+            company_name: visitor.company_name || prev.company_name,
+            phone: visitor.phone || prev.phone,
+            vehicle_plate: visitor.vehicle_plate || prev.vehicle_plate,
+            visiting_person: visitor.visiting_person || prev.visiting_person,
+            notes: visitor.notes || prev.notes,
+            subcontractor_worker: visitor.subcontractor_worker ?? prev.subcontractor_worker,
+            for_electric_station: visitor.for_electric_station ?? prev.for_electric_station,
+            daily_guest: visitor.daily_guest ?? prev.daily_guest,
+            entry_tag: visitor.entry_tag ?? prev.entry_tag,
+            exit_tag: visitor.exit_tag ?? prev.exit_tag,
+            tour_entry: visitor.tour_entry ?? prev.tour_entry,
+            tour_exit: visitor.tour_exit ?? prev.tour_exit,
+            meeting: visitor.meeting ?? prev.meeting,
+            delivery: visitor.delivery ?? prev.delivery,
+        }));
+        setShowPredefinedSuggestions(false);
+    };
+
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
@@ -1105,7 +1192,89 @@ export default function Visitors() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Ad Soyad</label>
-                            <input value={formData.full_name || ''} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} placeholder="Ziyaretçinin adı soyadı" className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                            <div className="relative">
+                                <input
+                                    ref={inputRef}
+                                    value={formData.full_name || ''}
+                                    onChange={(e) => {
+                                        selectedPredefinedRef.current = null;
+                                        setFormData({ ...formData, full_name: e.target.value });
+                                    }}
+                                    onFocus={() => {
+                                        if (predefinedSuggestions.length > 0) {
+                                            setShowPredefinedSuggestions(true);
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        setTimeout(() => {
+                                            setShowPredefinedSuggestions(false);
+                                        }, 200);
+                                    }}
+                                    placeholder="Ziyaretçinin adı soyadı"
+                                    className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                {showPredefinedSuggestions && predefinedSuggestions.length > 0 && createPortal(
+                                    <div 
+                                        style={dropdownStyle}
+                                        className="bg-white border border-gray-300 rounded-lg shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-100"
+                                    >
+                                        {predefinedSuggestions.map((visitor) => {
+                                            const tags: string[] = [];
+                                            if (visitor.subcontractor_worker) tags.push('Taşeron İşçi');
+                                            if (visitor.for_electric_station) tags.push('Şarj İstasyonu');
+                                            if (visitor.daily_guest) tags.push('Günübirlik Misafir');
+                                            if (visitor.entry_tag) tags.push('Giriş');
+                                            if (visitor.exit_tag) tags.push('Çıkış');
+                                            if (visitor.tour_entry) tags.push('Tur Giriş');
+                                            if (visitor.tour_exit) tags.push('Tur Çıkış');
+                                            if (visitor.meeting) tags.push('Görüşme');
+                                            if (visitor.delivery) tags.push('Teslimat');
+                                            return (
+                                                <button
+                                                    key={visitor.id}
+                                                    type="button"
+                                                    onClick={() => handleSelectPredefined(visitor)}
+                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex flex-col gap-2"
+                                                >
+                                                    {/* İsim */}
+                                                    <span className="text-base font-bold text-gray-900">{visitor.full_name}</span>
+
+                                                    {/* Alt Bilgiler - Yan Yana */}
+                                                    <span className="text-xs text-gray-600 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                                        {visitor.company_name && (
+                                                            <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
+                                                                Firma: <span className="text-gray-900 font-medium">{visitor.company_name}</span>
+                                                            </span>
+                                                        )}
+                                                        {visitor.vehicle_plate && (
+                                                            <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
+                                                                Plaka: <span className="text-gray-900 font-medium">{visitor.vehicle_plate}</span>
+                                                            </span>
+                                                        )}
+                                                        {visitor.phone && (
+                                                            <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
+                                                                Tel: <span className="text-gray-900 font-medium">{formatPhoneNumber(visitor.phone)}</span>
+                                                            </span>
+                                                        )}
+                                                        {tags.map((t, i) => (
+                                                            <span key={i} className="px-2 py-0.5 font-medium rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                                                {t}
+                                                            </span>
+                                                        ))}
+                                                        {visitor.notes && (
+                                                            <span className="text-gray-500 italic bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                                                                Not: {visitor.notes}
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>,
+                                    document.body
+                                )}
+
+                            </div>
                         </div>
 
                         <div>

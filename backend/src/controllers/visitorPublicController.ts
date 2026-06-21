@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database';
+import { safeQuery, safeTransaction } from '../config/dbSecurity';
 import { getClientIp } from '../middleware/rateLimiter';
 import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 import { logDataChange } from '../utils/auditLog';
 import { getResolvedGateFromRequest } from '../utils/gate';
-import { normalizePlate, sanitizePlainText } from '../utils/validation';
+import { normalizePlate, sanitizePlainText, validateTC } from '../utils/validation';
 import { consumeQrFormToken, issueQrFormToken } from '../services/visitorQrTokenStore';
 import { deleteFile, hashPassport, hashTC } from '../utils/fileUpload';
 
@@ -39,7 +40,7 @@ const extractUploadedFiles = (req: Request): Express.Multer.File[] => {
 };
 
 const getOrCreateGuestPersonnelId = async (): Promise<string> => {
-    const existing = await pool.query(
+    const existing = await safeQuery<{ id: string; deleted_at: any }>(
         `
             SELECT id, deleted_at
             FROM personnel
@@ -51,9 +52,9 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
     );
 
     if (existing.rows.length > 0) {
-        const existingId = existing.rows[0].id as string;
+        const existingId = existing.rows[0].id;
         if (existing.rows[0].deleted_at) {
-            await pool.query(
+            await safeQuery(
                 `
                     UPDATE personnel
                     SET deleted_at = NULL,
@@ -70,7 +71,7 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
     const id = uuidv4();
 
     try {
-        await pool.query(
+        await safeQuery(
             `
                 INSERT INTO personnel (
                     id,
@@ -84,7 +85,7 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
                     $1, $2, $3, $4, $5, $6, TRUE
                 )
             `,
-            [id, 'Misafir', 'QR', GUEST_QR_USERNAME, GUEST_QR_PASSWORD_HASH, 'personnel']
+            [id, 'Misafir', 'QR', GUEST_QR_USERNAME, uuidv4(), 'personnel']
         );
     } catch (error: any) {
         // Aynı anda birden fazla QR isteği gelirse oluşabilecek duplicate durumunu tolere et.
@@ -93,7 +94,7 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
         }
     }
 
-    const created = await pool.query(
+    const created = await safeQuery<{ id: string }>(
         `
             SELECT id
             FROM personnel
@@ -108,7 +109,7 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
         throw new Error('QR misafir personeli olusturulamadi');
     }
 
-    return created.rows[0].id as string;
+    return created.rows[0].id;
 };
 
 export const getQrVisitorFormToken = async (req: Request, res: Response): Promise<void> => {
@@ -209,9 +210,9 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
         const id = uuidv4();
         const personCountToInsert = personCountValue ?? 1;
 
-        await pool.query(
+        await safeQuery(
             `
-                INSERT INTO visitor_records (
+                INSERT INTO pending_qr_visitors (
                     id,
                     vehicle_plate,
                     full_name,
@@ -221,25 +222,9 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
                     children_count,
                     gate,
                     phone,
-                    notes,
-                    subcontractor_worker,
-                    for_electric_station,
-                    entry_by,
-                    entry_by_name,
-                    entry_date,
-                    entry_time,
-                    status,
-                    send_whatsapp
+                    status
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                    NULL,
-                    FALSE,
-                    FALSE,
-                    $10, $11,
-                    CURRENT_DATE,
-                    CURRENT_TIME,
-                    'inside',
-                    FALSE
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending'
                 )
             `,
             [
@@ -251,14 +236,12 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
                 personCountToInsert,
                 childrenCountValue,
                 gate,
-                normalizedPhone,
-                guestPersonnelId,
-                GUEST_QR_ENTRY_NAME
+                normalizedPhone
             ]
         );
 
         await logDataChange(
-            'visitor_records',
+            'pending_qr_visitors',
             id,
             'INSERT',
             null,
@@ -266,7 +249,7 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
                 full_name: normalizedFullName,
                 company_name: normalizedCompanyName,
                 visiting_person: normalizedVisitingPerson,
-                source: 'qr_guest'
+                source: 'qr_guest_pending'
             },
             guestPersonnelId,
             clientIp
@@ -274,11 +257,23 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
 
         emitApiMutation({
             method: 'POST',
-            path: '/api/visitor-public/records',
+            path: '/api/visitors/pending-qr',
             statusCode: 201,
             timestamp: new Date().toISOString(),
             clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitor-public/records'),
+            topics: resolveMutationTopics('/api/visitors/records'),
+            payload: {
+                id,
+                vehicle_plate: normalizedPlate,
+                full_name: normalizedFullName,
+                company_name: normalizedCompanyName,
+                visiting_person: normalizedVisitingPerson,
+                person_count: personCountToInsert,
+                children_count: childrenCountValue,
+                gate,
+                phone: normalizedPhone,
+                created_at: new Date().toISOString()
+            }
         });
 
         res.status(201).json({
@@ -293,7 +288,7 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
 };
 
 const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
-    const existing = await pool.query(
+    const existing = await safeQuery<{ id: string; deleted_at: any }>(
         `
             SELECT id, deleted_at
             FROM personnel
@@ -305,9 +300,9 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
     );
 
     if (existing.rows.length > 0) {
-        const existingId = existing.rows[0].id as string;
+        const existingId = existing.rows[0].id;
         if (existing.rows[0].deleted_at) {
-            await pool.query(
+            await safeQuery(
                 `
                     UPDATE personnel
                     SET deleted_at = NULL,
@@ -324,7 +319,7 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
     const id = uuidv4();
 
     try {
-        await pool.query(
+        await safeQuery(
             `
                 INSERT INTO personnel (
                     id,
@@ -338,7 +333,7 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
                     $1, $2, $3, $4, $5, $6, TRUE
                 )
             `,
-            [id, 'QR', 'Kaydi', SGK_QR_USERNAME, GUEST_QR_PASSWORD_HASH, 'personnel']
+            [id, 'QR', 'Kaydi', SGK_QR_USERNAME, uuidv4(), 'personnel']
         );
     } catch (error: any) {
         if (error?.code !== '23505') {
@@ -346,7 +341,7 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
         }
     }
 
-    const created = await pool.query(
+    const created = await safeQuery<{ id: string }>(
         `
             SELECT id
             FROM personnel
@@ -361,7 +356,7 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
         throw new Error('QR SGK personeli olusturulamadi');
     }
 
-    return created.rows[0].id as string;
+    return created.rows[0].id;
 };
 
 export const createQrSgkRecord = async (req: Request, res: Response): Promise<void> => {
@@ -431,9 +426,14 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                 res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalidir' });
                 return;
             }
+            if (!validateTC(cleanTC)) {
+                uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+                res.status(400).json({ success: false, message: 'Gecersiz TC Kimlik Numarasi' });
+                return;
+            }
             hashedTC = hashTC(cleanTC);
 
-            const existingByTC = await pool.query(
+            const existingByTC = await safeQuery<{ id: string }>(
                 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL',
                 [hashedTC]
             );
@@ -454,7 +454,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             }
             hashedPassport = hashPassport(cleanPassport);
 
-            const existingByPassport = await pool.query(
+            const existingByPassport = await safeQuery<{ id: string }>(
                 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL',
                 [hashedPassport]
             );
@@ -469,63 +469,63 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
         const id = uuidv4();
         const currentDate = new Date();
         const personnelId = await getOrCreateQrSgkPersonnelId();
-        const client = await pool.connect();
         let committed = false;
 
+        const fileRecords = uploadedFiles.map((file, i) => ({
+            id: uuidv4(),
+            pending_sgk_id: id,
+            stored_file_name: file.filename,
+            original_file_name: file.originalname || null,
+            mime_type: file.mimetype || null,
+            size_bytes: file.size || null,
+            sort_order: i
+        }));
+
         try {
-            await client.query('BEGIN');
-
-            await client.query(
-                `
-                    INSERT INTO sgk_records (
-                        id, hashed_tc, hashed_passport, full_name, company_name,
-                        file_path, upload_date, notes, personnel_id, created_at
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                `,
-                [
-                    id,
-                    hashedTC,
-                    hashedPassport,
-                    normalizedFullName,
-                    normalizedCompanyName,
-                    uploadedFiles[0].filename,
-                    currentDate,
-                    sanitizedNotes,
-                    personnelId,
-                    currentDate
-                ]
-            );
-
-            for (let i = 0; i < uploadedFiles.length; i++) {
-                const uploadedFile = uploadedFiles[i];
+            await safeTransaction(async (client) => {
                 await client.query(
                     `
-                        INSERT INTO sgk_record_files (
-                            id, sgk_record_id, stored_file_name, original_file_name,
-                            mime_type, size_bytes, sort_order
+                        INSERT INTO pending_qr_sgk (
+                            id, hashed_tc, hashed_passport, full_name, company_name,
+                            notes, status, created_at, updated_at
                         )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $7)
                     `,
                     [
-                        uuidv4(),
                         id,
-                        uploadedFile.filename,
-                        uploadedFile.originalname || null,
-                        uploadedFile.mimetype || null,
-                        uploadedFile.size || null,
-                        i
+                        hashedTC,
+                        hashedPassport,
+                        normalizedFullName,
+                        normalizedCompanyName,
+                        sanitizedNotes,
+                        currentDate
                     ]
                 );
-            }
 
-            await client.query('COMMIT');
+                for (const fileRec of fileRecords) {
+                    await client.query(
+                        `
+                            INSERT INTO pending_qr_sgk_files (
+                                id, pending_sgk_id, stored_file_name, original_file_name,
+                                mime_type, size_bytes, sort_order
+                            )
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        `,
+                        [
+                            fileRec.id,
+                            id,
+                            fileRec.stored_file_name,
+                            fileRec.original_file_name,
+                            fileRec.mime_type,
+                            fileRec.size_bytes,
+                            fileRec.sort_order
+                        ]
+                    );
+                }
+            });
             committed = true;
         } catch (txError) {
-            await client.query('ROLLBACK');
             throw txError;
-        } finally {
-            client.release();
         }
 
         if (!committed) {
@@ -535,7 +535,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
         }
 
         await logDataChange(
-            'sgk_records',
+            'pending_qr_sgk',
             id,
             'INSERT',
             null,
@@ -543,7 +543,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                 full_name: normalizedFullName,
                 company_name: normalizedCompanyName,
                 notes: sanitizedNotes,
-                source: 'qr_sgk',
+                source: 'qr_sgk_pending',
                 recorded_by_name: SGK_QR_ENTRY_NAME
             },
             personnelId,
@@ -552,11 +552,22 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
 
         emitApiMutation({
             method: 'POST',
-            path: '/api/visitor-public/sgk-records',
+            path: '/api/sgk/pending-qr',
             statusCode: 201,
             timestamp: new Date().toISOString(),
             clientId: req.header('x-realtime-client-id')?.trim() || null,
             topics: resolveMutationTopics('/api/sgk/records'),
+            payload: {
+                id,
+                hashed_tc: hashedTC,
+                hashed_passport: hashedPassport,
+                full_name: normalizedFullName,
+                company_name: normalizedCompanyName,
+                notes: sanitizedNotes,
+                status: 'pending',
+                created_at: currentDate.toISOString(),
+                files: fileRecords
+            }
         });
 
         res.status(201).json({

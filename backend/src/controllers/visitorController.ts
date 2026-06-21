@@ -194,6 +194,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.deleted_at,
                 vr.entry_by_name,
                 vr.exit_by_name,
+                vr.is_qr,
                 pe.first_name as entry_by_first_name,
                 pe.last_name as entry_by_last_name,
                 px.first_name as exit_by_first_name,
@@ -236,11 +237,11 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             status: row.status,
             deleted_at: row.deleted_at || null,
             entry_by: (row.entry_by_first_name || row.entry_by_last_name)
-                ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}`.trim()
-                : (row.entry_by_name || null),
+                ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}${row.is_qr ? ' (QR)' : ''}`.trim()
+                : (row.entry_by_name ? `${row.entry_by_name}${row.is_qr ? ' (QR)' : ''}` : null),
             exit_by: (row.exit_by_first_name || row.exit_by_last_name)
-                ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}`.trim()
-                : (row.exit_by_name || null),
+                ? `${row.exit_by_first_name || ''} ${row.exit_by_last_name || ''}${row.is_qr ? ' (QR)' : ''}`.trim()
+                : (row.exit_by_name ? `${row.exit_by_name}${row.is_qr ? ' (QR)' : ''}` : null),
             created_at: row.created_at
         }));
 
@@ -862,5 +863,315 @@ export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): P
             success: false,
             message: 'WhatsApp mesajı gönderilirken hata oluştu.',
         });
+    }
+};
+
+/**
+ * Get all pending QR visitors
+ * GET /api/visitors/pending-qr
+ */
+export const getPendingQrVisitors = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const query = `
+            SELECT id, vehicle_plate, full_name, company_name, visiting_person,
+                   person_count, children_count, phone, gate, status, created_at
+            FROM pending_qr_visitors
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+        `;
+        const result = await pool.query(query);
+        
+        // Decode stored HTML entities if any
+        const formatted = result.rows.map((row: any) => ({
+            id: row.id,
+            vehicle_plate: row.vehicle_plate,
+            full_name: decodeStoredHtmlEntities(row.full_name),
+            company_name: decodeStoredHtmlEntities(row.company_name),
+            visiting_person: decodeStoredHtmlEntities(row.visiting_person),
+            person_count: row.person_count,
+            children_count: row.children_count ?? 0,
+            phone: row.phone,
+            gate: row.gate,
+            status: row.status,
+            created_at: row.created_at
+        }));
+        
+        res.status(200).json(formatted);
+    } catch (error) {
+        console.error('Get pending QR visitors error:', error);
+        res.status(500).json({ success: false, message: 'Bekleyen QR kayıtları listelenirken hata oluştu' });
+    }
+};
+
+/**
+ * Reject a pending QR visitor
+ * POST /api/visitors/pending-qr/:id/reject
+ */
+export const rejectPendingQrVisitor = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const checkQuery = `SELECT id, status FROM pending_qr_visitors WHERE id = $1 AND status = 'pending'`;
+        const checkResult = await pool.query(checkQuery, [id]);
+        if (checkResult.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Bekleyen kayıt bulunamadı veya zaten işlendi' });
+            return;
+        }
+
+        const updateQuery = `UPDATE pending_qr_visitors SET status = 'rejected', updated_at = NOW() WHERE id = $1`;
+        await pool.query(updateQuery, [id]);
+
+        await logDataChange(
+            'pending_qr_visitors',
+            id,
+            'UPDATE',
+            { status: 'pending' },
+            { status: 'rejected' },
+            personnel_id,
+            clientIp
+        );
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/visitors/pending-qr',
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/visitors/records'),
+            payload: { id, status: 'rejected' }
+        });
+
+        res.status(200).json({ success: true, message: 'QR kaydı reddedildi' });
+    } catch (error) {
+        console.error('Reject pending QR visitor error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt reddedilirken hata oluştu' });
+    }
+};
+
+/**
+ * Approve a pending QR visitor and save to visitor_records
+ * POST /api/visitors/pending-qr/:id/approve
+ */
+export const approvePendingQrVisitor = async (req: Request, res: Response): Promise<void> => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const {
+            vehicle_plate,
+            full_name,
+            company_name,
+            visiting_person,
+            person_count,
+            children_count,
+            phone,
+            notes,
+            highlight_color,
+            subcontractor_worker,
+            for_electric_station,
+            daily_guest,
+            entry_tag,
+            exit_tag,
+            tour_entry,
+            tour_exit,
+            meeting,
+            delivery,
+            guide,
+            entry_time,
+            send_whatsapp
+        } = req.body;
+
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        if (!personnel_id) {
+            res.status(401).json({ success: false, message: 'Kullanıcı doğrulanmadı. Lütfen giriş yapın.' });
+            return;
+        }
+
+        // Get personnel name to store in entry_by_name
+        const personnelCheck = await pool.query('SELECT first_name, last_name FROM personnel WHERE id = $1', [personnel_id]);
+        if (personnelCheck.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Onaylayan personel bulunamadı' });
+            return;
+        }
+        const personnelName = `${personnelCheck.rows[0].first_name || ''} ${personnelCheck.rows[0].last_name || ''}`.trim();
+
+        // Check if pending record exists
+        const pendingCheck = await pool.query('SELECT id, gate FROM pending_qr_visitors WHERE id = $1 AND status = \'pending\'', [id]);
+        if (pendingCheck.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Bekleyen kayıt bulunamadı veya zaten onaylandı/reddedildi' });
+            return;
+        }
+        const gate = pendingCheck.rows[0].gate;
+
+        // Validations
+        const sanitizedFullName = sanitizePlainText(full_name, 100);
+        const sanitizedCompanyName = sanitizePlainText(company_name, 100);
+        const sanitizedVisitingPerson = sanitizePlainText(visiting_person, 100);
+        const sanitizedNotes = sanitizePlainText(notes, 1000);
+        const normalizedPlate = normalizePlate(vehicle_plate);
+        const normalizedPhone = phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null;
+
+        if (!sanitizedFullName) {
+            res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
+            return;
+        }
+
+        if (normalizedPlate && normalizedPlate.length > 20) {
+            res.status(400).json({ success: false, message: 'Araç plakası 20 karakterden uzun olamaz' });
+            return;
+        }
+
+        if (phone && phone.length > 20) {
+            res.status(400).json({ success: false, message: 'Telefon numarası 20 karakterden uzun olamaz' });
+            return;
+        }
+
+        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+            res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
+            return;
+        }
+
+        const personCountToInsert = (person_count === '' || person_count === null || isNaN(person_count)) ? 1 : Number(person_count);
+        const childrenCountValue = (children_count === '' || children_count === null || isNaN(children_count)) ? 0 : Number(children_count);
+        const normalizedHighlightColor = normalizeVisitorHighlightColor(highlight_color);
+
+        const newRecordId = uuidv4();
+
+        await client.query('BEGIN');
+
+        // 1. Insert into visitor_records
+        const insertQuery = `
+            INSERT INTO visitor_records (
+                id, vehicle_plate, full_name, company_name, visiting_person,
+                person_count, children_count, gate, phone, notes, highlight_color, subcontractor_worker, for_electric_station, daily_guest,
+                entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_by, entry_by_name, entry_date, entry_time, status, send_whatsapp, is_qr
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+                CURRENT_DATE, 
+                COALESCE($24::time, CURRENT_TIME), 
+                'inside', $25, TRUE
+            )
+            RETURNING entry_date, entry_time
+        `;
+
+        const insertResult = await client.query(insertQuery, [
+            newRecordId,
+            normalizedPlate,
+            sanitizedFullName,
+            sanitizedCompanyName,
+            sanitizedVisitingPerson,
+            personCountToInsert,
+            childrenCountValue,
+            gate,
+            normalizedPhone,
+            sanitizedNotes,
+            normalizedHighlightColor,
+            Boolean(subcontractor_worker),
+            Boolean(for_electric_station),
+            Boolean(daily_guest),
+            Boolean(entry_tag),
+            Boolean(exit_tag),
+            Boolean(tour_entry),
+            Boolean(tour_exit),
+            Boolean(meeting),
+            Boolean(delivery),
+            Boolean(guide),
+            personnel_id,
+            personnelName,
+            entry_time || null,
+            Boolean(send_whatsapp)
+        ]);
+
+        // 2. Update pending status to approved
+        await client.query(
+            `UPDATE pending_qr_visitors SET status = 'approved', updated_at = NOW() WHERE id = $1`,
+            [id]
+        );
+
+        await client.query('COMMIT');
+
+        // GÜVENLİK: Audit log kaydı
+        await logDataChange(
+            'visitor_records',
+            newRecordId,
+            'INSERT',
+            null,
+            { vehicle_plate: normalizedPlate, full_name: sanitizedFullName, company_name: sanitizedCompanyName, source: 'qr_approved' },
+            personnel_id,
+            clientIp
+        );
+
+        // Emit mutation event for records table
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/visitors/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/visitors/records'),
+        });
+
+        // Emit mutation event to remove from pending queue on other browsers
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/visitors/pending-qr',
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/visitors/records'),
+            payload: { id, status: 'approved' }
+        });
+
+        // WhatsApp message logic (only if send_whatsapp is true)
+        let whatsappMessage = '';
+        if (Boolean(send_whatsapp)) {
+            try {
+                const entryDate = insertResult.rows[0]?.entry_date || new Date().toISOString().split('T')[0];
+                const timeString = insertResult.rows[0]?.entry_time || new Date().toLocaleTimeString('tr-TR');
+                const formattedEntryTime = timeString.substring(0, 5);
+
+                whatsappMessage = createVisitorRecordMessage({
+                    fullName: sanitizedFullName || undefined,
+                    companyName: sanitizedCompanyName || undefined,
+                    visitingPerson: sanitizedVisitingPerson || undefined,
+                    entryDate,
+                    entryTime: formattedEntryTime,
+                    gate: gate || undefined,
+                    vehiclePlate: normalizedPlate || undefined,
+                    personCount: personCountToInsert,
+                    childrenCount: childrenCountValue,
+                    phone: normalizedPhone || undefined,
+                    subcontractorWorker: Boolean(subcontractor_worker),
+                    forElectricStation: Boolean(for_electric_station),
+                    dailyGuest: Boolean(daily_guest),
+                    meeting: Boolean(meeting),
+                    delivery: Boolean(delivery),
+                    notes: sanitizedNotes || undefined
+                });
+            } catch (error) {
+                console.error('WhatsApp message generation error:', error);
+            }
+        }
+
+        res.status(201).json({ success: true, message: 'Ziyaretçi girişi onaylandı', data: { id: newRecordId }, whatsappMessage });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Approve pending QR visitor error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt onaylanırken hata oluştu' });
+    } finally {
+        client.release();
     }
 };

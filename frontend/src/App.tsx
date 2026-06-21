@@ -43,9 +43,11 @@ import QrVisitorCheckin from './pages/QrVisitorCheckin';
 import QrSgkUpload from './pages/QrSgkUpload';
 import QrLanding from './pages/QrLanding';
 import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
+import AdminPredefinedVisitors from './pages/AdminPredefinedVisitors';
 import { getRealtimeClientId } from './realtime/clientId';
 import { initializeRealtimeClient } from './realtime/socket';
 import { useWebSocketNotifications } from './hooks/useWebSocketNotifications';
+import QrApprovalQueue from './components/QrApprovalQueue';
 
 function AppShell() {
   useWebSocketNotifications();
@@ -55,12 +57,13 @@ function AppShell() {
       <ThemeProvider>
         <NotificationManager />
         <Router>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/qr" element={<QrLanding />} />
-          <Route path="/qr/visitor-checkin" element={<QrVisitorCheckin />} />
-          <Route path="/qr/sgk-upload" element={<QrSgkUpload />} />
+          <QrApprovalQueue />
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/qr" element={<QrLanding />} />
+            <Route path="/qr/visitor-checkin" element={<QrVisitorCheckin />} />
+            <Route path="/qr/sgk-upload" element={<QrSgkUpload />} />
 
           {/* Equipment Check - Semi-protected (requires login but before dashboard) */}
           <Route path="/equipment-check" element={
@@ -95,6 +98,7 @@ function AppShell() {
             <Route path="parking-management" element={<AdminParkingManagement />} />
             <Route path="misafir-kayitlari" element={<GuestRegistry />} />
             <Route path="misafir-qr-yonetimi" element={<AdminVisitorQrManagement />} />
+            <Route path="predefined-visitors" element={<AdminPredefinedVisitors />} />
           </Route>
 
           {/* Protected Routes - Authentication gerekli */}

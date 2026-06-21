@@ -19,6 +19,7 @@ const TOPIC_MAP: Array<{ prefix: string; topics: string[] }> = [
     { prefix: '/api/managers', topics: ['managers', 'dashboard'] },
     { prefix: '/api/personnel', topics: ['personnel'] },
     { prefix: '/api/guest-registry', topics: ['guest-registry'] },
+    { prefix: '/api/predefined-visitors', topics: ['predefined-visitors'] },
     { prefix: '/api/fire-alarms', topics: ['fire-alarms', 'dashboard'] },
     { prefix: '/api/incidents', topics: ['incidents'] },
     { prefix: '/api/sgk', topics: ['sgk'] },

@@ -5,6 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { hashTC, deleteFile, getFilePath, hashPassport } from '../utils/fileUpload';
+import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 interface SgkFileMeta {
     id: string;
@@ -115,7 +116,7 @@ const mapRecordResponse = (record: any, fileMap: Map<string, SgkFileMeta[]>) => 
         upload_date: record.upload_date,
         notes: record.notes,
         personnel: (record.personnel_first_name || record.personnel_last_name)
-            ? `${record.personnel_first_name || ''} ${record.personnel_last_name || ''}`.trim()
+            ? `${record.personnel_first_name || ''} ${record.personnel_last_name || ''}${record.is_qr ? ' (QR)' : ''}`.trim()
             : null,
         created_at: record.created_at
     };
@@ -210,6 +211,7 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
                 sr.upload_date,
                 sr.notes,
                 sr.created_at,
+                sr.is_qr,
                 p.first_name as personnel_first_name,
                 p.last_name as personnel_last_name
             FROM sgk_records sr
@@ -1017,5 +1019,362 @@ export const deleteSgkRecord = async (req: Request, res: Response): Promise<void
     } catch (error) {
         console.error('Delete SGK record error:', error);
         res.status(500).json({ success: false, message: 'SGK kaydı silinirken hata oluştu' });
+    }
+};
+
+/**
+ * Get all pending QR SGK records
+ * GET /api/sgk/pending-qr
+ */
+export const getPendingQrSgk = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const query = `
+            SELECT id, hashed_tc, hashed_passport, full_name, company_name, notes, status, created_at
+            FROM pending_qr_sgk
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+        `;
+        const result = await pool.query(query);
+
+        const pendingIds = result.rows.map((row: any) => row.id);
+        const filesMap = new Map<string, any[]>();
+
+        if (pendingIds.length > 0) {
+            const filesQuery = `
+                SELECT id, pending_sgk_id, stored_file_name, original_file_name, mime_type, size_bytes, sort_order, created_at
+                FROM pending_qr_sgk_files
+                WHERE pending_sgk_id = ANY($1::uuid[])
+                ORDER BY pending_sgk_id, sort_order, created_at
+            `;
+            const filesResult = await pool.query(filesQuery, [pendingIds]);
+
+            for (const fileRow of filesResult.rows) {
+                const current = filesMap.get(fileRow.pending_sgk_id) || [];
+                current.push({
+                    id: fileRow.id,
+                    record_id: fileRow.pending_sgk_id,
+                    file_name: fileRow.stored_file_name,
+                    original_file_name: fileRow.original_file_name,
+                    mime_type: fileRow.mime_type,
+                    size_bytes: fileRow.size_bytes,
+                    sort_order: fileRow.sort_order,
+                    created_at: fileRow.created_at
+                });
+                filesMap.set(fileRow.pending_sgk_id, current);
+            }
+        }
+
+        const formattedData = result.rows.map((row: any) => {
+            const recordFiles = filesMap.get(row.id) || [];
+            return {
+                id: row.id,
+                hashed_tc: row.hashed_tc,
+                hashed_passport: row.hashed_passport,
+                full_name: row.full_name,
+                company_name: row.company_name,
+                notes: row.notes,
+                status: row.status,
+                created_at: row.created_at,
+                files: recordFiles,
+                file_count: recordFiles.length,
+                file_path: recordFiles[0]?.file_name || null
+            };
+        });
+
+        res.status(200).json(formattedData);
+    } catch (error) {
+        console.error('Get pending QR SGK error:', error);
+        res.status(500).json({ success: false, message: 'Bekleyen QR kayıtları listelenirken hata oluştu' });
+    }
+};
+
+/**
+ * Stream pending QR SGK file
+ * GET /api/sgk/pending-qr/:id/files/:fileId
+ */
+export const getPendingQrSgkFile = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id, fileId } = req.params;
+
+        if (!isValidUUID(id) || !isValidUUID(fileId)) {
+            res.status(400).json({ success: false, message: 'Geçersiz ID formatı' });
+            return;
+        }
+
+        const query = `
+            SELECT stored_file_name
+            FROM pending_qr_sgk_files
+            WHERE id = $1 AND pending_sgk_id = $2
+        `;
+        const result = await pool.query(query, [fileId, id]);
+
+        if (result.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Dosya bulunamadı' });
+            return;
+        }
+
+        sendStoredFile(res, result.rows[0].stored_file_name);
+    } catch (error) {
+        console.error('Get pending QR SGK file error:', error);
+        res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
+    }
+};
+
+/**
+ * Reject a pending QR SGK registration
+ * POST /api/sgk/pending-qr/:id/reject
+ */
+export const rejectPendingQrSgk = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        const checkQuery = `SELECT id FROM pending_qr_sgk WHERE id = $1 AND status = 'pending'`;
+        const checkResult = await pool.query(checkQuery, [id]);
+        if (checkResult.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Bekleyen kayıt bulunamadı veya zaten işlendi' });
+            return;
+        }
+
+        // Fetch files to delete physically
+        const filesQuery = `SELECT stored_file_name FROM pending_qr_sgk_files WHERE pending_sgk_id = $1`;
+        const filesResult = await pool.query(filesQuery, [id]);
+        const fileNames = filesResult.rows.map((row: any) => row.stored_file_name);
+
+        await pool.query(`UPDATE pending_qr_sgk SET status = 'rejected', updated_at = NOW() WHERE id = $1`, [id]);
+
+        // Delete physical files
+        for (const fileName of fileNames) {
+            try {
+                deleteFile(fileName);
+            } catch (err) {
+                console.error('Error deleting physical file:', fileName, err);
+            }
+        }
+
+        await logDataChange(
+            'pending_qr_sgk',
+            id,
+            'UPDATE',
+            { status: 'pending' },
+            { status: 'rejected' },
+            personnel_id,
+            clientIp
+        );
+
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/sgk/pending-qr',
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/sgk/records'),
+            payload: { id, status: 'rejected' }
+        });
+
+        res.status(200).json({ success: true, message: 'Kayıt başvurusu reddedildi' });
+    } catch (error) {
+        console.error('Reject pending QR SGK error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt reddedilirken hata oluştu' });
+    }
+};
+
+/**
+ * Approve pending QR SGK registration and save to sgk_records / sgk_record_files
+ * POST /api/sgk/pending-qr/:id/approve
+ */
+export const approvePendingQrSgk = async (req: Request, res: Response): Promise<void> => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { tc_no, passport_no, full_name, company_name, notes } = req.body;
+        const personnel_id = req.user?.userId || null;
+        const clientIp = getClientIp(req);
+
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz kayıt ID formatı' });
+            return;
+        }
+
+        if (!personnel_id) {
+            res.status(401).json({ success: false, message: 'Kullanıcı doğrulanmadı. Lütfen giriş yapın.' });
+            return;
+        }
+
+        const pendingCheck = await client.query(`SELECT id FROM pending_qr_sgk WHERE id = $1 AND status = 'pending'`, [id]);
+        if (pendingCheck.rows.length === 0) {
+            res.status(404).json({ success: false, message: 'Bekleyen kayıt bulunamadı veya zaten işlendi' });
+            return;
+        }
+
+        const hasTCInput = typeof tc_no === 'string' && tc_no.trim().length > 0;
+        const hasPassportInput = typeof passport_no === 'string' && passport_no.trim().length > 0;
+
+        if (hasTCInput && hasPassportInput) {
+            res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
+            return;
+        }
+
+        let hashedTC: string | null = null;
+        let hashedPassport: string | null = null;
+
+        if (hasTCInput) {
+            const cleanTC = tc_no.replace(/\D/g, '');
+            if (cleanTC.length !== 11) {
+                res.status(400).json({ success: false, message: 'TC Kimlik No 11 haneli olmalıdır' });
+                return;
+            }
+            hashedTC = hashTC(cleanTC);
+
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL';
+            const existingResult = await client.query(existingQuery, [hashedTC]);
+            if (existingResult.rows.length > 0) {
+                res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait kayıt zaten mevcut' });
+                return;
+            }
+        }
+
+        if (hasPassportInput) {
+            const cleanPassport = passport_no.trim().toUpperCase();
+            if (cleanPassport.length < 6 || cleanPassport.length > 20) {
+                res.status(400).json({ success: false, message: 'Pasaport numarası 6-20 karakter arasında olmalıdır' });
+                return;
+            }
+            hashedPassport = hashPassport(cleanPassport);
+
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL';
+            const existingResult = await client.query(existingQuery, [hashedPassport]);
+            if (existingResult.rows.length > 0) {
+                res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait kayıt zaten mevcut' });
+                return;
+            }
+        }
+
+        const sanitizedFullName = sanitizeInput(full_name?.trim() || '');
+        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '');
+        const sanitizedNotes = sanitizeInput(notes?.trim() || '');
+
+        if (!sanitizedFullName) {
+            res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
+            return;
+        }
+
+        // Fetch files from pending_qr_sgk_files
+        const filesResult = await client.query(
+            `
+                SELECT stored_file_name, original_file_name, mime_type, size_bytes, sort_order
+                FROM pending_qr_sgk_files
+                WHERE pending_sgk_id = $1
+                ORDER BY sort_order, created_at
+            `,
+            [id]
+        );
+
+        if (filesResult.rows.length === 0) {
+            res.status(400).json({ success: false, message: 'Onaylanacak kayıt için yüklenmiş belge bulunamadı' });
+            return;
+        }
+
+        const newRecordId = uuidv4();
+        const currentDate = new Date();
+
+        await client.query('BEGIN');
+
+        // Insert into sgk_records
+        const insertQuery = `
+            INSERT INTO sgk_records (
+                id, hashed_tc, hashed_passport, full_name, company_name,
+                file_path, upload_date, notes, personnel_id, created_at, is_qr
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+            RETURNING *
+        `;
+        const insertResult = await client.query(insertQuery, [
+            newRecordId,
+            hashedTC,
+            hashedPassport,
+            sanitizedFullName,
+            sanitizedCompanyName,
+            filesResult.rows[0].stored_file_name,
+            currentDate,
+            sanitizedNotes,
+            personnel_id,
+            currentDate
+        ]);
+
+        // Insert into sgk_record_files
+        for (const fileRow of filesResult.rows) {
+            const fileInsertQuery = `
+                INSERT INTO sgk_record_files (
+                    id, sgk_record_id, stored_file_name, original_file_name,
+                    mime_type, size_bytes, sort_order
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `;
+            await client.query(fileInsertQuery, [
+                uuidv4(),
+                newRecordId,
+                fileRow.stored_file_name,
+                fileRow.original_file_name,
+                fileRow.mime_type,
+                fileRow.size_bytes,
+                fileRow.sort_order
+            ]);
+        }
+
+        // Update pending status
+        await client.query(`UPDATE pending_qr_sgk SET status = 'approved', updated_at = NOW() WHERE id = $1`, [id]);
+
+        await client.query('COMMIT');
+
+        // Audit log
+        await logDataChange(
+            'sgk_records',
+            newRecordId,
+            'INSERT',
+            null,
+            { id: newRecordId, full_name: sanitizedFullName, company_name: sanitizedCompanyName, is_qr: true },
+            personnel_id,
+            clientIp
+        );
+
+        // Emit mutation event for records table
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/sgk/records',
+            statusCode: 201,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/sgk/records'),
+        });
+
+        // Emit mutation event to remove from pending queue
+        emitApiMutation({
+            method: 'POST',
+            path: '/api/sgk/pending-qr',
+            statusCode: 200,
+            timestamp: new Date().toISOString(),
+            clientId: req.header('x-realtime-client-id')?.trim() || null,
+            topics: resolveMutationTopics('/api/sgk/records'),
+            payload: { id, status: 'approved' }
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'SGK kaydı onaylandı ve kaydedildi',
+            data: { id: newRecordId }
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Approve pending QR SGK error:', error);
+        res.status(500).json({ success: false, message: 'Kayıt onaylanırken hata oluştu' });
+    } finally {
+        client.release();
     }
 };

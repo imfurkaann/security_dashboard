@@ -19,11 +19,13 @@ import personnelRoutes from './routes/personnel';
 import exportRoutes from './routes/export';
 import statisticsRoutes from './routes/statistics';
 import guestRegistryRoutes from './routes/guestRegistry';
+import predefinedVisitorRoutes from './routes/predefinedVisitors';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
 import { setWhatsAppTargetJid, warmupWhatsAppConnection, shutdownWhatsAppConnection } from './services/whatsappBaileys';
 import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
 import { initRealtime, emitApiMutation, resolveMutationTopics } from './realtime/socket';
+import { initTempCleanupService } from './services/tempCleanupService';
 
 dotenv.config();
 
@@ -182,6 +184,7 @@ app.use('/api/personnel', personnelRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/guest-registry', guestRegistryRoutes);
+app.use('/api/predefined-visitors', predefinedVisitorRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
@@ -348,6 +351,9 @@ const startServer = async () => {
         if (runningServer) {
             initRealtime(runningServer);
         }
+
+        // Initialize temporary file/record cleanup background service
+        initTempCleanupService();
 
         console.log(`🚀 Server is running on port ${runningPort}`);
         console.log(`📝 Environment: ${process.env.NODE_ENV}`);
