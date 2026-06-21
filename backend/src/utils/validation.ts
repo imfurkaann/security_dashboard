@@ -243,6 +243,40 @@ export const sanitizePlainText = (
     return sanitized;
 };
 
+/**
+ * Türkiye Cumhuriyeti Kimlik Numarası algoritmik doğrulaması (mod10/mod11)
+ * GÜVENLİK: TC Kimlik numarasının matematiksel olarak geçerliliğini denetler
+ */
+export const validateTC = (tc: string | null | undefined): boolean => {
+    if (!tc || typeof tc !== 'string') return false;
+
+    // Sadece rakamlardan oluşmalı ve tam olarak 11 karakter olmalı
+    const cleanTC = tc.replace(/\D/g, '');
+    if (cleanTC.length !== 11) return false;
+
+    // İlk hane 0 olamaz
+    if (cleanTC[0] === '0') return false;
+
+    const digits = cleanTC.split('').map(Number);
+
+    // 1, 3, 5, 7 ve 9. hanelerin toplamı
+    const oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
+
+    // 2, 4, 6 ve 8. hanelerin toplamı
+    const evenSum = digits[1] + digits[3] + digits[5] + digits[7];
+
+    // (oddSum * 7 - evenSum) % 10, 10. haneye eşit olmalı
+    const tenthDigit = (oddSum * 7 - evenSum) % 10;
+    const expectedTenth = tenthDigit < 0 ? (tenthDigit + 10) % 10 : tenthDigit;
+    if (expectedTenth !== digits[9]) return false;
+
+    // İlk 10 hanenin toplamının mod 10'u 11. haneye eşit olmalı
+    const sumFirstTen = digits.slice(0, 10).reduce((sum, d) => sum + d, 0);
+    if (sumFirstTen % 10 !== digits[10]) return false;
+
+    return true;
+};
+
 export default {
     isValidUUID,
     isValidPhone,
@@ -260,5 +294,7 @@ export default {
     safeParseInt,
     normalizePlate,
     normalizePhone,
-    validateFields
+    validateFields,
+    validateTC
 };
+

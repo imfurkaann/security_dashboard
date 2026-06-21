@@ -113,6 +113,31 @@ export interface VisitorRecord {
     created_at: string | null;
 }
 
+export interface PredefinedVisitor {
+    id: string;
+    full_name: string;
+    company_name: string | null;
+    phone: string | null;
+    vehicle_plate: string | null;
+    visiting_person: string | null;
+    notes: string | null;
+    highlight_color?: string;
+    subcontractor_worker: boolean;
+    for_electric_station: boolean;
+    daily_guest: boolean;
+    entry_tag: boolean;
+    exit_tag: boolean;
+    tour_entry: boolean;
+    tour_exit: boolean;
+    meeting: boolean;
+    delivery: boolean;
+    guide: boolean;
+    created_at?: string;
+    updated_at?: string;
+    deleted_at?: string | null;
+}
+
+
 // Manager Types
 export interface Manager {
     id: string;

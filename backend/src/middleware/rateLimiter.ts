@@ -32,6 +32,12 @@ const RATE_LIMIT_CONFIG = {
         windowMs: isTestEnv ? 1000 : 60 * 1000,      // Test: 1sn, Prod: 1 dakika
         maxRequests: isTestEnv ? 10000 : 300,        // Test: 10000, Prod: 300
         blockDurationMs: isTestEnv ? 1000 : 10 * 60 * 1000  // Test: 1sn, Prod: 10 dakika
+    },
+    // QR Ziyaretçi ve SGK kayıt limitleri (Halk açık form)
+    qrPublic: {
+        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // Test: 1sn, Prod: 15 dakika
+        maxRequests: isTestEnv ? 10000 : 15,          // Test: 10000, Prod: 15 istek (IP başına)
+        blockDurationMs: isTestEnv ? 1000 : 15 * 60 * 1000 // Test: 1sn, Prod: 15 dakika
     }
 };
 
@@ -221,6 +227,35 @@ export const writeRateLimiter = (
 };
 
 /**
+ * QR Ziyaretçi ve SGK kayıtları için rate limiting middleware (Halka açık uçlar)
+ */
+export const qrPublicRateLimiter = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
+    const ip = getClientIp(req);
+    const result = checkRateLimit(ip, 'qrPublic');
+
+    res.setHeader('X-RateLimit-Limit', RATE_LIMIT_CONFIG.qrPublic.maxRequests);
+    if (result.remaining !== undefined) {
+        res.setHeader('X-RateLimit-Remaining', result.remaining);
+    }
+
+    if (!result.allowed) {
+        res.setHeader('Retry-After', result.retryAfter || 900);
+        res.status(429).json({
+            success: false,
+            message: 'Çok fazla form isteği gönderildi. Lütfen bir süre sonra tekrar deneyin.',
+            retryAfter: result.retryAfter
+        });
+        return;
+    }
+
+    next();
+};
+
+/**
  * Başarısız giriş denemesi kaydet (login controller'dan çağrılır)
  */
 export const recordFailedLogin = (ip: string): void => {
@@ -266,6 +301,7 @@ export default {
     generalRateLimiter,
     loginRateLimiter,
     writeRateLimiter,
+    qrPublicRateLimiter,
     recordFailedLogin,
     clearLoginAttempts,
     isIpBlocked,

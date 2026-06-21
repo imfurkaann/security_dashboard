@@ -214,6 +214,17 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
+        // GÜVENLİK: Sanal sistem hesapları (QR) ile giriş yapılması engellenir
+        const lowercaseUser = sanitizedUsername.toLowerCase();
+        if (lowercaseUser === 'qr_misafir' || lowercaseUser === 'qr_sgk') {
+            await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
+            res.status(401).json({
+                success: false,
+                message: 'Kullanıcı adı veya şifre hatalı',
+            });
+            return;
+        }
+
         // Find user by username - parameterized query
         const userQuery = `
             SELECT id, username, password, first_name, last_name, role, is_active
