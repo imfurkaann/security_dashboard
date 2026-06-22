@@ -1029,7 +1029,7 @@ export const deleteSgkRecord = async (req: Request, res: Response): Promise<void
 export const getPendingQrSgk = async (req: Request, res: Response): Promise<void> => {
     try {
         const query = `
-            SELECT id, hashed_tc, hashed_passport, full_name, company_name, notes, status, created_at
+            SELECT id, hashed_tc, hashed_passport, full_name, company_name, notes, status, created_at, gate
             FROM pending_qr_sgk
             WHERE status = 'pending'
             ORDER BY created_at ASC
@@ -1077,7 +1077,8 @@ export const getPendingQrSgk = async (req: Request, res: Response): Promise<void
                 created_at: row.created_at,
                 files: recordFiles,
                 file_count: recordFiles.length,
-                file_path: recordFiles[0]?.file_name || null
+                file_path: recordFiles[0]?.file_name || null,
+                gate: row.gate
             };
         });
 

@@ -1233,7 +1233,14 @@ export default function Visitors() {
                                                 <button
                                                     key={visitor.id}
                                                     type="button"
-                                                    onClick={() => handleSelectPredefined(visitor)}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        handleSelectPredefined(visitor);
+                                                    }}
+                                                    onTouchStart={(e) => {
+                                                        e.preventDefault();
+                                                        handleSelectPredefined(visitor);
+                                                    }}
                                                     className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex flex-col gap-2"
                                                 >
                                                     {/* İsim */}

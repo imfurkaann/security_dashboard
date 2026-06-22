@@ -251,11 +251,16 @@ export default function QrSgkUpload() {
         try {
             setSubmitting(true);
 
+            const gate = new URLSearchParams(window.location.search).get('gate')?.trim() || '';
+
             const uploadData = new FormData();
             uploadData.append('formToken', formToken);
             uploadData.append('website', website);
             uploadData.append('full_name', formData.full_name.trim());
             uploadData.append('company_name', formData.company_name.trim());
+            if (gate) {
+                uploadData.append('gate', gate);
+            }
 
             formData.pdf_files.forEach((file) => {
                 uploadData.append('pdf_files', file);
