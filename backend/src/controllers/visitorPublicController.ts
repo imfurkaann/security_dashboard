@@ -466,6 +466,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             }
         }
 
+        const gate = await getResolvedGateFromRequest(req);
         const id = uuidv4();
         const currentDate = new Date();
         const personnelId = await getOrCreateQrSgkPersonnelId();
@@ -487,9 +488,9 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                     `
                         INSERT INTO pending_qr_sgk (
                             id, hashed_tc, hashed_passport, full_name, company_name,
-                            notes, status, created_at, updated_at
+                            notes, status, created_at, updated_at, gate
                         )
-                        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $7)
+                        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $7, $8)
                     `,
                     [
                         id,
@@ -498,7 +499,8 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                         normalizedFullName,
                         normalizedCompanyName,
                         sanitizedNotes,
-                        currentDate
+                        currentDate,
+                        gate
                     ]
                 );
 
@@ -544,7 +546,8 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                 company_name: normalizedCompanyName,
                 notes: sanitizedNotes,
                 source: 'qr_sgk_pending',
-                recorded_by_name: SGK_QR_ENTRY_NAME
+                recorded_by_name: SGK_QR_ENTRY_NAME,
+                gate
             },
             personnelId,
             clientIp
@@ -566,7 +569,8 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
                 notes: sanitizedNotes,
                 status: 'pending',
                 created_at: currentDate.toISOString(),
-                files: fileRecords
+                files: fileRecords,
+                gate
             }
         });
 

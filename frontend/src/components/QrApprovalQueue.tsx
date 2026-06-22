@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { message, Modal } from 'antd';
+import { useLocation } from 'react-router-dom';
 import CustomModal from './Modal';
 import api from '../utils/api';
 import { subscribeToApiMutations, type ApiMutationEvent } from '../realtime/socket';
@@ -45,6 +46,7 @@ interface PendingQrSgkData {
     files: SgkPendingFile[];
     file_count: number;
     file_path: string | null;
+    gate?: string | null;
 }
 
 interface PendingQrSgk extends PendingQrSgkData {
@@ -140,6 +142,20 @@ const VISITOR_HIGHLIGHT_OPTIONS = [
 ];
 
 export default function QrApprovalQueue() {
+    const location = useLocation();
+    const [selectedGate, setSelectedGate] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('selectedGate');
+        }
+        return null;
+    });
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            setSelectedGate(localStorage.getItem('selectedGate'));
+        }
+    }, [location]);
+
     const [queue, setQueue] = useState<QueueItem[]>([]);
     const [formData, setFormData] = useState<VisitorFormData>(INITIAL_FORM_DATA());
     const [sgkFormData, setSgkFormData] = useState<SgkFormData>(INITIAL_SGK_FORM_DATA());
@@ -223,7 +239,10 @@ export default function QrApprovalQueue() {
                     const nextQueue = [...prev, newVisitor].sort(
                         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                     );
-                    playNotificationSound();
+                    const currentGate = typeof window !== 'undefined' ? localStorage.getItem('selectedGate') : null;
+                    if (!currentGate || !newVisitor.gate || newVisitor.gate === currentGate) {
+                        playNotificationSound();
+                    }
                     return nextQueue;
                 });
             }
@@ -250,7 +269,10 @@ export default function QrApprovalQueue() {
                     const nextQueue = [...prev, newSgk].sort(
                         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                     );
-                    playNotificationSound();
+                    const currentGate = typeof window !== 'undefined' ? localStorage.getItem('selectedGate') : null;
+                    if (!currentGate || !newSgk.gate || newSgk.gate === currentGate) {
+                        playNotificationSound();
+                    }
                     return nextQueue;
                 });
             }
@@ -271,10 +293,16 @@ export default function QrApprovalQueue() {
         };
     }, [isAuthenticated, isQrPage]);
 
+    // Filter queue to only show items matching current user's gate
+    const filteredQueue = useMemo(() => {
+        if (!selectedGate) return queue;
+        return queue.filter(item => !item.gate || item.gate === selectedGate);
+    }, [queue, selectedGate]);
+
     // Active record at the head of the queue
     const activeRecord = useMemo(() => {
-        return queue.length > 0 ? queue[0] : null;
-    }, [queue]);
+        return filteredQueue.length > 0 ? filteredQueue[0] : null;
+    }, [filteredQueue]);
 
     const previewFiles = useMemo(() => {
         if (activeRecord?.type === 'sgk') {
@@ -535,7 +563,7 @@ export default function QrApprovalQueue() {
                 <>
                     <div className="mb-4">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 animate-pulse">
-                            QR KOD KAYIT İSTEĞİ ({queue.length} Bekleyen)
+                            QR KOD KAYIT İSTEĞİ ({filteredQueue.length} Bekleyen)
                         </span>
                         <h2 className="text-xl font-bold text-slate-900 mt-2">Ziyaretçi Girişini Onayla</h2>
                         <p className="text-xs text-slate-500 mt-0.5">
@@ -732,7 +760,7 @@ export default function QrApprovalQueue() {
                     <div className="w-full lg:w-2/5 flex flex-col justify-between overflow-y-auto pr-2">
                         <div>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 mb-3">
-                                QR KOD SGK YÜKLEME İSTEĞİ ({queue.length} Bekleyen)
+                                QR KOD SGK YÜKLEME İSTEĞİ ({filteredQueue.length} Bekleyen)
                             </span>
                             <h2 className="text-xl font-bold text-slate-900 font-sans">SGK Belgesini Onayla</h2>
                             <p className="text-xs text-slate-500 mt-0.5 mb-4">
