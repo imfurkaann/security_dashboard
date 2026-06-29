@@ -429,14 +429,8 @@ export default function AdminManagerRecords() {
     };
 
     const availableManagers = useMemo(() => {
-        const insideManagerIds = new Set(
-            records
-                .filter(r => r.status === 'inside' && !r.deleted_at && r.manager_id)
-                .map(r => r.manager_id as string)
-        );
-
-        return managersList.filter(m => !insideManagerIds.has(m.id));
-    }, [managersList, records]);
+        return managersList;
+    }, [managersList]);
 
     const openEditModal = (record: ManagerRecord) => {
         setEditingRecord(record);

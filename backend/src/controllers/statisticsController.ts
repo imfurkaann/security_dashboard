@@ -874,29 +874,15 @@ export const getComparativeAnalysis = async (req: Request, res: Response) => {
 // Personel bazlı kayıt performansı (haftalık/aylık/yıllık)
 export const getPersonnelPerformanceStats = async (req: Request, res: Response) => {
     try {
-        const periodRaw = typeof req.query.period === 'string' ? req.query.period : 'weekly';
-        const period = periodRaw.toLowerCase();
-
-        if (!['weekly', 'monthly', 'yearly'].includes(period)) {
-            res.status(400).json({
-                success: false,
-                message: 'Geçersiz dönem parametresi. weekly, monthly veya yearly olmalıdır'
-            });
-            return;
-        }
-
+        const { start, end } = resolveDateRange(req.query);
         const client = await pool.connect();
 
         try {
             const result = await client.query(
                 `WITH period_window AS (
                     SELECT
-                        CASE
-                            WHEN $1 = 'weekly' THEN date_trunc('week', CURRENT_DATE)::date
-                            WHEN $1 = 'monthly' THEN date_trunc('month', CURRENT_DATE)::date
-                            ELSE date_trunc('year', CURRENT_DATE)::date
-                        END AS start_date,
-                        (CURRENT_DATE + INTERVAL '1 day')::date AS end_date
+                        $1::date AS start_date,
+                        ($2::date + INTERVAL '1 day')::date AS end_date
                 ),
                 personnel_base AS (
                     SELECT p.id, p.first_name, p.last_name, p.username
@@ -981,7 +967,7 @@ export const getPersonnelPerformanceStats = async (req: Request, res: Response) 
                 LEFT JOIN fire_alarm_counts fac ON fac.personnel_id = pb.id
                 LEFT JOIN sgk_counts sc ON sc.personnel_id = pb.id
                 ORDER BY total_count DESC, pb.first_name ASC, pb.last_name ASC`,
-                [period]
+                [start, end]
             );
 
             const rangeStart = result.rows[0]?.start_date || null;
@@ -990,7 +976,7 @@ export const getPersonnelPerformanceStats = async (req: Request, res: Response) 
             res.json({
                 success: true,
                 data: {
-                    period,
+                    period: 'custom',
                     startDate: rangeStart,
                     endDate: rangeEnd,
                     rows: result.rows.map((row) => ({

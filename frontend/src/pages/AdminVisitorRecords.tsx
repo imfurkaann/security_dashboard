@@ -676,15 +676,6 @@ export default function AdminVisitorRecords() {
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto">
                             <button
-                                onClick={() => navigate('/admin/predefined-visitors')}
-                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base font-semibold"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857m0 0a5 5 0 115.986-3.13M15 11h3m-3-3h2M9 11a4 4 0 11-4-4 4 4 0 014 4z" />
-                                </svg>
-                                Tanımlı Ziyaretçiler
-                            </button>
-                            <button
                                 onClick={handleDownloadRecords}
                                 disabled={isExporting || loading || filteredRecords.length === 0}
                                 className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed font-semibold"

@@ -43,7 +43,6 @@ import QrVisitorCheckin from './pages/QrVisitorCheckin';
 import QrSgkUpload from './pages/QrSgkUpload';
 import QrLanding from './pages/QrLanding';
 import AdminVisitorQrManagement from './pages/AdminVisitorQrManagement';
-import AdminPredefinedVisitors from './pages/AdminPredefinedVisitors';
 import { getRealtimeClientId } from './realtime/clientId';
 import { initializeRealtimeClient } from './realtime/socket';
 import { useWebSocketNotifications } from './hooks/useWebSocketNotifications';
@@ -98,7 +97,6 @@ function AppShell() {
             <Route path="parking-management" element={<AdminParkingManagement />} />
             <Route path="misafir-kayitlari" element={<GuestRegistry />} />
             <Route path="misafir-qr-yonetimi" element={<AdminVisitorQrManagement />} />
-            <Route path="predefined-visitors" element={<AdminPredefinedVisitors />} />
           </Route>
 
           {/* Protected Routes - Authentication gerekli */}

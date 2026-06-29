@@ -2,10 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Cell } from 'recharts';
+import { DatePicker } from 'antd';
+import dayjs from 'dayjs';
+import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
-type PeriodType = 'weekly' | 'monthly' | 'yearly';
+const { RangePicker } = DatePicker;
+
+type PeriodType = 'custom';
 
 interface PersonnelStatRow {
     id: string;
@@ -29,12 +34,6 @@ interface PersonnelStatsResponse {
         rows: PersonnelStatRow[];
     };
 }
-
-const PERIOD_LABELS: Record<PeriodType, string> = {
-    weekly: 'Haftalık',
-    monthly: 'Aylık',
-    yearly: 'Yıllık',
-};
 
 const formatDisplayDate = (value: string | null): string => {
     if (!value) return '-';
@@ -96,7 +95,10 @@ const renderWrappedNameTick = ({
 
 export default function AdminPersonnelStatistics() {
     const navigate = useNavigate();
-    const [period, setPeriod] = useState<PeriodType>('weekly');
+    const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null]>([
+        dayjs().subtract(30, 'day'),
+        dayjs()
+    ]);
     const [rows, setRows] = useState<PersonnelStatRow[]>([]);
     const [startDate, setStartDate] = useState<string | null>(null);
     const [endDate, setEndDate] = useState<string | null>(null);
@@ -110,12 +112,14 @@ export default function AdminPersonnelStatistics() {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const fetchStats = useCallback(async (selectedPeriod: PeriodType) => {
+    const fetchStats = useCallback(async (start: dayjs.Dayjs | null, end: dayjs.Dayjs | null) => {
         setLoading(true);
         setError('');
 
         try {
-            const response = await api.get<PersonnelStatsResponse>(`/statistics/personnel-performance?period=${selectedPeriod}`);
+            const startStr = start ? start.format('YYYY-MM-DD') : '';
+            const endStr = end ? end.format('YYYY-MM-DD') : '';
+            const response = await api.get<PersonnelStatsResponse>(`/statistics/personnel-performance?startDate=${startStr}&endDate=${endStr}`);
             const data = response.data?.data;
             setRows(data?.rows || []);
             setStartDate(data?.startDate || null);
@@ -131,10 +135,10 @@ export default function AdminPersonnelStatistics() {
     }, []);
 
     useEffect(() => {
-        fetchStats(period);
-    }, [period, fetchStats]);
+        void fetchStats(dateRange[0], dateRange[1]);
+    }, [dateRange, fetchStats]);
 
-    const refreshStatsRealtime = useCallback(() => fetchStats(period), [fetchStats, period]);
+    const refreshStatsRealtime = useCallback(() => fetchStats(dateRange[0], dateRange[1]), [fetchStats, dateRange]);
 
     useRealtimeRefetch({
         topics: ['dashboard', 'incidents', 'sgk', 'personnel'],
@@ -248,7 +252,7 @@ export default function AdminPersonnelStatistics() {
                             <div className="min-w-0">
                                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Admin Paneli</p>
                                 <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight break-words">Personel İstatistiği</h1>
-                                <p className="text-sm sm:text-base text-slate-200 mt-1">Personel bazlı kayıt performansı ({PERIOD_LABELS[period]})</p>
+                                <p className="text-sm sm:text-base text-slate-200 mt-1">Personel bazlı kayıt performansı</p>
                             </div>
                         </div>
                     </div>
@@ -260,21 +264,24 @@ export default function AdminPersonnelStatistics() {
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-wrap">
                             <div className="flex items-center gap-2 flex-wrap text-sm text-slate-600">
-                                <span className="font-medium text-slate-500">Dönem</span>
-                                <select
-                                    id="period"
-                                    value={period}
-                                    onChange={(e) => setPeriod(e.target.value as PeriodType)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none"
-                                >
-                                    <option value="weekly">Haftalık</option>
-                                    <option value="monthly">Aylık</option>
-                                    <option value="yearly">Yıllık</option>
-                                </select>
+                                <span className="font-medium text-slate-500">Tarih Aralığı Seçin</span>
+                                <RangePicker
+                                    value={dateRange}
+                                    onChange={(dates) => {
+                                        if (dates) {
+                                            setDateRange([dates[0], dates[1]]);
+                                        } else {
+                                            setDateRange([null, null]);
+                                        }
+                                    }}
+                                    format="DD/MM/YYYY"
+                                    placeholder={['Başlangıç', 'Bitiş']}
+                                    size="small"
+                                />
                             </div>
 
                             <button
-                                onClick={() => fetchStats(period)}
+                                onClick={() => fetchStats(dateRange[0], dateRange[1])}
                                 disabled={loading}
                                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                             >
