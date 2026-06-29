@@ -31,7 +31,6 @@ export const createVehicleRecordMessage = (data: {
     return `\uD83D\uDD11 ARA\u00c7 TESL\u0130M B\u0130LD\u0130R\u0130M\u0130
 Ara\u00e7: ${data.vehiclePlate}
 Ki\u015fi: ${data.managerName}
-Tarih: ${data.givenDate}
 ${konumSatir}${aciklamaSatir}Saat: ${data.givenTime}
 
 Teslim edilmi\u015ftir.`;

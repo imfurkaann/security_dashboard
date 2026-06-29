@@ -321,6 +321,10 @@ export default function Managers() {
 
     // Memoized available managers for select
     const selectManagers = useMemo(() => {
+        if (isAdminPage) {
+            return managersList;
+        }
+
         const insideManagerIds = new Set(
             records
                 .filter(r => {
@@ -347,7 +351,7 @@ export default function Managers() {
         }
 
         return available;
-    }, [managersList, records, isEditing, editingId]);
+    }, [managersList, records, isEditing, editingId, isAdminPage]);
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
         const text = (value || '-').toString();

@@ -184,7 +184,7 @@ export default function Visitors() {
                     position: 'fixed',
                     left: `${rect.left}px`,
                     width: `${rect.width}px`,
-                    bottom: `${window.innerHeight - rect.top + 4}px`,
+                    top: `${rect.bottom + 4}px`,
                     zIndex: 9999,
                 });
             }
@@ -1241,13 +1241,13 @@ export default function Visitors() {
                                                         e.preventDefault();
                                                         handleSelectPredefined(visitor);
                                                     }}
-                                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex flex-col gap-2"
+                                                    className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex flex-col gap-1"
                                                 >
                                                     {/* İsim */}
-                                                    <span className="text-base font-bold text-gray-900">{visitor.full_name}</span>
+                                                    <span className="text-sm font-semibold text-gray-900">{visitor.full_name}</span>
 
                                                     {/* Alt Bilgiler - Yan Yana */}
-                                                    <span className="text-xs text-gray-600 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                                                    <span className="text-[11px] text-gray-600 flex flex-wrap items-center gap-x-2 gap-y-1">
                                                         {visitor.company_name && (
                                                             <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
                                                                 Firma: <span className="text-gray-900 font-medium">{visitor.company_name}</span>
