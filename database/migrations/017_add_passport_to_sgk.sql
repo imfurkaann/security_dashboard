@@ -12,6 +12,8 @@ CREATE INDEX IF NOT EXISTS idx_sgk_records_hashed_passport ON sgk_records(hashed
 ALTER TABLE sgk_records DROP CONSTRAINT IF EXISTS sgk_records_hashed_tc_key;
 
 -- Add check constraint to ensure at least one of TC or passport is provided
+ALTER TABLE sgk_records DROP CONSTRAINT IF EXISTS sgk_records_identifier_check;
+
 ALTER TABLE sgk_records ADD CONSTRAINT sgk_records_identifier_check 
     CHECK (
         (hashed_tc IS NOT NULL AND hashed_passport IS NULL) OR

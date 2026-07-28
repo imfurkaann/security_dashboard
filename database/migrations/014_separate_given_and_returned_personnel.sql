@@ -8,11 +8,15 @@
 -- 1. VEHICLE_RECORDS
 -- ==========================================
 -- personnel_id → given_by ve given_by_name
-ALTER TABLE vehicle_records 
-RENAME COLUMN personnel_id TO given_by;
-
-ALTER TABLE vehicle_records 
-RENAME COLUMN personnel_name TO given_by_name;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicle_records' AND column_name = 'personnel_id') THEN
+        ALTER TABLE vehicle_records RENAME COLUMN personnel_id TO given_by;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicle_records' AND column_name = 'personnel_name') THEN
+        ALTER TABLE vehicle_records RENAME COLUMN personnel_name TO given_by_name;
+    END IF;
+END $$;
 
 -- returned_by ve returned_by_name ekle
 ALTER TABLE vehicle_records 
@@ -25,16 +29,16 @@ ADD COLUMN IF NOT EXISTS returned_by_name VARCHAR(200);
 DROP INDEX IF EXISTS idx_vehicle_records_personnel;
 DROP INDEX IF EXISTS idx_vehicle_records_personnel_name;
 
-CREATE INDEX idx_vehicle_records_given_by 
+CREATE INDEX IF NOT EXISTS idx_vehicle_records_given_by 
 ON vehicle_records(given_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_vehicle_records_returned_by 
+CREATE INDEX IF NOT EXISTS idx_vehicle_records_returned_by 
 ON vehicle_records(returned_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_vehicle_records_given_by_name 
+CREATE INDEX IF NOT EXISTS idx_vehicle_records_given_by_name 
 ON vehicle_records(given_by_name);
 
-CREATE INDEX idx_vehicle_records_returned_by_name 
+CREATE INDEX IF NOT EXISTS idx_vehicle_records_returned_by_name 
 ON vehicle_records(returned_by_name);
 
 COMMENT ON COLUMN vehicle_records.given_by IS 'Aracı teslim eden personel ID';
@@ -46,11 +50,15 @@ COMMENT ON COLUMN vehicle_records.returned_by_name IS 'Aracı teslim alan person
 -- 2. VISITOR_RECORDS
 -- ==========================================
 -- personnel_id → entry_by ve entry_by_name
-ALTER TABLE visitor_records 
-RENAME COLUMN personnel_id TO entry_by;
-
-ALTER TABLE visitor_records 
-RENAME COLUMN personnel_name TO entry_by_name;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'visitor_records' AND column_name = 'personnel_id') THEN
+        ALTER TABLE visitor_records RENAME COLUMN personnel_id TO entry_by;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'visitor_records' AND column_name = 'personnel_name') THEN
+        ALTER TABLE visitor_records RENAME COLUMN personnel_name TO entry_by_name;
+    END IF;
+END $$;
 
 -- exit_by ve exit_by_name ekle
 ALTER TABLE visitor_records 
@@ -63,16 +71,16 @@ ADD COLUMN IF NOT EXISTS exit_by_name VARCHAR(200);
 DROP INDEX IF EXISTS idx_visitor_records_personnel;
 DROP INDEX IF EXISTS idx_visitor_records_personnel_name;
 
-CREATE INDEX idx_visitor_records_entry_by 
+CREATE INDEX IF NOT EXISTS idx_visitor_records_entry_by 
 ON visitor_records(entry_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_visitor_records_exit_by 
+CREATE INDEX IF NOT EXISTS idx_visitor_records_exit_by 
 ON visitor_records(exit_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_visitor_records_entry_by_name 
+CREATE INDEX IF NOT EXISTS idx_visitor_records_entry_by_name 
 ON visitor_records(entry_by_name);
 
-CREATE INDEX idx_visitor_records_exit_by_name 
+CREATE INDEX IF NOT EXISTS idx_visitor_records_exit_by_name 
 ON visitor_records(exit_by_name);
 
 COMMENT ON COLUMN visitor_records.entry_by IS 'Ziyaretçi girişini kaydeden personel ID';
@@ -84,11 +92,15 @@ COMMENT ON COLUMN visitor_records.exit_by_name IS 'Ziyaretçi çıkışını kay
 -- 3. MANAGERS_RECORDS
 -- ==========================================
 -- recorded_by → entry_by ve entry_by_name (rename)
-ALTER TABLE managers_records 
-RENAME COLUMN recorded_by TO entry_by;
-
-ALTER TABLE managers_records 
-RENAME COLUMN recorded_by_name TO entry_by_name;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'managers_records' AND column_name = 'recorded_by') THEN
+        ALTER TABLE managers_records RENAME COLUMN recorded_by TO entry_by;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'managers_records' AND column_name = 'recorded_by_name') THEN
+        ALTER TABLE managers_records RENAME COLUMN recorded_by_name TO entry_by_name;
+    END IF;
+END $$;
 
 -- exit_by ve exit_by_name ekle
 ALTER TABLE managers_records 
@@ -101,16 +113,16 @@ ADD COLUMN IF NOT EXISTS exit_by_name VARCHAR(200);
 DROP INDEX IF EXISTS idx_managers_records_recorded_by;
 DROP INDEX IF EXISTS idx_managers_records_recorded_by_name;
 
-CREATE INDEX idx_managers_records_entry_by 
+CREATE INDEX IF NOT EXISTS idx_managers_records_entry_by 
 ON managers_records(entry_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_managers_records_exit_by 
+CREATE INDEX IF NOT EXISTS idx_managers_records_exit_by 
 ON managers_records(exit_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_managers_records_entry_by_name 
+CREATE INDEX IF NOT EXISTS idx_managers_records_entry_by_name 
 ON managers_records(entry_by_name);
 
-CREATE INDEX idx_managers_records_exit_by_name 
+CREATE INDEX IF NOT EXISTS idx_managers_records_exit_by_name 
 ON managers_records(exit_by_name);
 
 COMMENT ON COLUMN managers_records.entry_by IS 'Müdür girişini kaydeden personel ID';
@@ -130,10 +142,10 @@ ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES personnel(id) ON DELETE SET
 ALTER TABLE fire_alarms 
 ADD COLUMN IF NOT EXISTS resolved_by_name VARCHAR(200);
 
-CREATE INDEX idx_fire_alarms_resolved_by 
+CREATE INDEX IF NOT EXISTS idx_fire_alarms_resolved_by 
 ON fire_alarms(resolved_by) WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_fire_alarms_resolved_by_name 
+CREATE INDEX IF NOT EXISTS idx_fire_alarms_resolved_by_name 
 ON fire_alarms(resolved_by_name);
 
 COMMENT ON COLUMN fire_alarms.recorded_by IS 'Yangın alarmını kaydeden personel ID';

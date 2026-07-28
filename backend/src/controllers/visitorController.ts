@@ -259,7 +259,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, highlight_color } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, entry_date, highlight_color } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
@@ -301,6 +301,16 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         if (notes && notes.length > 1000) {
             res.status(400).json({ success: false, message: 'Açıklama 1000 karakterden uzun olamaz' });
             return;
+        }
+
+        // entry_date validasyonu (YYYY-MM-DD formatı)
+        let validEntryDate: string | null = null;
+        if (entry_date) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry_date))) {
+                res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
+                return;
+            }
+            validEntryDate = String(entry_date);
         }
 
         // entry_time validasyonu (HH:MM formatı)
@@ -349,9 +359,9 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
                 entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_by, entry_date, entry_time, status, send_whatsapp
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
-                CURRENT_DATE, 
-                COALESCE($23::time, CURRENT_TIME), 
-                'inside', $24
+                COALESCE($23::date, CURRENT_DATE), 
+                COALESCE($24::time, CURRENT_TIME), 
+                'inside', $25
             )
             RETURNING entry_date, entry_time
         `;
@@ -380,6 +390,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             Boolean(delivery),
             Boolean(guide),
             personnel_id,
+            validEntryDate,
             entry_time || null,  // entry_time boşsa null, CURRENT_TIME kullanılacak
             sendWhatsApp
         ];
@@ -464,7 +475,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, exit_time, highlight_color } = req.body;
+        const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, exit_time, entry_date, highlight_color } = req.body;
         const clientIp = getClientIp(req);
 
         // GÜVENLİK: UUID validasyonu
@@ -476,6 +487,12 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         const recordCheck = await pool.query('SELECT * FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
         if (recordCheck.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
+            return;
+        }
+
+        // entry_date validasyonu (YYYY-MM-DD formatı)
+        if (entry_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(entry_date))) {
+            res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
             return;
         }
 
@@ -539,6 +556,10 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
         }
         if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
+        if (entry_date !== undefined) {
+            updates.push(`entry_date = $${idx++}`);
+            params.push(entry_date || null);
+        }
         if (entry_time !== undefined) {
             updates.push(`entry_time = $${idx++}`);
             params.push(entry_time || null);

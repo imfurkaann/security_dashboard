@@ -8,9 +8,11 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
-import { formatPhoneNumber } from '../utils/validation';
+import { formatPhoneNumber, validateVisitorForm, normalizePlate, normalizePhone } from '../utils/validation';
 
 const { RangePicker } = DatePicker;
+const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 10000;
+
 const getVisitorTags = (record: VisitorRecord): string[] => {
     const tags: string[] = [];
     if (record.subcontractor_worker) tags.push('Taşeron İşçi');
@@ -73,9 +75,58 @@ type VisitorEditFormData = {
     tour_exit: boolean;
     meeting: boolean;
     delivery: boolean;
+    entry_date: string;
     entry_time: string;
     exit_time: string;
 };
+
+type VisitorCreateFormData = {
+    vehicle_plate: string;
+    full_name: string;
+    company_name: string;
+    visiting_person: string;
+    person_count: string;
+    children_count: string;
+    phone: string;
+    notes: string;
+    highlight_color: string;
+    subcontractor_worker: boolean;
+    for_electric_station: boolean;
+    daily_guest: boolean;
+    entry_tag: boolean;
+    exit_tag: boolean;
+    tour_entry: boolean;
+    tour_exit: boolean;
+    meeting: boolean;
+    delivery: boolean;
+    send_whatsapp: boolean;
+    entry_date: string;
+    entry_time: string;
+};
+
+const initialCreateFormData = (): VisitorCreateFormData => ({
+    vehicle_plate: '',
+    full_name: '',
+    company_name: '',
+    visiting_person: '',
+    person_count: '',
+    children_count: '0',
+    phone: '',
+    notes: '',
+    highlight_color: 'none',
+    subcontractor_worker: false,
+    for_electric_station: false,
+    daily_guest: false,
+    entry_tag: false,
+    exit_tag: false,
+    tour_entry: false,
+    tour_exit: false,
+    meeting: false,
+    delivery: false,
+    send_whatsapp: false,
+    entry_date: dayjs().format('YYYY-MM-DD'),
+    entry_time: ''
+});
 
 const VISITOR_EDIT_TAGS: Array<{ key: VisitorEditTagKey; label: string }> = [
     { key: 'subcontractor_worker', label: 'Taşeron İşçi' },
@@ -164,6 +215,7 @@ const createVisitorEditFormData = (record: VisitorRecord | null): VisitorEditFor
     tour_exit: record?.tour_exit ?? false,
     meeting: record?.meeting ?? false,
     delivery: record?.delivery ?? false,
+    entry_date: record?.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '',
     entry_time: record?.entry_time || '',
     exit_time: record?.exit_time || ''
 });
@@ -181,6 +233,19 @@ export default function AdminVisitorRecords() {
     const [editFormData, setEditFormData] = useState<VisitorEditFormData>(createVisitorEditFormData(null));
     const [openTagsDropdown, setOpenTagsDropdown] = useState(false);
     const [savingEdit, setSavingEdit] = useState(false);
+
+    // Create modal state
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createFormData, setCreateFormData] = useState<VisitorCreateFormData>(initialCreateFormData());
+    const [createOpenTagsDropdown, setCreateOpenTagsDropdown] = useState(false);
+    const [savingCreate, setSavingCreate] = useState(false);
+
+    // WhatsApp modal state
+    const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+    const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+    const [autoSendFailed, setAutoSendFailed] = useState(false);
+
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -275,6 +340,121 @@ export default function AdminVisitorRecords() {
         setEditingRecord(null);
         setShowEditModal(false);
     }, []);
+
+    const resetCreateForm = useCallback(() => {
+        setCreateFormData(initialCreateFormData());
+        setCreateOpenTagsDropdown(false);
+    }, []);
+
+    const openCreateModal = useCallback(() => {
+        resetCreateForm();
+        setShowCreateModal(true);
+    }, [resetCreateForm]);
+
+    const closeCreateModal = useCallback(() => {
+        setShowCreateModal(false);
+        resetCreateForm();
+    }, [resetCreateForm]);
+
+    const handleCreateSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const validation = validateVisitorForm(createFormData);
+        if (!validation.isValid) {
+            Modal.error({
+                title: 'Lütfen hataları düzeltin',
+                content: (
+                    <ul className="list-disc pl-4 mt-2">
+                        {validation.errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                        ))}
+                    </ul>
+                )
+            });
+            return;
+        }
+
+        try {
+            setSavingCreate(true);
+            const payload = {
+                vehicle_plate: normalizePlate(createFormData.vehicle_plate) || null,
+                full_name: createFormData.full_name?.trim() || null,
+                company_name: createFormData.company_name?.trim() || null,
+                visiting_person: createFormData.visiting_person?.trim() || null,
+                person_count: createFormData.person_count === '' ? null : Number(createFormData.person_count),
+                children_count: createFormData.children_count === '' ? 0 : Number(createFormData.children_count),
+                phone: normalizePhone(createFormData.phone) || null,
+                notes: createFormData.notes?.trim() || null,
+                highlight_color: createFormData.highlight_color || 'none',
+                subcontractor_worker: !!createFormData.subcontractor_worker,
+                for_electric_station: !!createFormData.for_electric_station,
+                daily_guest: !!createFormData.daily_guest,
+                entry_tag: !!createFormData.entry_tag,
+                exit_tag: !!createFormData.exit_tag,
+                tour_entry: !!createFormData.tour_entry,
+                tour_exit: !!createFormData.tour_exit,
+                meeting: !!createFormData.meeting,
+                delivery: !!createFormData.delivery,
+                send_whatsapp: !!createFormData.send_whatsapp,
+                entry_date: createFormData.entry_date || null,
+                entry_time: createFormData.entry_time || null
+            };
+
+            const response = await api.post('/visitors/records', payload);
+
+            if (response.data?.whatsappMessage) {
+                setWhatsappMessage(response.data.whatsappMessage);
+                setAutoSendFailed(false);
+                setShowWhatsAppModal(true);
+            } else {
+                message.success('Ziyaretçi kaydı başarıyla oluşturuldu');
+            }
+
+            closeCreateModal();
+            void fetchData(0, false);
+        } catch (error: any) {
+            console.error('Ziyaretçi kaydı oluşturulamadı:', error);
+            const errMsg = error.response?.data?.message || 'Ziyaretçi kaydı oluşturulurken bir hata oluştu';
+            message.error(errMsg);
+        } finally {
+            setSavingCreate(false);
+        }
+    };
+
+    const handleSendWhatsAppAutomatic = async () => {
+        setSendingWhatsApp(true);
+        try {
+            const response = await api.post('/visitors/send-whatsapp-message', {
+                message: whatsappMessage,
+            }, {
+                timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
+            });
+
+            if (response.data?.success) {
+                setShowWhatsAppModal(false);
+                setAutoSendFailed(false);
+                message.success('WhatsApp mesajı gönderildi');
+            } else {
+                setAutoSendFailed(true);
+                const errorCode = response.data?.errorCode || 'WHATSAPP_SEND_FAILED';
+                const reason = response.data?.reason || 'Bilinmeyen hata';
+                const debugRef = response.data?.debugId ? ` Referans: ${response.data.debugId}` : '';
+                message.error(`Otomatik gönderim başarısız (${errorCode}): ${reason}.${debugRef} Lütfen Manuel Mesaj Gönder butonunu kullanın.`);
+            }
+        } catch (error: any) {
+            setAutoSendFailed(true);
+            message.error('WhatsApp mesajı gönderilirken bir hata oluştu');
+        } finally {
+            setSendingWhatsApp(false);
+        }
+    };
+
+    const handleSendWhatsAppManual = () => {
+        const encodedMessage = encodeURIComponent(whatsappMessage);
+        window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+        setShowWhatsAppModal(false);
+        setAutoSendFailed(false);
+    };
 
     const handleSaveEdit = async () => {
         if (!editingRecord) return;
@@ -675,6 +855,16 @@ export default function AdminVisitorRecords() {
                             </div>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-2.5 w-full lg:w-auto">
+                            <button
+                                type="button"
+                                onClick={openCreateModal}
+                                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-6 py-2.5 sm:py-3 rounded-lg transition shadow-md hover:shadow-lg text-sm sm:text-base font-semibold"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Ziyaretçi Kaydı Oluştur
+                            </button>
                             <button
                                 onClick={handleDownloadRecords}
                                 disabled={isExporting || loading || filteredRecords.length === 0}
@@ -1163,6 +1353,16 @@ export default function AdminVisitorRecords() {
                                     </div>
 
                                     <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Tarihi</label>
+                                        <input
+                                            type="date"
+                                            value={editFormData.entry_date || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, entry_date: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
                                         <input
                                             type="time"
@@ -1228,11 +1428,227 @@ export default function AdminVisitorRecords() {
                                 </div>
 
                                 <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">Güncelle</button>
-                                    <button type="button" onClick={closeEditModal} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
+                                    <button type="submit" disabled={savingEdit} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:opacity-50">Güncelle</button>
+                                    <button type="button" onClick={closeEditModal} disabled={savingEdit} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition disabled:opacity-50">İptal</button>
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center gap-4 mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900">Ziyaretçi Kaydı Oluştur</h2>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2">
+                                        {VISITOR_HIGHLIGHT_OPTIONS.map((option) => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                onClick={() => setCreateFormData((prev) => ({ ...prev, highlight_color: option.value }))}
+                                                className={`w-6 h-6 rounded-full border-2 transition ${createFormData.highlight_color === option.value ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                                                style={{ backgroundColor: option.color }}
+                                                title={option.label}
+                                                aria-label={option.label}
+                                                disabled={savingCreate}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button onClick={closeCreateModal} className="text-gray-400 hover:text-gray-600" type="button" disabled={savingCreate}>
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleCreateSubmit} className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ad Soyad</label>
+                                        <input value={createFormData.full_name || ''} onChange={(e) => setCreateFormData({ ...createFormData, full_name: e.target.value })} placeholder="Ziyaretçinin adı soyadı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Plaka</label>
+                                        <input value={createFormData.vehicle_plate || ''} onChange={(e) => setCreateFormData({ ...createFormData, vehicle_plate: e.target.value })} placeholder="TR 34 XXX 34" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Firma</label>
+                                        <input value={createFormData.company_name || ''} onChange={(e) => setCreateFormData({ ...createFormData, company_name: e.target.value })} placeholder="Firma adı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Ziyaret Edilen</label>
+                                        <input value={createFormData.visiting_person || ''} onChange={(e) => setCreateFormData({ ...createFormData, visiting_person: e.target.value })} placeholder="İsim veya departman" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Kişi Sayısı</label>
+                                        <input type="number" value={createFormData.person_count || ''} onChange={(e) => setCreateFormData({ ...createFormData, person_count: e.target.value })} placeholder="1" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Çocuk Sayısı</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={createFormData.children_count ?? ''}
+                                            onChange={(e) => setCreateFormData({ ...createFormData, children_count: e.target.value })}
+                                            placeholder="0"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Telefon</label>
+                                        <input value={createFormData.phone || ''} onChange={(e) => setCreateFormData({ ...createFormData, phone: e.target.value })} placeholder="05xx..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Tarihi</label>
+                                        <input
+                                            type="date"
+                                            value={createFormData.entry_date || ''}
+                                            onChange={(e) => setCreateFormData({ ...createFormData, entry_date: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Geçmiş bir tarih seçebilirsiniz (Boş bırakılırsa bugün kullanılır)</p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Giriş Saati</label>
+                                        <input
+                                            type="time"
+                                            value={createFormData.entry_time || ''}
+                                            onChange={(e) => setCreateFormData({ ...createFormData, entry_time: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Boş bırakırsanız mevcut saat kullanılır</p>
+                                    </div>
+
+                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCreateOpenTagsDropdown(!createOpenTagsDropdown)}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
+                                                >
+                                                    <span className="text-sm">
+                                                        {[createFormData.subcontractor_worker && 'Taşeron İşçi', createFormData.for_electric_station && 'Şarj İstasyonu', createFormData.daily_guest && 'Günübirlik Misafir', createFormData.entry_tag && 'Giriş', createFormData.exit_tag && 'Çıkış', createFormData.tour_entry && 'Tur Giriş', createFormData.tour_exit && 'Tur Çıkış', createFormData.meeting && 'Görüşme', createFormData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                    </span>
+                                                    <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${createOpenTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                    </svg>
+                                                </button>
+                                                {createOpenTagsDropdown && (
+                                                    <div className="absolute z-20 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                                                        {VISITOR_EDIT_TAGS.map((option) => (
+                                                            <label key={option.key} className="flex items-center px-4 py-2 hover:bg-gray-50 border-b last:border-b-0 cursor-pointer">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={!!createFormData[option.key]}
+                                                                    onChange={(e) => {
+                                                                        setCreateFormData({ ...createFormData, [option.key]: e.target.checked });
+                                                                    }}
+                                                                    className="mr-3 w-4 h-4 cursor-pointer"
+                                                                />
+                                                                <span className="text-sm text-gray-700">{option.label}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama / Not</label>
+                                            <textarea value={createFormData.notes || ''} onChange={(e) => setCreateFormData({ ...createFormData, notes: e.target.value })} rows={3} placeholder="Notlar..." className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-2 flex items-center gap-3">
+                                        <label className="inline-flex items-center">
+                                            <input type="checkbox" checked={!!createFormData.send_whatsapp} onChange={(e) => setCreateFormData({ ...createFormData, send_whatsapp: e.target.checked })} className="mr-2" />
+                                            <span className="text-sm">WhatsApp Mesajı Gönder</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <button type="submit" disabled={savingCreate} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:opacity-50">
+                                        {savingCreate ? 'Kaydediliyor...' : 'Kaydet'}
+                                    </button>
+                                    <button type="button" onClick={closeCreateModal} disabled={savingCreate} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition disabled:opacity-50">İptal</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showWhatsAppModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900">WhatsApp ile Paylaş</h3>
+                        </div>
+
+                        <p className="text-gray-600 mb-4">Kayıt başarıyla oluşturuldu. WhatsApp'tan paylaşmak ister misiniz?</p>
+
+                        <div className="bg-gray-50 rounded-lg p-4 mb-4 max-h-48 overflow-y-auto">
+                            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{whatsappMessage}</pre>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            {!autoSendFailed && (
+                                <button
+                                    type="button"
+                                    onClick={handleSendWhatsAppAutomatic}
+                                    disabled={sendingWhatsApp}
+                                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
+                                >
+                                    {sendingWhatsApp ? 'Gönderiliyor...' : 'Otomatik Mesaj Gönder'}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleSendWhatsAppManual}
+                                disabled={sendingWhatsApp}
+                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 rounded-lg font-medium transition"
+                            >
+                                Manuel Mesaj Gönder
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAutoSendFailed(false);
+                                    setShowWhatsAppModal(false);
+                                }}
+                                disabled={sendingWhatsApp}
+                                className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"
+                            >
+                                Kapat
+                            </button>
+                        </div>
+
+                        {autoSendFailed && (
+                            <p className="text-sm text-red-600 mt-3">
+                                Otomatik gönderim başarısız oldu. Lütfen Manuel Mesaj Gönder butonunu kullanın.
+                            </p>
+                        )}
                     </div>
                 </div>
             )}

@@ -20,12 +20,12 @@ CREATE TABLE IF NOT EXISTS sgk_records (
 );
 
 -- Create indexes for better query performance
-CREATE INDEX idx_sgk_records_hashed_tc ON sgk_records(hashed_tc);
-CREATE INDEX idx_sgk_records_full_name ON sgk_records(full_name);
-CREATE INDEX idx_sgk_records_company_name ON sgk_records(company_name);
-CREATE INDEX idx_sgk_records_upload_date ON sgk_records(upload_date);
-CREATE INDEX idx_sgk_records_personnel ON sgk_records(personnel_id);
-CREATE INDEX idx_sgk_records_deleted_at ON sgk_records(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_hashed_tc ON sgk_records(hashed_tc);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_full_name ON sgk_records(full_name);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_company_name ON sgk_records(company_name);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_upload_date ON sgk_records(upload_date);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_personnel ON sgk_records(personnel_id);
+CREATE INDEX IF NOT EXISTS idx_sgk_records_deleted_at ON sgk_records(deleted_at);
 
 -- Create trigger for updating updated_at timestamp
 CREATE OR REPLACE FUNCTION update_sgk_records_updated_at()

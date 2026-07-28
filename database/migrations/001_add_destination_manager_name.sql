@@ -24,5 +24,8 @@ ALTER COLUMN manager_id DROP NOT NULL;
 
 -- Add check constraint: either manager_id or manager_name must be provided
 ALTER TABLE vehicle_records 
+DROP CONSTRAINT IF EXISTS check_manager_info;
+
+ALTER TABLE vehicle_records 
 ADD CONSTRAINT check_manager_info 
 CHECK (manager_id IS NOT NULL OR manager_name IS NOT NULL);

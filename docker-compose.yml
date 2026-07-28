@@ -14,7 +14,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/local_backup.sql:/docker-entrypoint-initdb.d/01-backup.sql:ro
-      - ./database/migrations/012_create_sgk_records.sql:/docker-entrypoint-initdb.d/02-sgk.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
