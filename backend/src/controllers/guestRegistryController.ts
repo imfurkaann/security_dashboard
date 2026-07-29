@@ -4,7 +4,6 @@ import * as XLSX from 'xlsx';
 import pool from '../config/database';
 import { getClientIp } from '../middleware/rateLimiter';
 import { logDataChange } from '../utils/auditLog';
-import { sanitizePlainText } from '../utils/validation';
 import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 interface ParsedRow {
@@ -21,6 +20,33 @@ interface GuestRegistryColumn {
     type: GuestColumnType;
     index: number;
 }
+
+class GuestImportValidationError extends Error {}
+
+const parsePositiveInteger = (value: string | undefined, fallback: number): number => {
+    const parsed = Number(value);
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const MAX_IMPORT_ROWS = parsePositiveInteger(process.env.GUEST_EXCEL_MAX_ROWS, 100_000);
+const MAX_IMPORT_COLUMNS = parsePositiveInteger(process.env.GUEST_EXCEL_MAX_COLUMNS, 200);
+const MAX_IMPORT_CELLS = parsePositiveInteger(process.env.GUEST_EXCEL_MAX_CELLS, 2_000_000);
+const MAX_IMPORT_SHEETS = parsePositiveInteger(process.env.GUEST_EXCEL_MAX_SHEETS, 50);
+const MAX_CELL_LENGTH = parsePositiveInteger(process.env.GUEST_EXCEL_MAX_CELL_LENGTH, 2_000);
+const MAX_SEARCH_LENGTH = 200;
+const MAX_SEARCH_TEXT_LENGTH = 20_000;
+
+const parseBoundedQueryInteger = (
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number
+): number => {
+    if (typeof value !== 'string' || !/^\d+$/.test(value)) return fallback;
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+};
 
 const isHiddenGeneratedColumn = (key: string): boolean => /^COL_\d+(?:_\d+)?$/i.test(key.trim());
 
@@ -56,16 +82,54 @@ const fixPotentialMojibake = (value: string): string => {
     }
 };
 
+const sanitizeHeader = (value: unknown, fallbackIndex: number): string => {
+    const repaired = fixPotentialMojibake(String(value ?? ''))
+        .replace(/[\u0000-\u001F\u007F]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120);
+    return repaired || `COL_${fallbackIndex + 1}`;
+};
+
 const normalizeHeader = (value: string): string => {
     const repaired = fixPotentialMojibake(String(value));
     return normalizeSearchText(repaired).replace(/[^a-z0-9]/g, '');
 };
 
-const sanitizeCell = (value: unknown, maxLength: number): string | null => {
+const normalizeCellValue = (value: unknown): unknown => {
     if (value === null || value === undefined) return null;
-    const text = String(value).trim();
+    if (typeof value === 'number' || typeof value === 'boolean' || value instanceof Date) return value;
+
+    const text = fixPotentialMojibake(String(value))
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+        .trim()
+        .slice(0, MAX_CELL_LENGTH);
     if (!text) return null;
-    return sanitizePlainText(text, maxLength);
+    return text;
+};
+
+const buildSearchText = (rowData: Record<string, unknown>): string => {
+    return Object.values(rowData)
+        .map((value) => value === null || value === undefined ? '' : normalizeSearchText(String(value)))
+        .filter(Boolean)
+        .join(' ')
+        .slice(0, MAX_SEARCH_TEXT_LENGTH);
+};
+
+const sanitizeFileName = (value: string): string => {
+    return fixPotentialMojibake(value)
+        .replace(/[\\/]/g, '_')
+        .replace(/[\u0000-\u001F\u007F]/g, '')
+        .trim()
+        .slice(0, 255) || 'misafir-kayitlari.xlsx';
+};
+
+const hasValidExcelSignature = (buffer: Buffer): boolean => {
+    if (buffer.length < 8) return false;
+    const isZip = buffer[0] === 0x50 && buffer[1] === 0x4B;
+    const oleSignature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    const isOle = oleSignature.every((byte, index) => buffer[index] === byte);
+    return isZip || isOle;
 };
 
 const makeUniqueHeaderKey = (baseKey: string, usedKeys: Set<string>, fallbackIndex: number): string => {
@@ -282,11 +346,29 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
         raw: false
     });
 
+    if (workbook.SheetNames.length > MAX_IMPORT_SHEETS) {
+        throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_SHEETS} sayfa içerebilir`);
+    }
+
     const parsedRows: ParsedRow[] = [];
+    let estimatedCellCount = 0;
 
     workbook.SheetNames.forEach((sheetName) => {
         const worksheet = workbook.Sheets[sheetName];
         if (!worksheet) return;
+
+        if (worksheet['!ref']) {
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+            const rowCount = range.e.r - range.s.r + 1;
+            const columnCount = range.e.c - range.s.c + 1;
+            if (columnCount > MAX_IMPORT_COLUMNS) {
+                throw new GuestImportValidationError(`Bir Excel sayfasinda en fazla ${MAX_IMPORT_COLUMNS} kolon olabilir`);
+            }
+            estimatedCellCount += rowCount * columnCount;
+            if (estimatedCellCount > MAX_IMPORT_CELLS) {
+                throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_CELLS.toLocaleString('tr-TR')} hücre içerebilir`);
+            }
+        }
 
         const rawRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
             header: 1,
@@ -301,8 +383,7 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
         const headerRow = rawRows[headerRowIndex] || [];
         const usedRowKeys = new Set<string>();
         const headerKeys = headerRow.map((rawHeader, colIndex) => {
-            const key = rawHeader ? String(rawHeader).trim() : '';
-            return makeUniqueHeaderKey(key || `COL_${colIndex + 1}`, usedRowKeys, colIndex);
+            return makeUniqueHeaderKey(sanitizeHeader(rawHeader, colIndex), usedRowKeys, colIndex);
         });
 
         for (let rowIndex = headerRowIndex + 1; rowIndex < rawRows.length; rowIndex++) {
@@ -313,7 +394,7 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
             for (let colIndex = 0; colIndex < Math.max(headerKeys.length, dataRow.length); colIndex++) {
                 const rawHeader = headerKeys[colIndex] || `COL_${colIndex + 1}`;
                 const key = makeUniqueHeaderKey(rawHeader, rowUsedKeys, colIndex);
-                rowData[key] = dataRow[colIndex] ?? null;
+                rowData[key] = normalizeCellValue(dataRow[colIndex]);
             }
 
             parsedRows.push({
@@ -321,6 +402,10 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
                 rowNumber: rowIndex + 1,
                 rowData
             });
+
+            if (parsedRows.length > MAX_IMPORT_ROWS) {
+                throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_ROWS.toLocaleString('tr-TR')} veri satiri içerebilir`);
+            }
         }
     });
 
@@ -336,7 +421,13 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
     }
 
     try {
+        if (!hasValidExcelSignature(uploadedFile.buffer)) {
+            res.status(400).json({ success: false, message: 'Dosya içerigi geçerli bir Excel biçiminde degil' });
+            return;
+        }
+
         const parsedRows = parseExcelRows(uploadedFile.buffer);
+        const safeFileName = sanitizeFileName(uploadedFile.originalname);
 
         if (parsedRows.length === 0) {
             res.status(400).json({ success: false, message: 'Excel dosyasinda veri satiri bulunamadi' });
@@ -350,9 +441,15 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
         const rowErrors: Array<{ rowNumber: number; sheetName: string; reason: string }> = [];
         let insertedRows = 0;
         let skippedRows = 0;
+        let previousRecordCount = 0;
 
         try {
             await client.query('BEGIN');
+
+            // Ayni anda baslayan iki içe aktarma birbirinin verisini yarida kesemez.
+            await client.query(`SELECT pg_advisory_xact_lock(hashtext('misafir_kayitlari_import'))`);
+            const previousCountResult = await client.query('SELECT COUNT(*)::int AS count FROM misafir_kayitlari');
+            previousRecordCount = previousCountResult.rows[0]?.count || 0;
 
             // Her yeni Excel yuklemesinde onceki tum kayitlari kaldirip tam yenileme yap.
             await client.query('TRUNCATE TABLE misafir_kayitlari');
@@ -374,14 +471,15 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                 const queryValues: any[] = [];
                 
                 chunk.forEach((row, rowIndex) => {
-                    const baseIndex = rowIndex * 6;
-                    valuePlaceholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}::jsonb, $${baseIndex + 6})`);
+                    const baseIndex = rowIndex * 7;
+                    valuePlaceholders.push(`($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}::jsonb, $${baseIndex + 6}, $${baseIndex + 7})`);
                     queryValues.push(
                         uuidv4(),
-                        uploadedFile.originalname,
+                        safeFileName,
                         row.sheetName,
                         row.rowNumber,
                         JSON.stringify(row.rowData),
+                        buildSearchText(row.rowData),
                         createdBy
                     );
                 });
@@ -393,6 +491,7 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
                         sheet_name,
                         row_number,
                         row_data,
+                        search_text,
                         created_by
                     ) VALUES ${valuePlaceholders.join(', ')}
                 `;
@@ -429,14 +528,15 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
 
         await logDataChange(
             'misafir_kayitlari',
-            uploadedFile.originalname,
+            safeFileName,
             'INSERT',
-            null,
+            { record_count: previousRecordCount },
             {
-                file_name: uploadedFile.originalname,
+                file_name: safeFileName,
                 total_rows: parsedRows.length,
                 inserted_rows: insertedRows,
-                skipped_rows: skippedRows
+                skipped_rows: skippedRows,
+                replaced_rows: previousRecordCount
             },
             createdBy,
             clientIp
@@ -464,6 +564,10 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
         });
     } catch (error) {
         console.error('Misafir Excel import error:', error);
+        if (error instanceof GuestImportValidationError) {
+            res.status(400).json({ success: false, message: error.message });
+            return;
+        }
         res.status(500).json({ success: false, message: 'Excel dosyasi islenirken hata olustu' });
     }
 };
@@ -473,18 +577,38 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
-        const page = Math.max(Number(req.query.page) || 1, 1);
-        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 500);
+        const page = parseBoundedQueryInteger(req.query.page, 1, 1, 1_000_000);
+        const limit = parseBoundedQueryInteger(req.query.limit, 50, 1, 500);
 
         const searchQuery = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+        if (searchQuery.length > MAX_SEARCH_LENGTH) {
+            res.status(400).json({
+                success: false,
+                message: `Arama metni en fazla ${MAX_SEARCH_LENGTH} karakter olabilir`
+            });
+            return;
+        }
         const normalizedSearch = normalizeSearchText(searchQuery);
+        const escapedSearch = normalizedSearch.replace(/[\\%_]/g, '\\$&');
 
-        // Schema ve kolon tiplerini çıkarmak için 500 satırlık küçük bir örneklem alalım
+        // Her sayfanın ilk satırı tüm kolonları, örnek satırlar da kolon tiplerini temsil eder.
         const sampleResult = await pool.query(
-            `SELECT row_data 
-             FROM misafir_kayitlari 
-             WHERE deleted_at IS NULL 
-             LIMIT 500`
+            `SELECT row_data
+             FROM (
+                 SELECT DISTINCT ON (sheet_name) row_data, sheet_name, row_number
+                 FROM misafir_kayitlari
+                 WHERE deleted_at IS NULL
+                 ORDER BY sheet_name, row_number, id
+             ) first_sheet_rows
+             UNION ALL
+             SELECT row_data
+             FROM (
+                 SELECT row_data
+                 FROM misafir_kayitlari
+                 WHERE deleted_at IS NULL
+                 ORDER BY created_at ASC, sheet_name ASC, row_number ASC, id ASC
+                 LIMIT 500
+             ) sample_rows`
         );
 
         const orderedColumnKeys: string[] = [];
@@ -522,12 +646,9 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
         const countParams: any[] = [];
         if (searchQuery) {
             countQuery += `
-                AND EXISTS (
-                    SELECT 1 FROM jsonb_each_text(row_data)
-                    WHERE translate(lower(value), 'çğıöşüı', 'cgiosui') LIKE $1
-                )
+                AND search_text LIKE $1 ESCAPE '\\'
             `;
-            countParams.push(`%${normalizedSearch}%`);
+            countParams.push(`%${escapedSearch}%`);
         }
         const countResult = await pool.query(countQuery, countParams);
         const total = parseInt(countResult.rows[0].count, 10);
@@ -542,16 +663,13 @@ export const getGuestRecords = async (req: Request, res: Response): Promise<void
         let paramIdx = 1;
         if (searchQuery) {
             dataQuery += `
-                AND EXISTS (
-                    SELECT 1 FROM jsonb_each_text(row_data)
-                    WHERE translate(lower(value), 'çğıöşüı', 'cgiosui') LIKE $${paramIdx++}
-                )
+                AND search_text LIKE $${paramIdx++} ESCAPE '\\'
             `;
-            dataParams.push(`%${normalizedSearch}%`);
+            dataParams.push(`%${escapedSearch}%`);
         }
 
         dataQuery += `
-            ORDER BY created_at ASC, sheet_name ASC, row_number ASC
+            ORDER BY created_at ASC, sheet_name ASC, row_number ASC, id ASC
             LIMIT $${paramIdx++} OFFSET $${paramIdx++}
         `;
 

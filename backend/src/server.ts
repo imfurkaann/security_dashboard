@@ -21,6 +21,7 @@ import statisticsRoutes from './routes/statistics';
 import guestRegistryRoutes from './routes/guestRegistry';
 import predefinedVisitorRoutes from './routes/predefinedVisitors';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
+import { csrfProtection } from './middleware/csrf';
 import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
 import { setWhatsAppTargetJid, warmupWhatsAppConnection, shutdownWhatsAppConnection } from './services/whatsappBaileys';
 import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
@@ -33,6 +34,14 @@ dotenv.config();
 process.env.TZ = 'Europe/Istanbul';
 
 const app: Application = express();
+
+const configuredProxyHops = Number(process.env.TRUST_PROXY_HOPS || '0');
+if (Number.isInteger(configuredProxyHops) && configuredProxyHops >= 0 && configuredProxyHops <= 5) {
+    app.set('trust proxy', configuredProxyHops);
+} else {
+    console.warn('TRUST_PROXY_HOPS geçersiz; proxy güveni devre dışı bırakıldı.');
+    app.set('trust proxy', false);
+}
 
 const PRIMARY_PORT = Number(process.env.PORT || 5000);
 const FALLBACK_PORT = Number(process.env.PORT_FALLBACK || PRIMARY_PORT + 1);
@@ -102,9 +111,12 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate', 'X-Realtime-Client-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate', 'X-Realtime-Client-Id', 'X-CSRF-Token'],
     maxAge: 86400 // 24 saat önbellekleme
 }));
+
+// Cookie-authenticated write requests require CSRF validation.
+app.use(csrfProtection);
 
 // GÜVENLİK: Request logging (audit trail) - include originalUrl to capture query string for debugging
 app.use((req: Request, _res: Response, next: NextFunction) => {

@@ -3,6 +3,7 @@
  * GÜVENLİK: DoS/DDoS saldırılarına karşı koruma
  */
 import { Request, Response, NextFunction } from 'express';
+import net from 'net';
 
 interface RateLimitRecord {
     count: number;
@@ -66,21 +67,15 @@ const getRateLimitKey = (ip: string, type: string): string => {
  * IP adresini güvenli şekilde al
  */
 export const getClientIp = (req: Request): string => {
-    // Proxy arkasında ise X-Forwarded-For header'ını kullan
-    const forwardedFor = req.headers['x-forwarded-for'];
-    if (forwardedFor) {
-        const ips = String(forwardedFor).split(',');
-        return ips[0].trim();
-    }
+    // Express resolves trusted proxy headers according to the configured proxy hops.
+    // Never read X-Forwarded-For directly because a client can forge it.
+    const rawIp = req.ip || req.socket.remoteAddress || '';
+    const withoutBrackets = rawIp.replace(/^\[|\]$/g, '');
+    const normalizedIp = withoutBrackets.startsWith('::ffff:')
+        ? withoutBrackets.slice(7)
+        : withoutBrackets;
 
-    // X-Real-IP header'ı (nginx)
-    const realIp = req.headers['x-real-ip'];
-    if (realIp) {
-        return String(realIp);
-    }
-
-    // Doğrudan bağlantı
-    return req.ip || req.socket.remoteAddress || 'unknown';
+    return net.isIP(normalizedIp) ? normalizedIp : 'unknown';
 };
 
 /**
@@ -182,7 +177,7 @@ export const loginRateLimiter = (
 
         res.status(429).json({
             success: false,
-            message: 'Çok fazla başarısız giriş denemesi. Lütfen daha sonra tekrar deneyin.',
+            message: 'Çok fazla giriş denemesi. Lütfen daha sonra tekrar deneyin.',
             retryAfter: result.retryAfter
         });
         return;

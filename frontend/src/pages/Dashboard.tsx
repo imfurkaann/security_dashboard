@@ -49,12 +49,6 @@ export default function Dashboard() {
 
     // Fetch all data in parallel for better performance
     const fetchAllData = useCallback(async () => {
-        const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-        if (!token) {
-            navigate('/login');
-            return;
-        }
-
         try {
             const [vehiclesRes, vehicleRecordsRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
                 api.get('/vehicles'),

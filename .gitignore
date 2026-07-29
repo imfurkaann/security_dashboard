@@ -31,6 +31,10 @@ Thumbs.db
 *.sql.backup
 *.dump
 
+# Local Docker secret material
+secrets/
+!secrets/.gitkeep
+
 # Yedekler (gizlilik için Git'e eklenmez)
 backups/*.sql
 backups/*.sql.zip

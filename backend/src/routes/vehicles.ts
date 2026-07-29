@@ -14,7 +14,7 @@ import {
     updateVehicle,
     deleteVehicle
 } from '../controllers/vehicleController';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, authorize } from '../middleware/auth';
 
 const router = Router();
 
@@ -25,13 +25,13 @@ router.use(authMiddleware);
 router.get('/', getVehicles);
 
 // Create new vehicle
-router.post('/', createVehicle);
+router.post('/', authorize('admin'), createVehicle);
 
 // Update vehicle
-router.put('/:id', updateVehicle);
+router.put('/:id', authorize('admin'), updateVehicle);
 
 // Delete vehicle
-router.delete('/:id', deleteVehicle);
+router.delete('/:id', authorize('admin'), deleteVehicle);
 
 // Get all managers
 router.get('/managers', getManagers);

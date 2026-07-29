@@ -40,8 +40,11 @@ export default function VehicleRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
@@ -62,36 +65,60 @@ export default function VehicleRecords() {
 
             const [recordsRes, vehiclesRes] = await Promise.all([
                 api.get(`/vehicles/records?${params.toString()}`),
-                api.get('/vehicles')
+                append ? Promise.resolve(null) : api.get('/vehicles')
             ]);
+
+            if (requestVersion !== requestVersionRef.current) return;
 
             const fetchedRecords = recordsRes.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetchedRecords]);
+                setRecords(prev => {
+                    const merged = new Map(prev.map(record => [record.id, record]));
+                    fetchedRecords.forEach((record: VehicleUsage) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current += fetchedRecords.length;
             } else {
                 setRecords(fetchedRecords);
+                nextOffsetRef.current = fetchedRecords.length;
             }
 
             setHasMore(fetchedRecords.length === PAGE_SIZE);
-            setVehicles(vehiclesRes.data || []);
+            if (vehiclesRes) setVehicles(vehiclesRes.data || []);
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, [filters]);
 
     useEffect(() => {
+        const requestVersion = ++requestVersionRef.current;
         setLoading(true);
-        void fetchData(0, false);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
+        const timer = window.setTimeout(() => {
+            void fetchData(0, false, requestVersion);
+        }, 300);
+        return () => window.clearTimeout(timer);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['vehicles'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: () => {
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            nextOffsetRef.current = 0;
+            void fetchData(0, false, requestVersion);
+        },
         enabled: true,
     });
 
@@ -100,27 +127,29 @@ export default function VehicleRecords() {
         if (!node) return;
 
         const onScroll = () => {
-            if (loadingMore || !hasMore) return;
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
             const threshold = 300;
             const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
             if (remaining < threshold) {
+                loadMoreInFlightRef.current = true;
                 setLoadingMore(true);
-                void fetchData(records.length, true);
+                void fetchData(nextOffsetRef.current, true);
             }
         };
 
         node.addEventListener('scroll', onScroll);
 
         const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
             const threshold = 400;
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight || document.documentElement.clientHeight;
             const docHeight = document.documentElement.scrollHeight;
             const remaining = docHeight - windowHeight - scrollTop;
             if (remaining < threshold) {
+                loadMoreInFlightRef.current = true;
                 setLoadingMore(true);
-                void fetchData(records.length, true);
+                void fetchData(nextOffsetRef.current, true);
             }
         };
 
@@ -130,7 +159,7 @@ export default function VehicleRecords() {
             node.removeEventListener('scroll', onScroll);
             window.removeEventListener('scroll', onWindowScroll);
         };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    }, [fetchData, loadingMore, hasMore]);
 
     // Filtered records are handled on backend now
     const filteredRecords = records;
@@ -224,7 +253,8 @@ export default function VehicleRecords() {
             const exportGroupsMap = new Map<string, VehicleUsage[]>();
 
             exportableRecords.forEach((record) => {
-                const dayKey = dayjs(record.given_date).format('YYYY-MM-DD');
+                const groupingDate = filterBy === 'given' ? record.given_date : record.return_date;
+                const dayKey = dayjs(groupingDate).format('YYYY-MM-DD');
                 if (!exportGroupsMap.has(dayKey)) {
                     exportGroupsMap.set(dayKey, []);
                 }
@@ -237,9 +267,13 @@ export default function VehicleRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = a.given_date.localeCompare(b.given_date);
+                        const dateA = filterBy === 'given' ? a.given_date : a.return_date;
+                        const dateB = filterBy === 'given' ? b.given_date : b.return_date;
+                        const dateCompare = (dateA || '').localeCompare(dateB || '');
                         if (dateCompare !== 0) return dateCompare;
-                        return a.given_time.localeCompare(b.given_time);
+                        const timeA = filterBy === 'given' ? a.given_time : a.return_time;
+                        const timeB = filterBy === 'given' ? b.given_time : b.return_time;
+                        return (timeA || '').localeCompare(timeB || '');
                     })
                 }));
 
@@ -290,7 +324,8 @@ export default function VehicleRecords() {
             message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { message } from 'antd';
+import axios from 'axios';
+import { message, Modal as AntdModal } from 'antd';
 import 'antd/dist/reset.css';
 import api from '../utils/api';
 import type { GuestRegistryColumn, GuestRegistryRecord, GuestRegistrySchema } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import CustomModal from '../components/Modal';
 
 interface ImportSummary {
     totalRows: number;
@@ -15,6 +17,9 @@ interface ImportSummary {
 
 const EMPTY_SCHEMA: GuestRegistrySchema = { columns: [] };
 
+const PAGE_SIZE = 100;
+const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
+
 export default function GuestRegistry() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -23,12 +28,19 @@ export default function GuestRegistry() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
     const hasMountedRef = useRef(false);
+    const activeReplaceRequestRef = useRef<AbortController | null>(null);
+    const requestGenerationRef = useRef(0);
+    const loadedPageRef = useRef(0);
+    const loadingMoreRef = useRef(false);
 
     const [loading, setLoading] = useState(true);
+    const [filtering, setFiltering] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const [records, setRecords] = useState<GuestRegistryRecord[]>([]);
     const [schema, setSchema] = useState<GuestRegistrySchema>(EMPTY_SCHEMA);
+    const [totalRecords, setTotalRecords] = useState(0);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [searchText, setSearchText] = useState('');
     const [lastSummary, setLastSummary] = useState<ImportSummary | null>(null);
     const [debouncedSearchText, setDebouncedSearchText] = useState('');
@@ -36,7 +48,6 @@ export default function GuestRegistry() {
 
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
-    const PAGE_SIZE = 100;
 
     const isScrollingTable = useRef(false);
     const isScrollingBar = useRef(false);
@@ -71,9 +82,25 @@ export default function GuestRegistry() {
 
     const fetchRecords = useCallback(async (searchValue = '', pageNumber = 1, append = false, options?: { silent?: boolean }) => {
         const silent = options?.silent ?? false;
-        if (!silent && !append) {
-            setLoading(true);
+        const replacing = !append;
+
+        if (append) {
+            if (loadingMoreRef.current) return;
+            loadingMoreRef.current = true;
+            setLoadingMore(true);
+        } else {
+            requestGenerationRef.current += 1;
+            loadedPageRef.current = 0;
+            activeReplaceRequestRef.current?.abort();
+            activeReplaceRequestRef.current = new AbortController();
+            setLoadError(null);
+            if (silent) setFiltering(true);
+            else setLoading(true);
         }
+
+        const generation = requestGenerationRef.current;
+        const controller = replacing ? activeReplaceRequestRef.current : new AbortController();
+
         try {
             const params: Record<string, string | number> = { page: pageNumber, limit: PAGE_SIZE, _t: Date.now() };
 
@@ -81,28 +108,53 @@ export default function GuestRegistry() {
                 params.search = searchValue.trim();
             }
 
-            const response = await api.get('/guest-registry/records', { params });
+            const response = await api.get('/guest-registry/records', {
+                params,
+                signal: controller?.signal,
+            });
+            if (generation !== requestGenerationRef.current) return;
+
             const nextSchema: GuestRegistrySchema = response.data?.schema || EMPTY_SCHEMA;
+            const fetchedData: GuestRegistryRecord[] = Array.isArray(response.data?.data)
+                ? response.data.data
+                : [];
+            const total = Number(response.data?.pagination?.total) || 0;
 
             setSchema(nextSchema);
-            const fetchedData = response.data?.data || [];
+            setTotalRecords(total);
 
             if (append) {
-                setRecords(prev => [...prev, ...fetchedData]);
+                setRecords((previous) => {
+                    const knownIds = new Set(previous.map((record) => record.id));
+                    return [...previous, ...fetchedData.filter((record) => !knownIds.has(record.id))];
+                });
             } else {
                 setRecords(fetchedData);
+                requestAnimationFrame(() => {
+                    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
+                });
             }
 
-            setHasMore(fetchedData.length === PAGE_SIZE);
+            loadedPageRef.current = Math.max(loadedPageRef.current, pageNumber);
+            setHasMore(pageNumber * PAGE_SIZE < total);
         } catch (error) {
+            if (axios.isCancel(error)) return;
             console.error('Misafir kayitlari yuklenemedi:', error);
+            setLoadError('Misafir kayıtları yüklenemedi. Bağlantıyı kontrol edip tekrar deneyin.');
             message.error('Misafir kayıtları yüklenemedi');
         } finally {
-            if (!silent) {
-                setLoading(false);
+            if (append) {
+                loadingMoreRef.current = false;
+                setLoadingMore(false);
+            } else if (generation === requestGenerationRef.current) {
+                if (silent) setFiltering(false);
+                else setLoading(false);
             }
-            setLoadingMore(false);
         }
+    }, []);
+
+    useEffect(() => {
+        return () => activeReplaceRequestRef.current?.abort();
     }, []);
 
     useEffect(() => {
@@ -126,45 +178,22 @@ export default function GuestRegistry() {
         void fetchRecords(debouncedSearchText, 1, false, { silent: true });
     }, [debouncedSearchText, fetchRecords]);
 
-    // Infinite scroll listener
+    // Tablo kendi içinde kaydığı için yalnızca tek bir scroll kaynağı dinlenir.
     useEffect(() => {
         const node = tableScrollRef.current;
         if (!node) return;
 
         const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
+            if (loadingMoreRef.current || !hasMore) return;
             const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                const nextPage = Math.floor(records.length / PAGE_SIZE) + 1;
-                void fetchRecords(debouncedSearchText, nextPage, true);
+            if (remaining < 300) {
+                void fetchRecords(debouncedSearchText, loadedPageRef.current + 1, true);
             }
         };
 
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                const nextPage = Math.floor(records.length / PAGE_SIZE) + 1;
-                void fetchRecords(debouncedSearchText, nextPage, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchRecords, loadingMore, hasMore, records.length, debouncedSearchText]);
+        node.addEventListener('scroll', onScroll, { passive: true });
+        return () => node.removeEventListener('scroll', onScroll);
+    }, [fetchRecords, hasMore, debouncedSearchText, records.length]);
 
     const refreshGuestRegistryRealtime = useCallback(() => {
         return fetchRecords(debouncedSearchText, 1, false, { silent: true });
@@ -176,10 +205,9 @@ export default function GuestRegistry() {
         enabled: true,
     });
 
-    const onReset = async () => {
+    const onReset = () => {
         setSearchText('');
         setDebouncedSearchText('');
-        await fetchRecords('', 1, false);
     };
 
     const onUploadClick = () => {
@@ -197,29 +225,58 @@ export default function GuestRegistry() {
             return;
         }
 
+        if (selectedFile.size > MAX_UPLOAD_SIZE_BYTES) {
+            message.error('Excel dosyası en fazla 20 MB olabilir');
+            event.target.value = '';
+            return;
+        }
+
+        const confirmed = await new Promise<boolean>((resolve) => {
+            AntdModal.confirm({
+                title: 'Misafir listesini yenilemek istiyor musunuz?',
+                content: totalRecords > 0
+                    ? 'Bu dosya mevcut misafir listesinin tamamının yerine geçecektir. Dosya tamamen doğrulanamazsa mevcut kayıtlar korunur.'
+                    : 'Seçilen Excel dosyasındaki kayıtlar misafir listesine aktarılacaktır.',
+                okText: 'Listeyi Yenile',
+                cancelText: 'Vazgeç',
+                okType: 'danger',
+                centered: true,
+                onOk: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+
+        if (!confirmed) {
+            event.target.value = '';
+            return;
+        }
+
         const formData = new FormData();
         formData.append('file', selectedFile);
 
         try {
             setUploading(true);
-            const response = await api.post('/guest-registry/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const response = await api.post('/guest-registry/upload', formData);
 
             const summary = response.data?.summary as ImportSummary | undefined;
             if (summary) {
                 setLastSummary(summary);
             }
 
-            message.success('Excel yükleme tamamlandı');
+            message.success(summary
+                ? `${summary.insertedRows.toLocaleString('tr-TR')} misafir kaydı yüklendi`
+                : 'Excel yükleme tamamlandı');
             setSearchText('');
-            setDebouncedSearchText('');
-            await fetchRecords('', 1, false);
-        } catch (error: any) {
+            if (debouncedSearchText) {
+                setDebouncedSearchText('');
+            } else {
+                await fetchRecords('', 1, false);
+            }
+        } catch (error: unknown) {
             console.error('Excel yuklenemedi:', error);
-            const apiMessage = error?.response?.data?.message;
+            const apiMessage = axios.isAxiosError<{ message?: string }>(error)
+                ? error.response?.data?.message
+                : null;
             message.error(apiMessage || 'Excel yükleme sırasında hata oluştu');
         } finally {
             setUploading(false);
@@ -233,11 +290,11 @@ export default function GuestRegistry() {
 
     const existenceMessage = useMemo(() => {
         if (!hasActiveFilters) return null;
-        if (records.length > 0) {
-            return `${records.length} kayıt bulundu`;
+        if (totalRecords > 0) {
+            return `${totalRecords.toLocaleString('tr-TR')} kayıt bulundu`;
         }
         return 'Aranan kriterlere göre kayıt bulunamadı';
-    }, [hasActiveFilters, records.length]);
+    }, [hasActiveFilters, totalRecords]);
 
     const formatCellValue = (value: unknown, columnType: GuestRegistryColumn['type']): string => {
         if (value === null || value === undefined) return '-';
@@ -341,7 +398,7 @@ export default function GuestRegistry() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Misafir Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel misafir kayıtlarını yönetin.</p>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel misafir kayıtlarını yönetin.</p>
                             </div>
                         </div>
 
@@ -436,14 +493,33 @@ export default function GuestRegistry() {
                                 value={searchText}
                                 onChange={(e) => setSearchText(e.target.value)}
                                 placeholder="Excel kolonlarında ara (Örn: İsim, Oda No, Firma, Tarih vb...)"
-                                className="w-full pl-9 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition shadow-sm"
+                                maxLength={200}
+                                className="w-full pl-9 pr-9 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition shadow-sm"
                             />
+                            {filtering && (
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center" aria-label="Filtreleniyor">
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />
+                                </div>
+                            )}
                         </div>
                         <div className="text-[10px] text-gray-500 ml-1">
                             Arama; Excel satırındaki tüm kolon değerleri içinde çalışır ve otomatik olarak filtrelenir.
                         </div>
                     </div>
                 </div>
+
+                {loadError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-800 flex items-center justify-between gap-3">
+                        <span>{loadError}</span>
+                        <button
+                            type="button"
+                            onClick={() => void fetchRecords(debouncedSearchText, 1, false)}
+                            className="shrink-0 rounded-md bg-red-100 px-2.5 py-1 font-semibold hover:bg-red-200 transition"
+                        >
+                            Tekrar Dene
+                        </button>
+                    </div>
+                )}
 
                 {existenceMessage && (
                     <div className={`mb-2 rounded-lg px-4 py-2 text-xs font-medium border ${records.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
@@ -452,7 +528,10 @@ export default function GuestRegistry() {
                 )}
 
                 <div className="text-xs text-gray-500 font-medium ml-1">
-                    Toplam: <span className="font-bold text-gray-900">{records.length}</span> kayıt listeleniyor
+                    <span className="font-bold text-gray-900">{records.length.toLocaleString('tr-TR')}</span>
+                    {' / '}
+                    <span className="font-bold text-gray-900">{totalRecords.toLocaleString('tr-TR')}</span>
+                    {' kayıt görüntüleniyor'}
                 </div>
 
                 <div className="bg-white rounded-lg shadow border border-gray-200 p-4 min-h-[520px] overflow-hidden flex-1 min-h-0 flex flex-col">
@@ -525,37 +604,29 @@ export default function GuestRegistry() {
                 </div>
             </div>
 
-            {textPreview && (
-                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-scaleIn">
-                        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{textPreview.title}</h3>
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="text-gray-400 hover:text-gray-600 transition"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <div className="px-4 py-4 max-h-[60vh] overflow-y-auto">
-                            <p className="text-xs text-gray-800 whitespace-pre-wrap break-words select-text">{textPreview.value}</p>
-                        </div>
-                        <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setTextPreview(null)}
-                                className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs font-semibold transition"
-                            >
-                                Kapat
-                            </button>
-                        </div>
+            <CustomModal
+                isOpen={Boolean(textPreview)}
+                onClose={() => setTextPreview(null)}
+                size="sm"
+                footer={(
+                    <button
+                        type="button"
+                        onClick={() => setTextPreview(null)}
+                        className="rounded-lg bg-slate-200 px-4 py-1.5 text-xs font-semibold text-slate-800 transition hover:bg-slate-300"
+                    >
+                        Kapat
+                    </button>
+                )}
+            >
+                {textPreview && (
+                    <div>
+                        <h3 className="pr-8 text-sm font-semibold text-slate-900">{textPreview.title}</h3>
+                        <p className="mt-4 max-h-[60vh] overflow-y-auto whitespace-pre-wrap break-words text-xs text-slate-700 select-text">
+                            {textPreview.value}
+                        </p>
                     </div>
-                </div>
-            )}
+                )}
+            </CustomModal>
         </div>
     );
 }
-

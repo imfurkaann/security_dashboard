@@ -32,58 +32,41 @@ const getSocket = (): Socket => {
         return socket;
     }
 
-    const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
-
     socket = io(SOCKET_SERVER_URL, {
         path: '/api/socket.io/',
         transports: ['websocket', 'polling'],
-        auth: { token },
+        withCredentials: true,
         autoConnect: true,
         reconnection: true,
     });
-
-    (socket as any)._lastToken = token;
 
     return socket;
 };
 
 export const initializeRealtimeClient = (): Socket => {
     const client = getSocket();
-    const currentToken = localStorage.getItem('token') || localStorage.getItem('adminToken');
-
-    if ((client as any)._lastToken !== currentToken) {
-        (client as any)._lastToken = currentToken;
-        client.auth = { token: currentToken };
-        if (client.connected) {
-            client.disconnect().connect();
-        }
-    }
     return client;
+};
+
+export const refreshRealtimeAuthentication = (): Socket => {
+    const client = getSocket();
+    if (client.connected) {
+        client.disconnect();
+    }
+    client.connect();
+    return client;
+};
+
+export const disconnectRealtimeClient = (): void => {
+    if (socket?.connected) {
+        socket.disconnect();
+    }
 };
 
 export const subscribeToApiMutations = (listener: MutationListener): (() => void) => {
     const client = getSocket();
 
-    // Dynamically check if token changed (e.g. after login/logout) and reconnect if necessary
-    const currentToken = localStorage.getItem('token') || localStorage.getItem('adminToken');
-    if ((client as any)._lastToken !== currentToken) {
-        (client as any)._lastToken = currentToken;
-        client.auth = { token: currentToken };
-        if (client.connected) {
-            client.disconnect().connect();
-        }
-    }
-
     const wrapper = (event: ApiMutationEvent) => {
-        try {
-            // Temporary debug logging to inspect incoming realtime events
-            // Remove or guard this in production.
-            // eslint-disable-next-line no-console
-            console.debug('[realtime] api:mutation received', event);
-        } catch (err) {
-            // ignore logging errors
-        }
-
         listener(event);
     };
 

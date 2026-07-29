@@ -24,6 +24,7 @@ import {
     updateAdminWhatsAppTargetGroup,
 } from '../controllers/adminWhatsAppController';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
+import { loginRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ const router = Router();
  * @desc    Admin login
  * @access  Public
  */
-router.post('/login', adminLoginValidation, adminLogin);
+router.post('/login', loginRateLimiter, adminLoginValidation, adminLogin);
 
 /**
  * @route   POST /api/admin/logout

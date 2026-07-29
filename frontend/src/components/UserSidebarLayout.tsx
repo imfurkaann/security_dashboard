@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import api from '../utils/api';
 import { STORAGE_KEYS } from '../constants';
+import { disconnectRealtimeClient } from '../realtime/socket';
 
 function LogoutOverlay() {
     return (
@@ -66,6 +67,7 @@ export default function UserSidebarLayout() {
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
+            disconnectRealtimeClient();
             localStorage.removeItem(STORAGE_KEYS.TOKEN);
             localStorage.removeItem(STORAGE_KEYS.USER);
             localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);

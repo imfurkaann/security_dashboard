@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { guestExcelUpload } from '../utils/guestExcelUpload';
+import { uploadGuestExcelFile } from '../utils/guestExcelUpload';
 import { getGuestRecords, uploadGuestExcel } from '../controllers/guestRegistryController';
 
 const router = Router();
@@ -8,6 +8,6 @@ const router = Router();
 router.use(authMiddleware);
 
 router.get('/records', getGuestRecords);
-router.post('/upload', guestExcelUpload.single('file'), uploadGuestExcel);
+router.post('/upload', uploadGuestExcelFile, uploadGuestExcel);
 
 export default router;

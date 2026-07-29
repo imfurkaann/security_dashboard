@@ -101,6 +101,9 @@ export default function VisitorRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
     // Filter states
     const [filters, setFilters] = useState({
@@ -120,7 +123,7 @@ export default function VisitorRecords() {
         exitDateEnd: ''
     });
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
@@ -154,33 +157,56 @@ export default function VisitorRecords() {
             if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
 
             const res = await api.get(`/visitors/records?${params.toString()}`);
+            if (requestVersion !== requestVersionRef.current) return;
             const fetched = res.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords(prev => {
+                    const merged = new Map(prev.map(record => [record.id, record]));
+                    fetched.forEach((record: VisitorRecord) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current += fetched.length;
             } else {
                 setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
             }
 
             setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, [filters]);
 
 
     useEffect(() => {
+        const requestVersion = ++requestVersionRef.current;
         setLoading(true);
-        void fetchData(0, false);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
+        const timer = window.setTimeout(() => {
+            void fetchData(0, false, requestVersion);
+        }, 300);
+        return () => window.clearTimeout(timer);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['visitors'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: () => {
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            nextOffsetRef.current = 0;
+            void fetchData(0, false, requestVersion);
+        },
     });
 
     // Infinite scroll: load more on scroll near bottom (like admin view)
@@ -189,27 +215,29 @@ export default function VisitorRecords() {
         if (!node) return;
 
         const onScroll = () => {
-            if (loadingMore || !hasMore) return;
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
             const threshold = 300; // px from bottom to trigger
             const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
             if (remaining < threshold) {
+                loadMoreInFlightRef.current = true;
                 setLoadingMore(true);
-                void fetchData(records.length, true);
+                void fetchData(nextOffsetRef.current, true);
             }
         };
 
         node.addEventListener('scroll', onScroll);
         // Also listen to window scroll as a fallback when the page itself scrolls
         const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
             const threshold = 400; // px from bottom
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight || document.documentElement.clientHeight;
             const docHeight = document.documentElement.scrollHeight;
             const remaining = docHeight - windowHeight - scrollTop;
             if (remaining < threshold) {
+                loadMoreInFlightRef.current = true;
                 setLoadingMore(true);
-                void fetchData(records.length, true);
+                void fetchData(nextOffsetRef.current, true);
             }
         };
 
@@ -219,7 +247,7 @@ export default function VisitorRecords() {
             node.removeEventListener('scroll', onScroll);
             window.removeEventListener('scroll', onWindowScroll);
         };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    }, [fetchData, loadingMore, hasMore]);
 
     // Filtered records are handled on backend now
     const filteredRecords = records;
@@ -357,7 +385,8 @@ export default function VisitorRecords() {
             const exportGroupsMap = new Map<string, VisitorRecord[]>();
 
             exportableRecords.forEach((record) => {
-                const dayKey = dayjs(record.entry_date).format('YYYY-MM-DD');
+                const groupingDate = filterBy === 'entry' ? record.entry_date : record.exit_date;
+                const dayKey = dayjs(groupingDate).format('YYYY-MM-DD');
                 if (!exportGroupsMap.has(dayKey)) {
                     exportGroupsMap.set(dayKey, []);
                 }
@@ -370,9 +399,13 @@ export default function VisitorRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = (a.entry_date || '').localeCompare(b.entry_date || '');
+                        const dateA = filterBy === 'entry' ? a.entry_date : a.exit_date;
+                        const dateB = filterBy === 'entry' ? b.entry_date : b.exit_date;
+                        const dateCompare = (dateA || '').localeCompare(dateB || '');
                         if (dateCompare !== 0) return dateCompare;
-                        return (a.entry_time || '').localeCompare(b.entry_time || '');
+                        const timeA = filterBy === 'entry' ? a.entry_time : a.exit_time;
+                        const timeB = filterBy === 'entry' ? b.entry_time : b.exit_time;
+                        return (timeA || '').localeCompare(timeB || '');
                     })
                 }));
 
@@ -432,7 +465,8 @@ export default function VisitorRecords() {
             message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }

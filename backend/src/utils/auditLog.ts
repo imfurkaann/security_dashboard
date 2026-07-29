@@ -35,8 +35,39 @@ export interface AuditLogEntry {
  * Herhangi bir log kaydı tutulmamaktadır.
  */
 export const createAuditLog = async (entry: AuditLogEntry): Promise<void> => {
-    // Audit logging deaktif - veri tabanına yazma yapılmaz
-    return;
+    const authAuditEnabled = process.env.AUTH_AUDIT_LOG_ENABLED === 'true';
+    const guestRegistryAuditEnabled = process.env.GUEST_REGISTRY_AUDIT_LOG_ENABLED === 'true';
+    const fullAuditEnabled = process.env.AUDIT_LOG_ENABLED === 'true';
+    const isAuthAudit = authAuditEnabled && entry.tableName === 'auth';
+    const isGuestRegistryAudit = guestRegistryAuditEnabled && entry.tableName === 'misafir_kayitlari';
+    if (!fullAuditEnabled && !isAuthAudit && !isGuestRegistryAudit) {
+        return;
+    }
+
+    try {
+        const newValues = entry.additionalInfo
+            ? { ...(entry.newValues || {}), additionalInfo: entry.additionalInfo }
+            : entry.newValues;
+
+        await pool.query(
+            `INSERT INTO audit_log (
+                table_name, record_id, action, old_values, new_values,
+                changed_by, ip_address, user_agent
+            ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, $8)`,
+            [
+                entry.tableName,
+                entry.recordId,
+                entry.action,
+                JSON.stringify(maskSensitiveData(entry.oldValues)),
+                JSON.stringify(maskSensitiveData(newValues)),
+                entry.performedBy,
+                entry.ipAddress,
+                entry.userAgent || null
+            ]
+        );
+    } catch (error) {
+        console.error('Audit log yazılamadı:', error instanceof Error ? error.message : 'Bilinmeyen hata');
+    }
 };
 
 /**

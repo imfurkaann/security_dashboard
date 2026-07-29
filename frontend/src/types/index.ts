@@ -14,7 +14,6 @@ export interface User {
 export interface AuthResponse {
     success: boolean;
     data: {
-        token: string;
         user: User;
     };
     message?: string;
@@ -132,6 +131,9 @@ export interface PredefinedVisitor {
     meeting: boolean;
     delivery: boolean;
     guide: boolean;
+    visit_count?: number;
+    score?: number;
+    heat_score?: number;
     created_at?: string;
     updated_at?: string;
     deleted_at?: string | null;

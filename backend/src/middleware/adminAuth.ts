@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
+import pool from '../config/database';
+import { clearAuthCookies, getRequestToken } from '../utils/authCookies';
 
 // Extend Express Request type for admin authentication
 declare global {
@@ -10,6 +12,7 @@ declare global {
                 username: string;
                 role: string;
                 isAdmin: boolean;
+                personnelRecordId?: number;
             };
         }
     }
@@ -25,18 +28,14 @@ export const adminAuthMiddleware = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        // Get token from Authorization header
-        const authHeader = req.headers.authorization;
-
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const token = getRequestToken(req);
+        if (!token) {
             res.status(401).json({
                 success: false,
-                message: 'Yetkisiz erişim - Token bulunamadı',
+                message: 'Yetkisiz erişim - Oturum bulunamadı',
             });
             return;
         }
-
-        const token = authHeader.substring(7);
 
         // Debug logging in development only, without printing the actual decoded payload
         if (process.env.NODE_ENV !== 'production') {
@@ -49,6 +48,7 @@ export const adminAuthMiddleware = async (
 
         // Check if token is valid
         if (!decoded) {
+            clearAuthCookies(res);
             if (process.env.NODE_ENV !== 'production') {
                 console.debug('Admin auth - Token verification failed');
             }
@@ -60,7 +60,12 @@ export const adminAuthMiddleware = async (
         }
 
         // Check if user is admin
-        if (!decoded.isAdmin) {
+        if (
+            !decoded.isAdmin ||
+            decoded.role !== 'admin' ||
+            !decoded.userId ||
+            !decoded.username
+        ) {
             res.status(403).json({
                 success: false,
                 message: 'Yetkisiz erişim - Admin yetkisi gerekli',
@@ -68,20 +73,43 @@ export const adminAuthMiddleware = async (
             return;
         }
 
+        const adminResult = await pool.query<{
+            username: string;
+            role: string;
+        }>(
+            `SELECT username, role
+             FROM personnel
+             WHERE id = $1
+               AND deleted_at IS NULL
+               AND is_active = TRUE
+               AND role = 'admin'`,
+            [decoded.userId]
+        );
+
+        if (adminResult.rows.length !== 1) {
+            clearAuthCookies(res);
+            res.status(401).json({
+                success: false,
+                message: 'Admin oturumu artık geçerli değil',
+            });
+            return;
+        }
+
         // Attach admin info to request
         req.admin = {
             userId: decoded.userId,
-            username: decoded.username,
-            role: decoded.role,
+            username: adminResult.rows[0].username,
+            role: adminResult.rows[0].role,
             isAdmin: decoded.isAdmin || false,
+            personnelRecordId: decoded.personnelRecordId,
         };
 
         next();
     } catch (error) {
         console.error('Admin auth middleware error:', error);
-        res.status(401).json({
+        res.status(503).json({
             success: false,
-            message: 'Geçersiz veya süresi dolmuş token',
+            message: 'Yetkilendirme servisi geçici olarak kullanılamıyor',
         });
     }
 };

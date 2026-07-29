@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
+import type { PoolClient } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
-import { isValidUUID, sanitizePlainText, normalizePlate, isValidLength, isValidNumber } from '../utils/validation';
+import { isValidUUID, sanitizePlainText, normalizePlate, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
@@ -18,6 +18,39 @@ const normalizeVisitorHighlightColor = (value: unknown): string => {
         ? normalized
         : 'none';
 };
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_FILTER_LENGTH = 120;
+const MAX_EXPORT_ROWS = 50000;
+const isValidIsoDate = (value: string): boolean => {
+    if (!ISO_DATE_PATTERN.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+const VISITOR_BOOLEAN_FIELDS = [
+    'subcontractor_worker',
+    'for_electric_station',
+    'daily_guest',
+    'entry_tag',
+    'exit_tag',
+    'tour_entry',
+    'tour_exit',
+    'meeting',
+    'delivery',
+    'guide',
+    'send_whatsapp',
+] as const;
+
+const hasValidBooleanInputs = (body: Record<string, unknown>): boolean =>
+    VISITOR_BOOLEAN_FIELDS.every((field) => body[field] === undefined || typeof body[field] === 'boolean');
+
+const isValidCountInput = (value: unknown, min: number): boolean =>
+    (typeof value === 'string' || typeof value === 'number')
+    && isValidNumber(value, { min, max: 999, integer: true });
+
+const isRequestBodyObject = (body: unknown): boolean =>
+    body !== null && typeof body === 'object' && !Array.isArray(body);
 
 const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
     if (value === null || value === undefined) return null;
@@ -38,21 +71,57 @@ const decodeStoredHtmlEntities = (value: string | null | undefined): string | nu
 export const getVisitorRecords = async (req: Request, res: Response): Promise<void> => {
     try {
         const includeDeleted = req.query.includeDeleted === 'true';
-        const unlimited = req.query.unlimited === 'true';
+        const unlimitedRequested = req.query.unlimited === 'true';
 
-        // Pagination support: optional numeric `limit` and `offset` query params
         const reqLimit = Number(req.query.limit ?? 1000);
         const reqOffset = Number(req.query.offset ?? 0);
-        const safeLimit = Number.isFinite(reqLimit) && reqLimit > 0 ? Math.min(reqLimit, 10000) : 1000;
-        const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
+        if (!Number.isInteger(reqLimit) || reqLimit < 1 || !Number.isInteger(reqOffset) || reqOffset < 0) {
+            res.status(400).json({ success: false, message: 'Geçersiz sayfalama parametresi' });
+            return;
+        }
 
-        const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+        const dateFilterNames = ['entryDateStart', 'entryDateEnd', 'exitDateStart', 'exitDateEnd', 'activityDate'] as const;
+        for (const name of dateFilterNames) {
+            const value = req.query[name];
+            if (value !== undefined && (typeof value !== 'string' || !isValidIsoDate(value))) {
+                res.status(400).json({ success: false, message: 'Geçersiz tarih filtresi' });
+                return;
+            }
+        }
+
+        const textFilterNames = ['full_name', 'vehicle_plate', 'company_name', 'visiting_person', 'phone', 'entry_by', 'exit_by', 'gate'] as const;
+        for (const name of textFilterNames) {
+            const value = req.query[name];
+            if (value !== undefined && (typeof value !== 'string' || value.length > MAX_FILTER_LENGTH)) {
+                res.status(400).json({ success: false, message: 'Geçersiz filtre değeri' });
+                return;
+            }
+        }
+
+        const statusFilter = req.query.status;
+        if (statusFilter !== undefined && (typeof statusFilter !== 'string' || !['all', 'inside', 'exited', 'deleted'].includes(statusFilter))) {
+            res.status(400).json({ success: false, message: 'Geçersiz durum filtresi' });
+            return;
+        }
+
+        const hasDateFilter = dateFilterNames.some((name) => Boolean(req.query[name]));
+        if (unlimitedRequested && !hasDateFilter) {
+            res.status(400).json({ success: false, message: 'Sınırsız dışa aktarım için tarih filtresi gereklidir' });
+            return;
+        }
+
+        const unlimited = unlimitedRequested && hasDateFilter;
+        const safeLimit = Math.min(reqLimit, 10000);
+        const safeOffset = reqOffset;
+        const limitClause = unlimited
+            ? `LIMIT ${MAX_EXPORT_ROWS + 1}`
+            : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 
         const filters: string[] = [];
         const queryParams: any[] = [];
         let paramIndex = 1;
 
-        if (!includeDeleted) {
+        if (!includeDeleted && statusFilter !== 'deleted') {
             filters.push(`vr.deleted_at IS NULL`);
         }
 
@@ -78,7 +147,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
         }
 
         if (req.query.phone) {
-            filters.push(`LOWER(translate(vr.phone, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
+            filters.push(`LOWER(vr.phone) LIKE LOWER($${paramIndex++})`);
             queryParams.push(`%${req.query.phone}%`);
         }
 
@@ -98,7 +167,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             if (req.query.status === 'deleted') {
                 filters.push(`vr.deleted_at IS NOT NULL`);
             } else {
-                filters.push(`vr.status = $${paramIndex++}`);
+                filters.push(`vr.status = $${paramIndex++} AND vr.deleted_at IS NULL`);
                 queryParams.push(req.query.status);
             }
         }
@@ -126,6 +195,17 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
         if (req.query.exitDateEnd) {
             filters.push(`vr.exit_date <= $${paramIndex++}::date`);
             queryParams.push(req.query.exitDateEnd);
+        }
+
+        if (req.query.activityDate) {
+            filters.push(`(
+                vr.entry_date = $${paramIndex}::date
+                OR vr.exit_date = $${paramIndex}::date
+                OR vr.deleted_at::date = $${paramIndex}::date
+                OR (vr.deleted_at IS NULL AND vr.status = 'inside')
+            )`);
+            queryParams.push(req.query.activityDate);
+            paramIndex++;
         }
 
         // Tag filters
@@ -203,10 +283,15 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             LEFT JOIN personnel pe ON vr.entry_by = pe.id
             LEFT JOIN personnel px ON vr.exit_by = px.id
             ${whereClause}
-            ORDER BY vr.entry_date DESC, vr.entry_time DESC
+            ORDER BY vr.entry_date DESC, vr.entry_time DESC, vr.id DESC
             ${limitClause}
         `;
         const result = await pool.query(query, queryParams);
+
+        if (unlimited && result.rows.length > MAX_EXPORT_ROWS) {
+            res.status(413).json({ success: false, message: 'Dışa aktarım sonucu çok büyük; lütfen tarih aralığını daraltın' });
+            return;
+        }
 
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
@@ -259,10 +344,33 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
  */
 export const createVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
+        if (!isRequestBodyObject(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
+            return;
+        }
+
         const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, entry_date, highlight_color } = req.body;
         const personnel_id = req.user?.userId || null;
         const clientIp = getClientIp(req);
         const gate = await getResolvedGateFromRequest(req);
+
+        const textInputs: Array<[unknown, number]> = [
+            [vehicle_plate, 20],
+            [full_name, 100],
+            [company_name, 100],
+            [visiting_person, 100],
+            [phone, 20],
+            [notes, 1000],
+        ];
+        if (textInputs.some(([value, max]) => value !== undefined && value !== null && (typeof value !== 'string' || value.length > max))) {
+            res.status(400).json({ success: false, message: 'Ziyaretçi metin alanlarından biri geçersiz veya çok uzun' });
+            return;
+        }
+
+        if (!hasValidBooleanInputs(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz ziyaretçi seçim değeri' });
+            return;
+        }
 
         // GÜVENLİK: Input sanitization
         const sanitizedFullName = sanitizePlainText(full_name, 100);
@@ -305,16 +413,16 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 
         // entry_date validasyonu (YYYY-MM-DD formatı)
         let validEntryDate: string | null = null;
-        if (entry_date) {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(entry_date))) {
-                res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
+        if (entry_date !== undefined && entry_date !== null && entry_date !== '') {
+            if (typeof entry_date !== 'string' || !isValidIsoDate(entry_date)) {
+                res.status(400).json({ success: false, message: 'Geçersiz giriş tarihi' });
                 return;
             }
-            validEntryDate = String(entry_date);
+            validEntryDate = entry_date;
         }
 
         // entry_time validasyonu (HH:MM formatı)
-        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+        if (entry_time !== undefined && entry_time !== null && entry_time !== '' && (typeof entry_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time))) {
             res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
             return;
         }
@@ -322,7 +430,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         // person_count opsiyonel
         let personCountValue: number | null = null;
         if (person_count !== undefined && person_count !== null && person_count !== '') {
-            if (isNaN(person_count) || Number(person_count) < 1) {
+            if (!isValidCountInput(person_count, 1)) {
                 res.status(400).json({ success: false, message: 'Kişi sayısı geçerli bir sayı olmalı ve en az 1 olmalıdır' });
                 return;
             }
@@ -331,7 +439,7 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
 
         let childrenCountValue = 0;
         if (children_count !== undefined && children_count !== null && children_count !== '') {
-            if (isNaN(children_count) || Number(children_count) < 0) {
+            if (!isValidCountInput(children_count, 0)) {
                 res.status(400).json({ success: false, message: 'Çocuk sayısı geçerli bir sayı olmalı ve en az 0 olmalıdır' });
                 return;
             }
@@ -419,15 +527,6 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             clientIp
         );
 
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/visitors/records',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitors/records'),
-        });
-
         // WhatsApp mesaj şablonu oluştur (sadece send_whatsapp = true ise)
         let whatsappMessage = '';
         if (sendWhatsApp) {
@@ -474,6 +573,11 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
  */
 export const updateVisitorRecord = async (req: Request, res: Response): Promise<void> => {
     try {
+        if (!isRequestBodyObject(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
+            return;
+        }
+
         const { id } = req.params;
         const { vehicle_plate, full_name, company_name, visiting_person, person_count, children_count, phone, notes, subcontractor_worker, for_electric_station, daily_guest, entry_tag, exit_tag, tour_entry, tour_exit, meeting, delivery, guide, entry_time, exit_time, entry_date, highlight_color } = req.body;
         const clientIp = getClientIp(req);
@@ -490,28 +594,58 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
+        const textInputs: Array<[unknown, number]> = [
+            [vehicle_plate, 20],
+            [full_name, 100],
+            [company_name, 100],
+            [visiting_person, 100],
+            [phone, 20],
+            [notes, 1000],
+        ];
+        if (textInputs.some(([value, max]) => value !== undefined && value !== null && (typeof value !== 'string' || value.length > max))) {
+            res.status(400).json({ success: false, message: 'Ziyaretçi metin alanlarından biri geçersiz veya çok uzun' });
+            return;
+        }
+
+        if (!hasValidBooleanInputs(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz ziyaretçi seçim değeri' });
+            return;
+        }
+
+        const currentStatus = recordCheck.rows[0].status;
+
         // entry_date validasyonu (YYYY-MM-DD formatı)
-        if (entry_date && !/^\d{4}-\d{2}-\d{2}$/.test(String(entry_date))) {
-            res.status(400).json({ success: false, message: 'Giriş tarihi YYYY-MM-DD formatında olmalıdır' });
+        if (entry_date !== undefined && (typeof entry_date !== 'string' || !isValidIsoDate(entry_date))) {
+            res.status(400).json({ success: false, message: 'Geçersiz giriş tarihi' });
             return;
         }
 
         // entry_time ve exit_time validasyonu
-        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+        if (entry_time !== undefined && (typeof entry_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time))) {
             res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
             return;
         }
-        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+        if (exit_time !== undefined && exit_time !== null && exit_time !== '' && (typeof exit_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time))) {
             res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
             return;
         }
 
-        if (person_count !== undefined && person_count !== null && person_count !== '' && (isNaN(person_count) || Number(person_count) < 1)) {
+        if (currentStatus === 'exited' && exit_time !== undefined && (exit_time === null || exit_time === '')) {
+            res.status(400).json({ success: false, message: 'Çıkış yapmış kayıtta çıkış saati boş bırakılamaz' });
+            return;
+        }
+
+        if (currentStatus === 'inside' && exit_time) {
+            res.status(400).json({ success: false, message: 'İçerideki ziyaretçiye düzenleme ekranından çıkış saati verilemez' });
+            return;
+        }
+
+        if (person_count !== undefined && person_count !== null && person_count !== '' && !isValidCountInput(person_count, 1)) {
             res.status(400).json({ success: false, message: 'Kişi sayısı geçerli bir sayı olmalı ve en az 1 olmalıdır' });
             return;
         }
 
-        if (children_count !== undefined && children_count !== null && children_count !== '' && (isNaN(children_count) || Number(children_count) < 0)) {
+        if (children_count !== undefined && children_count !== null && children_count !== '' && !isValidCountInput(children_count, 0)) {
             res.status(400).json({ success: false, message: 'Çocuk sayısı geçerli bir sayı olmalı ve en az 0 olmalıdır' });
             return;
         }
@@ -523,11 +657,11 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
 
         if (vehicle_plate !== undefined) {
             updates.push(`vehicle_plate = $${idx++}`);
-            params.push(vehicle_plate ? String(vehicle_plate).replace(/\s/g, '').toUpperCase() : null);
+            params.push(vehicle_plate ? normalizePlate(vehicle_plate) : null);
         }
-        if (full_name !== undefined) { updates.push(`full_name = $${idx++}`); params.push(full_name || null); }
-        if (company_name !== undefined) { updates.push(`company_name = $${idx++}`); params.push(company_name || null); }
-        if (visiting_person !== undefined) { updates.push(`visiting_person = $${idx++}`); params.push(visiting_person || null); }
+        if (full_name !== undefined) { updates.push(`full_name = $${idx++}`); params.push(sanitizePlainText(full_name, 100)); }
+        if (company_name !== undefined) { updates.push(`company_name = $${idx++}`); params.push(sanitizePlainText(company_name, 100)); }
+        if (visiting_person !== undefined) { updates.push(`visiting_person = $${idx++}`); params.push(sanitizePlainText(visiting_person, 100)); }
         if (person_count !== undefined) {
             // DB requires non-null person_count — default to 1 when empty/null
             const pc = (person_count === '' || person_count === null) ? 1 : Number(person_count);
@@ -553,9 +687,9 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
         if (highlight_color !== undefined) { updates.push(`highlight_color = $${idx++}`); params.push(normalizeVisitorHighlightColor(highlight_color)); }
         if (phone !== undefined) {
             updates.push(`phone = $${idx++}`);
-            params.push(phone ? String(phone).replace(/[\s\-()]/g, '').trim() : null);
+            params.push(phone ? phone.replace(/[\s\-()]/g, '').trim() : null);
         }
-        if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes || null); }
+        if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(sanitizePlainText(notes, 1000)); }
         if (entry_date !== undefined) {
             updates.push(`entry_date = $${idx++}`);
             params.push(entry_date || null);
@@ -604,6 +738,11 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
  */
 export const exitVisitor = async (req: Request, res: Response): Promise<void> => {
     try {
+        if (!isRequestBodyObject(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
+            return;
+        }
+
         const { id } = req.params;
         const { exit_time } = req.body;
         const clientIp = getClientIp(req);
@@ -615,7 +754,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         }
 
         // exit_time validasyonu
-        if (exit_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time)) {
+        if (exit_time !== undefined && exit_time !== null && exit_time !== '' && (typeof exit_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(exit_time))) {
             res.status(400).json({ success: false, message: 'Çıkış saati HH:MM formatında olmalıdır' });
             return;
         }
@@ -641,12 +780,19 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                  exit_by = $2,
                  status = 'exited', 
                  updated_at = now() 
-             WHERE id = $1 AND deleted_at IS NULL
+             WHERE id = $1
+               AND deleted_at IS NULL
+               AND status = 'inside'
              RETURNING full_name, company_name, visiting_person, vehicle_plate, 
                        person_count, children_count, gate, phone, subcontractor_worker, 
                        for_electric_station, daily_guest, meeting, delivery, notes, exit_time, send_whatsapp`,
             [id, personnel_id, exit_time || null]
         );
+
+        if (updateResult.rowCount !== 1) {
+            res.status(409).json({ success: false, message: 'Ziyaretçi çıkışı başka bir işlem tarafından kaydedildi' });
+            return;
+        }
 
         // GÜVENLİK: Audit log kaydı
         await logDataChange(
@@ -722,13 +868,20 @@ export const deleteVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        await pool.query(
+        const deleteResult = await pool.query(
             `UPDATE visitor_records
              SET deleted_at = CURRENT_TIMESTAMP,
                  updated_at = now()
-             WHERE id = $1`,
+             WHERE id = $1
+               AND deleted_at IS NULL
+             RETURNING id`,
             [id]
         );
+
+        if (deleteResult.rowCount !== 1) {
+            res.status(409).json({ success: false, message: 'Kayıt başka bir işlem tarafından silindi' });
+            return;
+        }
 
         await logDataChange(
             'visitor_records',
@@ -773,13 +926,20 @@ export const restoreVisitorRecord = async (req: Request, res: Response): Promise
             return;
         }
 
-        await pool.query(
+        const restoreResult = await pool.query(
             `UPDATE visitor_records
              SET deleted_at = NULL,
                  updated_at = now()
-             WHERE id = $1`,
+             WHERE id = $1
+               AND deleted_at IS NOT NULL
+             RETURNING id`,
             [id]
         );
+
+        if (restoreResult.rowCount !== 1) {
+            res.status(409).json({ success: false, message: 'Kayıt başka bir işlem tarafından geri alındı' });
+            return;
+        }
 
         await logDataChange(
             'visitor_records',
@@ -823,7 +983,7 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        await pool.query(
+        const undoResult = await pool.query(
             `UPDATE visitor_records
              SET exit_date = NULL,
                  exit_time = NULL,
@@ -831,9 +991,17 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
                  exit_by_name = NULL,
                  status = 'inside',
                  updated_at = now()
-             WHERE id = $1`,
+             WHERE id = $1
+               AND deleted_at IS NULL
+               AND status = 'exited'
+             RETURNING id`,
             [id]
         );
+
+        if (undoResult.rowCount !== 1) {
+            res.status(409).json({ success: false, message: 'Çıkış kaydı başka bir işlem tarafından güncellendi' });
+            return;
+        }
 
         await logDataChange(
             'visitor_records',
@@ -847,14 +1015,6 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
 
         res.status(200).json({ success: true, message: 'Çıkış işlemi geri alındı' });
 
-        emitApiMutation({
-            method: 'POST',
-            path: `/api/visitors/records/${id}/undo-exit`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/visitors/records/${id}/undo-exit`),
-        });
     } catch (error) {
         console.error('Undo visitor exit error:', error);
         res.status(500).json({ success: false, message: 'Çıkış geri alınırken hata oluştu' });
@@ -866,6 +1026,11 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
  */
 export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
     try {
+        if (!isRequestBodyObject(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
+            return;
+        }
+
         const { message } = req.body;
 
         if (!message || typeof message !== 'string' || !message.trim()) {
@@ -939,15 +1104,17 @@ export const rejectPendingQrVisitor = async (req: Request, res: Response): Promi
             return;
         }
 
-        const checkQuery = `SELECT id, status FROM pending_qr_visitors WHERE id = $1 AND status = 'pending'`;
-        const checkResult = await pool.query(checkQuery, [id]);
-        if (checkResult.rows.length === 0) {
+        const updateResult = await pool.query(
+            `UPDATE pending_qr_visitors
+             SET status = 'rejected', updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'
+             RETURNING id`,
+            [id]
+        );
+        if (updateResult.rowCount !== 1) {
             res.status(404).json({ success: false, message: 'Bekleyen kayıt bulunamadı veya zaten işlendi' });
             return;
         }
-
-        const updateQuery = `UPDATE pending_qr_visitors SET status = 'rejected', updated_at = NOW() WHERE id = $1`;
-        await pool.query(updateQuery, [id]);
 
         await logDataChange(
             'pending_qr_visitors',
@@ -958,16 +1125,6 @@ export const rejectPendingQrVisitor = async (req: Request, res: Response): Promi
             personnel_id,
             clientIp
         );
-
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/visitors/pending-qr',
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitors/records'),
-            payload: { id, status: 'rejected' }
-        });
 
         res.status(200).json({ success: true, message: 'QR kaydı reddedildi' });
     } catch (error) {
@@ -981,8 +1138,13 @@ export const rejectPendingQrVisitor = async (req: Request, res: Response): Promi
  * POST /api/visitors/pending-qr/:id/approve
  */
 export const approvePendingQrVisitor = async (req: Request, res: Response): Promise<void> => {
-    const client = await pool.connect();
+    let client: PoolClient | null = null;
     try {
+        if (!isRequestBodyObject(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
+            return;
+        }
+
         const { id } = req.params;
         const {
             vehicle_plate,
@@ -1037,6 +1199,34 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
         }
         const gate = pendingCheck.rows[0].gate;
 
+        const textInputs: Array<[unknown, number]> = [
+            [vehicle_plate, 20],
+            [full_name, 100],
+            [company_name, 100],
+            [visiting_person, 100],
+            [phone, 20],
+            [notes, 1000],
+        ];
+        if (textInputs.some(([value, max]) => value !== undefined && value !== null && (typeof value !== 'string' || value.length > max))) {
+            res.status(400).json({ success: false, message: 'QR ziyaretçi metin alanlarından biri geçersiz veya çok uzun' });
+            return;
+        }
+
+        if (!hasValidBooleanInputs(req.body)) {
+            res.status(400).json({ success: false, message: 'Geçersiz ziyaretçi seçim değeri' });
+            return;
+        }
+
+        if (person_count !== undefined && person_count !== null && person_count !== '' && !isValidCountInput(person_count, 1)) {
+            res.status(400).json({ success: false, message: 'Kişi sayısı 1-999 arasında bir tam sayı olmalıdır' });
+            return;
+        }
+
+        if (children_count !== undefined && children_count !== null && children_count !== '' && !isValidCountInput(children_count, 0)) {
+            res.status(400).json({ success: false, message: 'Çocuk sayısı 0-999 arasında bir tam sayı olmalıdır' });
+            return;
+        }
+
         // Validations
         const sanitizedFullName = sanitizePlainText(full_name, 100);
         const sanitizedCompanyName = sanitizePlainText(company_name, 100);
@@ -1060,7 +1250,7 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
             return;
         }
 
-        if (entry_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time)) {
+        if (entry_time !== undefined && entry_time !== null && entry_time !== '' && (typeof entry_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(entry_time))) {
             res.status(400).json({ success: false, message: 'Giriş saati HH:MM formatında olmalıdır' });
             return;
         }
@@ -1071,7 +1261,21 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
 
         const newRecordId = uuidv4();
 
+        client = await pool.connect();
         await client.query('BEGIN');
+
+        const claimResult = await client.query(
+            `UPDATE pending_qr_visitors
+             SET status = 'approved', updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'
+             RETURNING id`,
+            [id]
+        );
+        if (claimResult.rowCount !== 1) {
+            await client.query('ROLLBACK');
+            res.status(409).json({ success: false, message: 'QR kaydı başka bir işlem tarafından işlendi' });
+            return;
+        }
 
         // 1. Insert into visitor_records
         const insertQuery = `
@@ -1116,12 +1320,6 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
             Boolean(send_whatsapp)
         ]);
 
-        // 2. Update pending status to approved
-        await client.query(
-            `UPDATE pending_qr_visitors SET status = 'approved', updated_at = NOW() WHERE id = $1`,
-            [id]
-        );
-
         await client.query('COMMIT');
 
         // GÜVENLİK: Audit log kaydı
@@ -1134,27 +1332,6 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
             personnel_id,
             clientIp
         );
-
-        // Emit mutation event for records table
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/visitors/records',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitors/records'),
-        });
-
-        // Emit mutation event to remove from pending queue on other browsers
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/visitors/pending-qr',
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitors/records'),
-            payload: { id, status: 'approved' }
-        });
 
         // WhatsApp message logic (only if send_whatsapp is true)
         let whatsappMessage = '';
@@ -1189,10 +1366,14 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
 
         res.status(201).json({ success: true, message: 'Ziyaretçi girişi onaylandı', data: { id: newRecordId }, whatsappMessage });
     } catch (error) {
-        await client.query('ROLLBACK');
+        if (client) {
+            await client.query('ROLLBACK').catch(() => undefined);
+        }
         console.error('Approve pending QR visitor error:', error);
         res.status(500).json({ success: false, message: 'Kayıt onaylanırken hata oluştu' });
     } finally {
-        client.release();
+        if (client) {
+            client.release();
+        }
     }
 };

@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_URL } from '../constants';
+import api from '../utils/api';
 
 interface VehicleUsage {
     id: number;
@@ -69,23 +68,12 @@ export default function AdminDashboard() {
 
     // Fetch all data in parallel for better performance
     const fetchAllData = useCallback(async () => {
-        const adminToken = localStorage.getItem('adminToken');
-        if (!adminToken) {
-            navigate('/login');
-            return;
-        }
-
         try {
-            const headers = {
-                'Authorization': `Bearer ${adminToken}`,
-                'Content-Type': 'application/json'
-            };
-
             const [vehiclesRes, visitorsRes, managersRes, fireAlarmsRes] = await Promise.all([
-                axios.get(`${API_URL}/vehicles/records`, { headers }),
-                axios.get(`${API_URL}/visitors/records`, { headers }),
-                axios.get(`${API_URL}/managers/records`, { headers }),
-                axios.get(`${API_URL}/fire-alarms/records`, { headers }),
+                api.get('/vehicles/records'),
+                api.get('/visitors/records'),
+                api.get('/managers/records'),
+                api.get('/fire-alarms/records'),
             ]);
 
             // Vehicles

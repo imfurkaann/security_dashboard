@@ -537,12 +537,15 @@ export default function Sgk() {
 
                 const response = await api.get(endpoint, { responseType: 'blob' });
 
+                const responseContentType = response.headers['content-type'];
+                const contentType = typeof responseContentType === 'string'
+                    ? responseContentType
+                    : 'application/octet-stream';
                 const blob = new Blob([response.data], {
-                    type: response.headers['content-type'] || 'application/octet-stream'
+                    type: contentType
                 });
 
                 const url = URL.createObjectURL(blob);
-                const contentType = response.headers['content-type'] || '';
 
                 setPdfUrl((previousUrl) => {
                     if (previousUrl) {

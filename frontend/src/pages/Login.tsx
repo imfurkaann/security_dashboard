@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { STORAGE_KEYS } from '../constants';
 import type { AxiosError } from 'axios';
+import { refreshRealtimeAuthentication } from '../realtime/socket';
 
 // Error messages
 const ERROR_MESSAGES = {
@@ -20,7 +21,6 @@ interface WeeklyRankingCelebration {
 }
 
 interface LoginResponseData {
-    token: string;
     user: {
         id: string;
         username: string;
@@ -31,6 +31,7 @@ interface LoginResponseData {
         is_active: boolean;
     };
     weeklyRankingCelebration?: WeeklyRankingCelebration | null;
+    topPerformers?: AdminTopPerformer[];
 }
 
 interface LoginResponse {
@@ -48,24 +49,6 @@ interface AdminTopPerformer {
     rank: number;
 }
 
-interface AdminLoginResponse {
-    success: boolean;
-    message: string;
-    data: {
-        token: string;
-        admin: {
-            id: string;
-            username: string;
-            fullName: string;
-            firstName: string;
-            lastName: string;
-            role: string;
-            isAdmin: boolean;
-        };
-        topPerformers?: AdminTopPerformer[];
-    };
-}
-
 export default function Login() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -76,7 +59,7 @@ export default function Login() {
 
     // Form validation
     const validateForm = useCallback((): boolean => {
-        if (!username.trim() || !password.trim()) {
+        if (!username.trim() || !password) {
             setError(ERROR_MESSAGES.VALIDATION);
             return false;
         }
@@ -93,27 +76,25 @@ export default function Login() {
         setLoading(true);
 
         try {
-            // First, try regular login to check user role
-            const checkResponse = await api.post<LoginResponse>('/auth/login', {
+            const loginResponse = await api.post<LoginResponse>('/auth/login', {
                 username: username.trim(),
                 password
             });
 
-            const { user, weeklyRankingCelebration } = checkResponse.data.data;
+            const {
+                user,
+                weeklyRankingCelebration,
+                topPerformers = [],
+            } = loginResponse.data.data;
 
-            // Check user role and use appropriate login endpoint
+            refreshRealtimeAuthentication();
+
             if (user.role === 'admin') {
-                // Admin users: Use admin login endpoint to get proper admin token
-                const adminResponse = await api.post<AdminLoginResponse>('/admin/login', {
-                    username: username.trim(),
-                    password
-                });
-
-                const { token: adminToken, topPerformers = [] } = adminResponse.data.data;
-
-                // Save admin token ONLY to admin-specific keys (not to shared token key)
-                localStorage.setItem('adminToken', adminToken);
-                localStorage.setItem('adminUser', JSON.stringify({ ...user, isAdmin: true }));
+                localStorage.setItem(STORAGE_KEYS.ADMIN_USER, JSON.stringify({ ...user, isAdmin: true }));
+                localStorage.removeItem(STORAGE_KEYS.ADMIN_TOKEN);
+                localStorage.removeItem(STORAGE_KEYS.TOKEN);
+                localStorage.removeItem(STORAGE_KEYS.USER);
+                localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
                 localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
                 if (topPerformers.length > 0) {
                     localStorage.setItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP, JSON.stringify(topPerformers));
@@ -121,16 +102,13 @@ export default function Login() {
                     localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
                 }
 
-                // Small delay to ensure localStorage is saved before navigation
-                setTimeout(() => {
-                    navigate('/admin/vehicle-records', { replace: true });
-                }, 100);
+                navigate('/admin/vehicle-records', { replace: true });
             } else {
-                // Regular users: Use token from first login - save ONLY to personnel-specific keys
-                const { token } = checkResponse.data.data;
-                localStorage.setItem(STORAGE_KEYS.TOKEN, token);
                 localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+                localStorage.removeItem(STORAGE_KEYS.TOKEN);
                 localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
+                localStorage.removeItem(STORAGE_KEYS.ADMIN_TOKEN);
+                localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
 
                 if (weeklyRankingCelebration) {
                     localStorage.setItem(
@@ -213,6 +191,8 @@ export default function Login() {
                                                 onChange={(e) => setUsername(e.target.value)}
                                                 className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-900 placeholder-slate-400"
                                                 placeholder="Kullanıcı adınızı girin"
+                                                autoComplete="username"
+                                                maxLength={100}
                                                 required
                                                 autoFocus
                                             />
@@ -237,12 +217,15 @@ export default function Login() {
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 className="w-full pl-10 pr-12 py-3 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-900 placeholder-slate-400"
                                                 placeholder="Şifrenizi girin"
+                                                autoComplete="current-password"
+                                                maxLength={128}
                                                 required
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
                                                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-700 transition-colors"
+                                                aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
                                             >
                                                 {showPassword ? (
                                                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

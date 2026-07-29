@@ -18,8 +18,9 @@ import {
     X, 
     ShieldCheck 
 } from 'lucide-react';
-import axios from 'axios';
-import { API_URL, STORAGE_KEYS } from '../constants';
+import api from '../utils/api';
+import { STORAGE_KEYS } from '../constants';
+import { disconnectRealtimeClient } from '../realtime/socket';
 
 interface AdminTopPerformer {
     id: string;
@@ -106,24 +107,13 @@ export default function AdminSidebarLayout() {
 
     const handleLogout = async () => {
         setLogoutLoading(true);
-        const adminToken = localStorage.getItem('adminToken');
 
         try {
-            if (adminToken) {
-                await axios.post(
-                    `${API_URL}/admin/logout`,
-                    {},
-                    {
-                        headers: {
-                            Authorization: `Bearer ${adminToken}`,
-                            'Content-Type': 'application/json'
-                        }
-                    }
-                );
-            }
+            await api.post('/admin/logout', {});
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
+            disconnectRealtimeClient();
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
             localStorage.removeItem('selectedGate');

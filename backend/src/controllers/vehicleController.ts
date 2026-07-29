@@ -2,12 +2,12 @@ import { Request, Response } from 'express';
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
-import { isValidUUID, sanitizeInput, isValidLength, normalizePlate } from '../utils/validation';
+import { isValidUUID, isValidPlate, sanitizeInput, isValidLength, normalizePlate } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVehicleRecordMessage, createVehicleReturnMessage } from '../services/whatsapp';
 import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
 import { getResolvedGateFromRequest } from '../utils/gate';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
+
 
 const formatDriveDuration = (totalMinutes: number): string => {
     const normalized = Number.isFinite(totalMinutes) ? Math.max(0, Math.floor(totalMinutes)) : 0;
@@ -17,6 +17,15 @@ const formatDriveDuration = (totalMinutes: number): string => {
     if (hours > 0 && minutes > 0) return `${hours} Saat ${minutes} Dakika`;
     if (hours > 0) return `${hours} Saat`;
     return `${minutes} Dakika`;
+};
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_FILTER_LENGTH = 120;
+const MAX_EXPORT_ROWS = 50000;
+const isValidIsoDate = (value: string): boolean => {
+    if (!ISO_DATE_PATTERN.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
 /**
@@ -72,27 +81,65 @@ export const getManagers = async (_req: Request, res: Response): Promise<void> =
 export const getVehicleRecords = async (req: Request, res: Response): Promise<void> => {
     try {
         const includeDeleted = req.query.includeDeleted === 'true';
-        const unlimited = req.query.unlimited === 'true';
+        const unlimitedRequested = req.query.unlimited === 'true';
 
         const reqLimit = Number(req.query.limit ?? 1000);
         const reqOffset = Number(req.query.offset ?? 0);
-        const safeLimit = Number.isFinite(reqLimit) && reqLimit > 0 ? Math.min(reqLimit, 10000) : 1000;
-        const safeOffset = Number.isFinite(reqOffset) && reqOffset >= 0 ? reqOffset : 0;
+        if (!Number.isInteger(reqLimit) || reqLimit < 1 || !Number.isInteger(reqOffset) || reqOffset < 0) {
+            res.status(400).json({ success: false, message: 'Geçersiz sayfalama parametresi' });
+            return;
+        }
 
-        const limitClause = unlimited ? '' : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
+        const dateFilterNames = ['givenDateStart', 'givenDateEnd', 'returnDateStart', 'returnDateEnd', 'activityDate'] as const;
+        for (const name of dateFilterNames) {
+            const value = req.query[name];
+            if (value !== undefined && (typeof value !== 'string' || !isValidIsoDate(value))) {
+                res.status(400).json({ success: false, message: 'Geçersiz tarih filtresi' });
+                return;
+            }
+        }
+
+        const textFilterNames = ['vehicle_plate', 'manager', 'destination', 'given_by', 'returned_by', 'gate'] as const;
+        for (const name of textFilterNames) {
+            const value = req.query[name];
+            if (value !== undefined && (typeof value !== 'string' || value.length > MAX_FILTER_LENGTH)) {
+                res.status(400).json({ success: false, message: 'Geçersiz filtre değeri' });
+                return;
+            }
+        }
+
+        const statusFilter = req.query.status;
+        if (statusFilter !== undefined && (typeof statusFilter !== 'string' || !['all', 'in_use', 'returned', 'deleted'].includes(statusFilter))) {
+            res.status(400).json({ success: false, message: 'Geçersiz durum filtresi' });
+            return;
+        }
+
+        const hasDateFilter = dateFilterNames.some((name) => Boolean(req.query[name]));
+        if (unlimitedRequested && !hasDateFilter) {
+            res.status(400).json({ success: false, message: 'Sınırsız dışa aktarım için tarih filtresi gereklidir' });
+            return;
+        }
+
+        const unlimited = unlimitedRequested && hasDateFilter;
+        const safeLimit = Math.min(reqLimit, 10000);
+        const safeOffset = reqOffset;
+
+        const limitClause = unlimited
+            ? `LIMIT ${MAX_EXPORT_ROWS + 1}`
+            : `LIMIT ${safeLimit} OFFSET ${safeOffset}`;
 
         const filters: string[] = [];
         const queryParams: any[] = [];
         let paramIndex = 1;
 
-        if (!includeDeleted) {
+        if (!includeDeleted && statusFilter !== 'deleted') {
             filters.push(`vr.deleted_at IS NULL`);
         }
 
         // Apply query filters
         if (req.query.vehicle_plate) {
-            filters.push(`v.plate = $${paramIndex++}`);
-            queryParams.push(req.query.vehicle_plate);
+            filters.push(`REPLACE(UPPER(v.plate), ' ', '') LIKE '%' || REPLACE(UPPER($${paramIndex++}), ' ', '') || '%'`);
+            queryParams.push(String(req.query.vehicle_plate).trim());
         }
 
         if (req.query.manager) {
@@ -120,7 +167,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             if (req.query.status === 'deleted') {
                 filters.push(`vr.deleted_at IS NOT NULL`);
             } else {
-                filters.push(`vr.status = $${paramIndex++}`);
+                filters.push(`vr.status = $${paramIndex++} AND vr.deleted_at IS NULL`);
                 queryParams.push(req.query.status);
             }
         }
@@ -146,8 +193,19 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
         }
 
         if (req.query.returnDateEnd) {
+
             filters.push(`vr.return_date <= $${paramIndex++}::date`);
             queryParams.push(req.query.returnDateEnd);
+        }
+
+        if (req.query.activityDate) {
+            filters.push(`(
+                vr.given_date = $${paramIndex}::date OR vr.return_date = $${paramIndex}::date
+                OR vr.deleted_at::date = $${paramIndex}::date
+                OR (vr.deleted_at IS NULL AND vr.status = 'in_use')
+            )`);
+            queryParams.push(req.query.activityDate);
+            paramIndex++;
         }
 
         const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
@@ -155,6 +213,8 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
         const query = `
             SELECT 
                 vr.id,
+                vr.vehicle_id,
+                vr.manager_id,
                 vr.given_date,
                 vr.given_time,
                 vr.return_date,
@@ -181,18 +241,25 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             INNER JOIN personnel pg ON vr.given_by = pg.id
             LEFT JOIN personnel pr ON vr.returned_by = pr.id
             ${whereClause}
-            ORDER BY vr.given_date DESC, vr.given_time DESC
+            ORDER BY vr.given_date DESC, vr.given_time DESC, vr.id DESC
             ${limitClause}
         `;
         const result = await pool.query(query, queryParams);
 
+        if (unlimited && result.rows.length > MAX_EXPORT_ROWS) {
+            res.status(413).json({ success: false, message: 'Dışa aktarım sonucu çok büyük; lütfen tarih aralığını daraltın' });
+            return;
+        }
+
         // Format the data
         const formattedData = result.rows.map(row => ({
             id: row.id,
+            vehicle_id: row.vehicle_id,
+            manager_id: row.manager_id,
             vehicle: `${row.vehicle_plate} - ${row.vehicle_brand}`,
             vehicle_brand: row.vehicle_brand,
             vehicle_plate: row.vehicle_plate,
-            manager: row.manager_name || `${row.manager_first_name} ${row.manager_last_name}`,
+            manager: row.manager_name || [row.manager_first_name, row.manager_last_name].filter(Boolean).join(' ') || null,
             manager_title: row.manager_title,
             given_by: `${row.given_by_first_name} ${row.given_by_last_name}`,
             returned_by: row.returned_by_first_name ? `${row.returned_by_first_name} ${row.returned_by_last_name}` : null,
@@ -299,17 +366,28 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
         }
 
         // Validate notes length to prevent buffer overflow
-        if (notes && typeof notes === 'string' && notes.length > 1000) {
+        if (notes !== undefined && notes !== null && (typeof notes !== 'string' || notes.length > 1000)) {
             res.status(400).json({
                 success: false,
-                message: 'Açıklama çok uzun (maksimum 1000 karakter)'
+                message: 'Açıklama geçersiz veya çok uzun (maksimum 1000 karakter)'
             });
+            return;
+        }
+
+        if (
+            given_time !== undefined
+            && given_time !== ''
+            && (typeof given_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time))
+        ) {
+            res.status(400).json({ success: false, message: 'Geçersiz teslim saati formatı' });
             return;
         }
 
         const id = uuidv4();
         const clientIp = getClientIp(req);
-        let resolvedManagerName = manager_name;
+        let resolvedManagerName = typeof manager_name === 'string' ? manager_name.trim() : manager_name;
+        const normalizedDestination = destination.trim();
+        const normalizedNotes = typeof notes === 'string' ? notes.trim() || null : null;
         let givenDate = '';
         let givenTimeFormatted = '';
         let vehiclePlate = 'Bilinmeyen';
@@ -397,14 +475,14 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
                     given_date, given_time, destination, notes, gate, status
                 ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6::TIME, $7, $8, $9, 'in_use')
                 RETURNING given_date, given_time`;
-                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, destination, notes || null, gate];
+                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, given_time, normalizedDestination, normalizedNotes, gate];
             } else {
                 insertQuery = `INSERT INTO vehicle_records (
                     id, vehicle_id, manager_id, manager_name, given_by,
                     given_date, given_time, destination, notes, gate, status
                 ) VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, CURRENT_TIME, $6, $7, $8, 'in_use')
                 RETURNING given_date, given_time`;
-                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, destination, notes || null, gate];
+                queryParams = [id, vehicle_id, manager_id || null, resolvedManagerName, personnel_id, normalizedDestination, normalizedNotes, gate];
             }
 
             const insertResult = await client.query(insertQuery, queryParams);
@@ -434,7 +512,7 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             id,
             'INSERT',
             null,
-            { vehicle_id, manager_id, destination, personnel_id },
+            { vehicle_id, manager_id, destination: normalizedDestination, personnel_id },
             personnel_id || null,
             clientIp
         );
@@ -447,8 +525,8 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
                 managerName: resolvedManagerName,
                 givenDate,
                 givenTime: givenTimeFormatted,
-                destination,
-                notes: notes || undefined
+                destination: normalizedDestination,
+                notes: normalizedNotes || undefined
             });
         } catch (error) {
             console.error('WhatsApp mesaj oluşturma hatası:', error);
@@ -458,15 +536,6 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
             success: true,
             message: 'Araç kaydı oluşturuldu',
             whatsappMessage
-        });
-
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/vehicles/records',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/vehicles/records'),
         });
     } catch (error) {
         console.error('Create vehicle record error:', error);
@@ -498,7 +567,7 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
 
         // Check if record exists
         const recordCheck = await pool.query(
-            'SELECT id, status, vehicle_id FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
+            'SELECT id, status, vehicle_id, manager_id, manager_name FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
             [id]
         );
 
@@ -512,6 +581,8 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
 
         const recordStatus = recordCheck.rows[0].status;
         const oldVehicleId = recordCheck.rows[0].vehicle_id;
+        const oldManagerId = recordCheck.rows[0].manager_id;
+        const oldManagerName = recordCheck.rows[0].manager_name;
 
         // Validate at least one field is provided
         if (!vehicle_id && !manager_id && !manager_name && !destination && notes === undefined && !given_time && !return_time) {
@@ -540,19 +611,24 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // Validate manager_name (only if provided and not empty)
-        if (manager_name && typeof manager_name === 'string' && manager_name.trim().length === 0) {
+        if (
+            manager_name !== undefined
+            && manager_name !== null
+            && (typeof manager_name !== 'string' || manager_name.trim().length < 1 || manager_name.trim().length > 100)
+        ) {
             res.status(400).json({
                 success: false,
-                message: 'Geçerli bir müdür adı giriniz'
+                message: 'Müdür adı geçersiz veya çok uzun (maksimum 100 karakter)'
             });
             return;
         }
 
-        if (manager_name && manager_name.length > 100) {
+        const nextManagerId = manager_id !== undefined ? manager_id : oldManagerId;
+        const nextManagerName = manager_name !== undefined ? manager_name : oldManagerName;
+        if (!nextManagerId && (typeof nextManagerName !== 'string' || nextManagerName.trim().length === 0)) {
             res.status(400).json({
                 success: false,
-                message: 'Müdür adı çok uzun (maksimum 100 karakter)'
+                message: 'Müdür bilgisi zorunludur'
             });
             return;
         }
@@ -575,16 +651,16 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
         }
 
         // Validate notes length
-        if (notes !== undefined && typeof notes === 'string' && notes.length > 1000) {
+        if (notes !== undefined && notes !== null && (typeof notes !== 'string' || notes.length > 1000)) {
             res.status(400).json({
                 success: false,
-                message: 'Açıklama çok uzun (maksimum 1000 karakter)'
+                message: 'Açıklama geçersiz veya çok uzun (maksimum 1000 karakter)'
             });
             return;
         }
 
         // Validate given_time format
-        if (given_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time)) {
+        if (given_time !== undefined && (typeof given_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(given_time))) {
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz saat formatı (HH:MM olmalıdır)'
@@ -593,7 +669,12 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
         }
 
         // Validate return_time format
-        if (return_time && !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(return_time)) {
+        if (
+            return_time !== undefined
+            && return_time !== null
+            && return_time !== ''
+            && (typeof return_time !== 'string' || !/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(return_time))
+        ) {
             res.status(400).json({
                 success: false,
                 message: 'Geçersiz teslim alınma saati formatı (HH:MM olmalıdır)'
@@ -601,20 +682,12 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
-        // DATA INTEGRITY: If return_date exists in database, return_time is required
-        if (!return_time) {
-            // Check if record already has return_date set
-            const existingRecord = await pool.query(
-                'SELECT return_date FROM vehicle_records WHERE id = $1',
-                [id]
-            );
-            if (existingRecord.rows[0]?.return_date && recordStatus !== 'returned') {
-                res.status(400).json({
-                    success: false,
-                    message: 'Teslim alınma saati zorunludur (araç iade tarihi belirtilmiş)'
-                });
-                return;
-            }
+        if (recordStatus === 'returned' && return_time !== undefined && (return_time === null || return_time === '')) {
+            res.status(400).json({
+                success: false,
+                message: 'Teslim alınmış kayıtta iade saati boş bırakılamaz'
+            });
+            return;
         }
 
         // If vehicle_id is provided, check if new vehicle exists and is available (only if record is still in_use)
@@ -651,7 +724,7 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
         }
 
         // If manager_id is provided, check if it exists and get name
-        let resolvedManagerName = manager_name;
+        let resolvedManagerName = typeof manager_name === 'string' ? manager_name.trim() : manager_name;
         if (manager_id) {
             const managerCheck = await pool.query(
                 'SELECT id, first_name, last_name FROM managers WHERE id = $1 AND deleted_at IS NULL AND is_active = true',
@@ -692,12 +765,12 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
 
         if (destination !== undefined) {
             updates.push(`destination = $${paramIndex++}`);
-            values.push(destination);
+            values.push(destination.trim());
         }
 
         if (notes !== undefined) {
             updates.push(`notes = $${paramIndex++}`);
-            values.push(notes || null);
+            values.push(typeof notes === 'string' ? notes.trim() || null : null);
         }
 
         if (given_time !== undefined) {
@@ -709,6 +782,13 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
             updates.push(`return_time = $${paramIndex++}::TIME`);
             values.push(return_time);
         }
+
+        if (updates.length === 0) {
+            res.status(400).json({ success: false, message: 'Değiştirilecek alan bulunamadı' });
+            return;
+        }
+
+        updates.push('updated_at = CURRENT_TIMESTAMP');
 
         // Add record ID as last parameter
         values.push(id);
@@ -762,15 +842,6 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
         res.status(200).json({
             success: true,
             message: 'Araç kaydı güncellendi'
-        });
-
-        emitApiMutation({
-            method: 'PUT',
-            path: `/api/vehicles/records/${id}`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
         });
     } catch (error) {
         console.error('Update vehicle record error:', error);
@@ -830,16 +901,26 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
             await client.query('BEGIN');
 
             // Update record - aracı iade eden kişiyi kaydet
-            await client.query(
+            const returnResult = await client.query(
                 `UPDATE vehicle_records 
                  SET return_date = CURRENT_DATE, 
                      return_time = CURRENT_TIME, 
                      returned_by = $2,
-                     status = 'returned'
-                 WHERE id = $1`,
+                     status = 'returned',
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1
+                   AND deleted_at IS NULL
+                   AND status = 'in_use'
+                 RETURNING vehicle_id`,
                 [id, personnel_id]
             );
 
+            if (returnResult.rowCount !== 1) {
+                await client.query('ROLLBACK');
+                res.status(409).json({ success: false, message: 'Araç kaydı başka bir işlem tarafından güncellendi' });
+                return;
+
+            }
             // Update vehicle status
             await client.query(
                 'UPDATE vehicles SET status = $1 WHERE id = $2',
@@ -915,15 +996,6 @@ export const returnVehicle = async (req: Request, res: Response): Promise<void> 
             success: true,
             message: 'Araç iadesi kaydedildi',
             whatsappMessage
-        });
-
-        emitApiMutation({
-            method: 'POST',
-            path: `/api/vehicles/records/${id}/return`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/vehicles/records/${id}/return`),
         });
     } catch (error) {
         console.error('Return vehicle error:', error);
@@ -1038,15 +1110,6 @@ export const undoVehicleReturn = async (req: Request, res: Response): Promise<vo
             success: true,
             message: 'Teslim alma işlemi geri alındı'
         });
-
-        emitApiMutation({
-            method: 'POST',
-            path: `/api/vehicles/records/${id}/undo-return`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/vehicles/records/${id}/undo-return`),
-        });
     } catch (error) {
         console.error('Undo vehicle return error:', error);
         res.status(500).json({
@@ -1147,15 +1210,6 @@ export const deleteVehicleRecord = async (req: Request, res: Response): Promise<
         res.status(200).json({
             success: true,
             message: 'Kayıt silindi'
-        });
-
-        emitApiMutation({
-            method: 'DELETE',
-            path: `/api/vehicles/records/${id}`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/vehicles/records/${id}`),
         });
     } catch (error) {
         console.error('Delete vehicle record error:', error);
@@ -1281,15 +1335,6 @@ export const restoreVehicleRecord = async (req: Request, res: Response): Promise
             success: true,
             message: 'Kayıt geri alındı'
         });
-
-        emitApiMutation({
-            method: 'POST',
-            path: `/api/vehicles/records/${id}/restore`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/vehicles/records/${id}/restore`),
-        });
     } catch (error) {
         console.error('Restore vehicle record error:', error);
         res.status(500).json({
@@ -1337,10 +1382,10 @@ export const createVehicle = async (req: Request, res: Response): Promise<void> 
         const { plate, brand } = req.body;
 
         // Validation
-        if (!plate || !brand) {
+        if (!isValidPlate(plate) || typeof brand !== 'string' || brand.trim().length < 1 || brand.trim().length > 100) {
             res.status(400).json({
                 success: false,
-                message: 'Plaka ve marka zorunludur'
+                message: 'Plaka veya marka bilgisi geçersiz'
             });
             return;
         }
@@ -1423,6 +1468,14 @@ export const updateVehicle = async (req: Request, res: Response): Promise<void> 
         }
 
         const { plate, brand } = req.body;
+
+        if (!isValidPlate(plate) || typeof brand !== 'string' || brand.trim().length < 1 || brand.trim().length > 100) {
+            res.status(400).json({
+                success: false,
+                message: 'Plaka veya marka bilgisi geçersiz'
+            });
+            return;
+        }
 
         // Get old data for audit log
         const oldDataQuery = 'SELECT * FROM vehicles WHERE id = $1 AND deleted_at IS NULL';

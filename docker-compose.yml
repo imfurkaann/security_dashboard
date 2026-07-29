@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-security_management}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       TZ: Europe/Istanbul
       PGTZ: Europe/Istanbul
@@ -22,6 +22,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s
+    secrets:
+      - db_password
     networks:
       - security_network
 
@@ -42,9 +44,21 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-security_management}
       DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres123}
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_MAX_AGE_MS: ${AUTH_COOKIE_MAX_AGE_MS:-86400000}
+      AUTH_AUDIT_LOG_ENABLED: ${AUTH_AUDIT_LOG_ENABLED:-true}
+      AUDIT_LOG_ENABLED: ${AUDIT_LOG_ENABLED:-false}
+      GUEST_REGISTRY_AUDIT_LOG_ENABLED: ${GUEST_REGISTRY_AUDIT_LOG_ENABLED:-true}
+      GUEST_EXCEL_MAX_FILE_SIZE_MB: ${GUEST_EXCEL_MAX_FILE_SIZE_MB:-20}
+      GUEST_EXCEL_MAX_ROWS: ${GUEST_EXCEL_MAX_ROWS:-100000}
+      GUEST_EXCEL_MAX_COLUMNS: ${GUEST_EXCEL_MAX_COLUMNS:-200}
+      GUEST_EXCEL_MAX_CELLS: ${GUEST_EXCEL_MAX_CELLS:-2000000}
+      GUEST_EXCEL_MAX_SHEETS: ${GUEST_EXCEL_MAX_SHEETS:-50}
+      GUEST_EXCEL_MAX_CELL_LENGTH: ${GUEST_EXCEL_MAX_CELL_LENGTH:-2000}
       TZ: Europe/Istanbul
       WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
       WHATSAPP_SESSION_PATH: ${WHATSAPP_SESSION_PATH:-.baileys_auth}
@@ -59,13 +73,16 @@ services:
       - ./ERISIM_BILGILERI.txt:/app/ERISIM_BILGILERI.txt:ro
       # Çıkış yaparken günlük export klasörü - Masaüstüne kayıt
      # - ${USERPROFILE}/Desktop/Guvenlik_Kayitlari:/app/daily_exports
+    secrets:
+      - db_password
+      - jwt_secret
     ports:
       - "5000:5000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "healthcheck.js"]
+      test: ["CMD", "node", "runtime-healthcheck.js"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -87,7 +104,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -115,3 +132,9 @@ volumes:
 networks:
   security_network:
     driver: bridge
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt

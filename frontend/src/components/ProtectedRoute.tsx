@@ -1,6 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
+import type { AxiosError } from 'axios';
 import api from '../utils/api';
+import { STORAGE_KEYS } from '../constants';
 
 interface ProtectedRouteProps {
     children: ReactNode;
@@ -23,46 +25,57 @@ interface User {
 export default function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps) {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
     const [user, setUser] = useState<User | null>(null);
+    const [hasConnectionError, setHasConnectionError] = useState(false);
     const location = useLocation();
 
     useEffect(() => {
         const checkAuth = async () => {
-            const token = localStorage.getItem('token');
-
-            // Token yoksa
-            if (!token) {
-                setIsAuthenticated(false);
-                return;
-            }
-
-            // Token format kontrolü
-            if (token.length < 10 || token.length > 1000) {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setIsAuthenticated(false);
-                return;
-            }
-
             try {
                 // Backend'den kullanıcı bilgilerini doğrula
                 const response = await api.get('/auth/me');
 
                 if (response.data.success && response.data.data) {
                     setUser(response.data.data);
+                    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.data.data));
                     setIsAuthenticated(true);
                 } else {
                     throw new Error('Invalid response');
                 }
             } catch (error) {
-                // Token geçersiz veya süresi dolmuş
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                setIsAuthenticated(false);
+                const status = (error as AxiosError).response?.status;
+                if (status === 401 || status === 403 || status === 404) {
+                    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+                    localStorage.removeItem(STORAGE_KEYS.USER);
+                    setIsAuthenticated(false);
+                } else {
+                    // Do not destroy a valid local session during a temporary API/DB outage.
+                    setHasConnectionError(true);
+                }
             }
         };
 
         checkAuth();
     }, []);
+
+    if (hasConnectionError) {
+        return (
+            <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+                <div className="bg-gray-800 border border-gray-700 rounded-lg p-8 max-w-md text-center">
+                    <h2 className="text-xl font-bold text-white mb-2">Bağlantı kurulamadı</h2>
+                    <p className="text-gray-300 mb-5">
+                        Sistem geçici olarak yanıt vermiyor. Oturumunuz korunuyor.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
+                    >
+                        Tekrar Dene
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     // Yükleniyor durumu
     if (isAuthenticated === null) {

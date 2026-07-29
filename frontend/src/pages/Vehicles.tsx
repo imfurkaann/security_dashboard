@@ -87,9 +87,10 @@ export default function Vehicles() {
     // Fetch all data in parallel
     const fetchData = useCallback(async () => {
         try {
+            const activityDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
             const [vehiclesRes, recordsRes, managersRes] = await Promise.all([
                 api.get('/vehicles'),
-                api.get('/vehicles/records?includeDeleted=true'),
+                api.get(`/vehicles/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`),
                 api.get('/vehicles/managers'),
             ]);
             setVehicles(vehiclesRes.data || []);
@@ -276,21 +277,15 @@ export default function Vehicles() {
     const openEditModal = useCallback((usage: VehicleUsage) => {
         setEditingUsage(usage);
 
-        // Parse vehicle_id from the usage record
-        const vehicleMatch = vehicles.find(v => v.plate === usage.vehicle_plate);
-        const vehicleId = vehicleMatch?.id || '';
-
-        // Parse manager_id if exists (check if manager is in the list)
-        const managerMatch = managers.find(m =>
-            `${m.first_name} ${m.last_name}` === usage.manager
-        );
-        const managerId = managerMatch?.id || '';
+        const vehicleId = usage.vehicle_id || vehicles.find(v => v.plate === usage.vehicle_plate)?.id || '';
+        const managerId = usage.manager_id || '';
+        const usesCustomManager = !managerId;
 
         // Pre-fill form with existing data
         setFormData({
             vehicle_id: vehicleId,
-            manager_id: managerId,
-            manager_name: managerId ? '' : usage.manager, // Use manager_name if not in list
+            manager_id: usesCustomManager ? 'custom' : managerId,
+            manager_name: usesCustomManager ? (usage.manager || '') : '',
             destination: usage.destination || '',
             notes: usage.notes || '',
             given_time: usage.given_time ? formatTime(usage.given_time) : '',
@@ -298,7 +293,7 @@ export default function Vehicles() {
         });
 
         // If manager not in list, show custom input
-        setShowCustomManager(!managerId);
+        setShowCustomManager(usesCustomManager);
         setShowEditModal(true);
     }, [vehicles, managers]);
 
@@ -311,7 +306,7 @@ export default function Vehicles() {
             await api.put(`/vehicles/records/${editingUsage.id}`, {
                 vehicle_id: formData.vehicle_id,
                 manager_id: (formData.manager_id && formData.manager_id !== 'custom') ? formData.manager_id : null,
-                manager_name: formData.manager_id === 'custom' ? formData.manager_name : null,
+                manager_name: formData.manager_id === 'custom' ? formData.manager_name.trim() : null,
                 destination: formData.destination,
                 notes: formData.notes || null,
                 given_time: formData.given_time || null,
@@ -362,18 +357,13 @@ export default function Vehicles() {
     const isEditFormDirty = useMemo(() => {
         if (!editingUsage) return false;
         
-        const vehicleMatch = vehicles.find(v => v.plate === editingUsage.vehicle_plate);
-        const vehicleId = vehicleMatch?.id || '';
-        
-        const managerMatch = managers.find(m =>
-            `${m.first_name} ${m.last_name}` === editingUsage.manager
-        );
-        const managerId = managerMatch?.id || '';
+        const vehicleId = editingUsage.vehicle_id || vehicles.find(v => v.plate === editingUsage.vehicle_plate)?.id || '';
+        const managerId = editingUsage.manager_id || 'custom';
         
         const initialEditData = {
             vehicle_id: vehicleId,
             manager_id: managerId,
-            manager_name: managerId ? '' : editingUsage.manager || '',
+            manager_name: editingUsage.manager_id ? '' : editingUsage.manager || '',
             destination: editingUsage.destination || '',
             notes: editingUsage.notes || '',
             given_time: editingUsage.given_time ? formatTime(editingUsage.given_time) : '',
@@ -416,6 +406,7 @@ export default function Vehicles() {
     const inUseCount = useMemo(() => usages.filter(u => u.status === 'in_use' && !u.deleted_at).length, [usages]);
     const availableVehicles = useMemo(
         () => vehicles.filter(v => {
+            if (!v.is_active || v.status !== 'available') return false;
             if (activeInUseVehicleIds.has(v.id)) return false;
             return !activeInUseVehiclePlates.has(normalizeVehiclePlate(v.plate));
         }),

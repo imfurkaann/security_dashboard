@@ -1,37 +1,87 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 
+type VisitorSuggestionField = 'full_name' | 'company_name' | 'vehicle_plate';
+
+const SEARCH_EXPRESSIONS: Record<VisitorSuggestionField, string> = {
+    full_name: `LOWER(translate(vr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`,
+    company_name: `LOWER(translate(vr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`,
+    vehicle_plate: `LOWER(translate(vr.vehicle_plate, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`
+};
+
+// Git geçmişindeki özgün EDRF (Exponentially Decayed Recency-Frequency) ayarları.
+// Her giriş ayrı sayılır; aynı gün içindeki tekrarlar da sıklık puanını artırır.
+const VISITOR_HEAT_CONFIG = Object.freeze({
+    scoringWindowDays: 90,
+    decayRate: 0.05,
+    minimumHeatScore: 0.5,
+    resultLimit: 10
+});
+
+const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined) return null;
+    return String(value)
+        .replace(/&#x2F;/g, '/')
+        .replace(/&#x27;/g, "'")
+        .replace(/&quot;/g, '"')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&');
+};
+
 /**
- * Search active frequent visitors by full_name (Personnel & Admin)
+ * Search frequent visitors with the original recency-frequency heat algorithm.
+ * Every matching entry contributes to the score, including multiple entries on
+ * the same day. Recent entries contribute more; old occasional entries decay.
  * GET /api/predefined-visitors/search
  */
 export const searchPredefinedVisitors = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { q } = req.query;
+        const rawQuery = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+        const requestedField = typeof req.query.field === 'string' ? req.query.field : 'full_name';
 
-        if (!q || typeof q !== 'string' || q.trim().length === 0) {
+        if (rawQuery.length < 2) {
             res.status(200).json({ success: true, data: [] });
             return;
         }
 
-        // EDRF (Exponentially Decayed Recency-Frequency) scoring query.
-        // Calculates score = SUM(EXP(-0.05 * (CURRENT_DATE - entry_date))) for matching visitors.
-        // Filters by name first using the functional index to maximize performance.
+        if (rawQuery.length > 100) {
+            res.status(400).json({ success: false, message: 'Arama metni en fazla 100 karakter olabilir' });
+            return;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(SEARCH_EXPRESSIONS, requestedField)) {
+            res.status(400).json({ success: false, message: 'Geçersiz arama alanı' });
+            return;
+        }
+
+        const searchField = requestedField as VisitorSuggestionField;
+        const searchExpression = SEARCH_EXPRESSIONS[searchField];
+        const escapedQuery = rawQuery.replace(/[\\%_]/g, '\\$&');
+        const searchPattern = `%${escapedQuery}%`;
+
+        // Özgün sorgu davranışı korunur: isim bazında gruplanır, her kayıt puana
+        // eklenir ve formu doldurmak için en güncel eşleşen kayıt döndürülür.
         const searchQuery = `
             WITH visitor_scores AS (
-                SELECT 
-                    LOWER(TRIM(full_name)) as normalized_name,
-                    SUM(EXP(-0.05 * (CURRENT_DATE - entry_date))) as score,
-                    (array_agg(id ORDER BY entry_date DESC, entry_time DESC))[1] as latest_record_id
-                FROM visitor_records
-                WHERE deleted_at IS NULL 
-                  AND entry_date >= CURRENT_DATE - INTERVAL '90 days'
-                  AND full_name IS NOT NULL AND TRIM(full_name) != ''
-                  AND LOWER(translate(full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($1, 'IİĞÜŞÖÇ', 'ıiğüşöç'))
-                GROUP BY LOWER(TRIM(full_name))
-                HAVING SUM(EXP(-0.05 * (CURRENT_DATE - entry_date))) >= 0.5
+                SELECT
+                    LOWER(TRIM(vr.full_name)) AS normalized_name,
+                    SUM(EXP(-$4::double precision * (CURRENT_DATE - vr.entry_date))) AS score,
+                    COUNT(*) AS visit_count,
+                    (ARRAY_AGG(
+                        vr.id
+                        ORDER BY vr.entry_date DESC, vr.entry_time DESC, vr.created_at DESC, vr.id DESC
+                    ))[1] AS latest_record_id
+                FROM visitor_records vr
+                WHERE vr.deleted_at IS NULL
+                  AND vr.entry_date >= CURRENT_DATE - ($3::int - 1)
+                  AND vr.full_name IS NOT NULL
+                  AND TRIM(vr.full_name) != ''
+                  AND ${searchExpression} LIKE LOWER(translate($2, 'IİĞÜŞÖÇ', 'ıiğüşöç')) ESCAPE '\\'
+                GROUP BY LOWER(TRIM(vr.full_name))
+                HAVING SUM(EXP(-$4::double precision * (CURRENT_DATE - vr.entry_date))) >= $5::double precision
             )
-            SELECT 
+            SELECT
                 vr.id,
                 vr.full_name,
                 vr.company_name,
@@ -49,25 +99,27 @@ export const searchPredefinedVisitors = async (req: Request, res: Response): Pro
                 vr.tour_exit,
                 vr.meeting,
                 vr.delivery,
-                s.score
+                s.visit_count,
+                ROUND(s.score::numeric, 3) AS heat_score,
+                CASE
+                    WHEN ${searchExpression} = LOWER(translate($1, 'IİĞÜŞÖÇ', 'ıiğüşöç')) THEN 0
+                    WHEN ${searchExpression} LIKE LOWER(translate($1, 'IİĞÜŞÖÇ', 'ıiğüşöç')) || '%' THEN 1
+                    ELSE 2
+                END AS match_rank
             FROM visitor_scores s
-            JOIN visitor_records vr ON s.latest_record_id = vr.id
-            ORDER BY s.score DESC
-            LIMIT 10
+            JOIN visitor_records vr ON vr.id = s.latest_record_id
+            ORDER BY match_rank ASC, s.score DESC, vr.entry_date DESC, vr.entry_time DESC, vr.id DESC
+            LIMIT $6::int
         `;
 
-        const result = await pool.query(searchQuery, [`%${q.trim()}%`]);
-
-        const decodeStoredHtmlEntities = (value: string | null | undefined): string | null => {
-            if (value === null || value === undefined) return null;
-            return String(value)
-                .replace(/&#x2F;/g, '/')
-                .replace(/&#x27;/g, "'")
-                .replace(/&quot;/g, '"')
-                .replace(/&gt;/g, '>')
-                .replace(/&lt;/g, '<')
-                .replace(/&amp;/g, '&');
-        };
+        const result = await pool.query(searchQuery, [
+            rawQuery,
+            searchPattern,
+            VISITOR_HEAT_CONFIG.scoringWindowDays,
+            VISITOR_HEAT_CONFIG.decayRate,
+            VISITOR_HEAT_CONFIG.minimumHeatScore,
+            VISITOR_HEAT_CONFIG.resultLimit
+        ]);
 
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
@@ -77,6 +129,7 @@ export const searchPredefinedVisitors = async (req: Request, res: Response): Pro
             vehicle_plate: row.vehicle_plate,
             visiting_person: decodeStoredHtmlEntities(row.visiting_person),
             notes: decodeStoredHtmlEntities(row.notes),
+            highlight_color: row.highlight_color,
             subcontractor_worker: row.subcontractor_worker,
             for_electric_station: row.for_electric_station,
             daily_guest: row.daily_guest,
@@ -86,7 +139,9 @@ export const searchPredefinedVisitors = async (req: Request, res: Response): Pro
             tour_exit: row.tour_exit,
             meeting: row.meeting,
             delivery: row.delivery,
-            score: Number(row.score)
+            visit_count: Number(row.visit_count),
+            score: Number(row.heat_score),
+            heat_score: Number(row.heat_score)
         }));
 
         res.status(200).json({

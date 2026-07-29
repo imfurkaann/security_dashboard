@@ -324,7 +324,8 @@ export default function AdminVehicleRecords() {
             const exportGroupsMap = new Map<string, VehicleUsage[]>();
 
             exportableRecords.forEach((record) => {
-                const dayKey = dayjs(record.given_date).format('YYYY-MM-DD');
+                const groupingDate = filterBy === 'given' ? record.given_date : record.return_date;
+                const dayKey = dayjs(groupingDate).format('YYYY-MM-DD');
                 if (!exportGroupsMap.has(dayKey)) {
                     exportGroupsMap.set(dayKey, []);
                 }
@@ -337,9 +338,13 @@ export default function AdminVehicleRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = a.given_date.localeCompare(b.given_date);
+                        const dateA = filterBy === 'given' ? a.given_date : a.return_date;
+                        const dateB = filterBy === 'given' ? b.given_date : b.return_date;
+                        const dateCompare = (dateA || '').localeCompare(dateB || '');
                         if (dateCompare !== 0) return dateCompare;
-                        return a.given_time.localeCompare(b.given_time);
+                        const timeA = filterBy === 'given' ? a.given_time : a.return_time;
+                        const timeB = filterBy === 'given' ? b.given_time : b.return_time;
+                        return (timeA || '').localeCompare(timeB || '');
                     })
                 }));
 
@@ -390,7 +395,8 @@ export default function AdminVehicleRecords() {
             message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }

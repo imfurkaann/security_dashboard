@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
+import pool from '../config/database';
+import { clearAuthCookies, getRequestToken } from '../utils/authCookies';
 
 // Extend Express Request type to include user
 declare global {
@@ -9,70 +11,26 @@ declare global {
                 userId: string;
                 username: string;
                 role: string;
+                personnelRecordId?: number;
+                isAdmin?: boolean;
             };
         }
     }
 }
 
-// Rate limiting için basit in-memory store
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 dakika
-const MAX_ATTEMPTS = 5;
-
-/**
- * IP bazlı rate limiting kontrolü
- */
-export const checkRateLimit = (ip: string): boolean => {
-    const now = Date.now();
-    const attempts = loginAttempts.get(ip);
-
-    if (!attempts) {
-        return true;
-    }
-
-    // Zaman penceresi geçmişse sıfırla
-    if (now - attempts.lastAttempt > RATE_LIMIT_WINDOW) {
-        loginAttempts.delete(ip);
-        return true;
-    }
-
-    return attempts.count < MAX_ATTEMPTS;
-};
-
-/**
- * Başarısız giriş denemesi kaydet
- */
-export const recordFailedAttempt = (ip: string): void => {
-    const now = Date.now();
-    const attempts = loginAttempts.get(ip);
-
-    if (!attempts || now - attempts.lastAttempt > RATE_LIMIT_WINDOW) {
-        loginAttempts.set(ip, { count: 1, lastAttempt: now });
-    } else {
-        loginAttempts.set(ip, { count: attempts.count + 1, lastAttempt: now });
-    }
-};
-
-/**
- * Başarılı giriş sonrası sıfırla
- */
-export const clearAttempts = (ip: string): void => {
-    loginAttempts.delete(ip);
-};
-
 /**
  * Authentication middleware - Verifies JWT token
  */
-export const authMiddleware = (
+export const authMiddleware = async (
     req: Request,
     res: Response,
     next: NextFunction
-): void => {
+): Promise<void> => {
     try {
-        // Get token from Authorization header
-        const authHeader = req.headers.authorization;
+        // Prefer the HttpOnly cookie; keep Bearer support during migration.
+        const token = getRequestToken(req);
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        if (!token) {
             res.status(401).json({
                 success: false,
                 message: 'Yetkilendirme token\'ı bulunamadı',
@@ -81,7 +39,6 @@ export const authMiddleware = (
         }
 
         // Token uzunluk kontrolü (güvenlik)
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
         if (!token || token.length < 10 || token.length > 1000) {
             res.status(401).json({
@@ -95,6 +52,7 @@ export const authMiddleware = (
         const decoded = verifyToken(token);
 
         if (!decoded) {
+            clearAuthCookies(res);
             res.status(401).json({
                 success: false,
                 message: 'Geçersiz veya süresi dolmuş token',
@@ -111,14 +69,40 @@ export const authMiddleware = (
             return;
         }
 
-        // Attach user info to request
-        req.user = decoded;
+        // JWT validity alone is not enough: disabled/deleted users and role changes
+        // must take effect without waiting for token expiration.
+        const userResult = await pool.query<{
+            username: string;
+            role: string;
+        }>(
+            `SELECT username, role
+             FROM personnel
+             WHERE id = $1
+               AND deleted_at IS NULL
+               AND is_active = TRUE`,
+            [decoded.userId]
+        );
+
+        if (userResult.rows.length !== 1) {
+            clearAuthCookies(res);
+            res.status(401).json({
+                success: false,
+                message: 'Kullanıcı oturumu artık geçerli değil',
+            });
+            return;
+        }
+
+        req.user = {
+            ...decoded,
+            username: userResult.rows[0].username,
+            role: userResult.rows[0].role,
+        };
         next();
     } catch (error) {
         console.error('Auth middleware error:', error);
-        res.status(401).json({
+        res.status(503).json({
             success: false,
-            message: 'Yetkilendirme hatası',
+            message: 'Yetkilendirme servisi geçici olarak kullanılamıyor',
         });
     }
 };
@@ -157,25 +141,4 @@ export const authorize = (...roles: string[]) => {
 
         next();
     };
-};
-
-/**
- * Rate limiting middleware - Login endpointi için
- */
-export const rateLimitMiddleware = (
-    req: Request,
-    res: Response,
-    next: NextFunction
-): void => {
-    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
-
-    if (!checkRateLimit(clientIp)) {
-        res.status(429).json({
-            success: false,
-            message: 'Çok fazla başarısız deneme. Lütfen 15 dakika sonra tekrar deneyin.',
-        });
-        return;
-    }
-
-    next();
 };

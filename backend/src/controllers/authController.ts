@@ -4,9 +4,18 @@ import pool from '../config/database';
 import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { logLoginAttempt, logLogout } from '../utils/auditLog';
-import { sanitizeInput, isValidLength } from '../utils/validation';
+import { isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { generateLogoutExport } from '../services/exportService';
+import {
+    createLoginSession,
+    getWeeklyTopPerformers,
+    type TopPerformerRow,
+} from '../services/loginSessionService';
+import { clearAuthCookies, setAuthCookies } from '../utils/authCookies';
+
+// Keeps password verification cost similar when a username does not exist.
+const DUMMY_PASSWORD_HASH = '$2a$10$fTErQltYuvKSDtMMqLtzJ.ymeJ5TgU9fdgHwmBmeLb1Z6d7FtlgaC';
 
 interface WeeklyRankingCelebration {
     rank: number;
@@ -154,17 +163,20 @@ const getWeeklyRankingCelebration = async (
  */
 export const loginValidation = [
     body('username')
+        .isString()
+        .withMessage('Kullanıcı adı geçersizdir')
         .trim()
         .notEmpty()
         .withMessage('Kullanıcı adı gereklidir')
-        .isLength({ min: 3 })
-        .withMessage('Kullanıcı adı en az 3 karakter olmalıdır'),
+        .isLength({ min: 3, max: 100 })
+        .withMessage('Kullanıcı adı 3-100 karakter arasında olmalıdır'),
     body('password')
-        .trim()
+        .isString()
+        .withMessage('Şifre geçersizdir')
         .notEmpty()
         .withMessage('Şifre gereklidir')
-        .isLength({ min: 6 })
-        .withMessage('Şifre en az 6 karakter olmalıdır'),
+        .isLength({ min: 6, max: 128 })
+        .withMessage('Şifre 6-128 karakter arasında olmalıdır'),
 ];
 
 /**
@@ -192,8 +204,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         const { username, password } = req.body;
 
-        // GÜVENLİK: Input sanitization
-        const sanitizedUsername = sanitizeInput(username, 100);
+        const sanitizedUsername = String(username).trim();
 
         if (!sanitizedUsername || !password) {
             await logLoginAttempt(null, username || 'unknown', false, clientIp, userAgent);
@@ -234,6 +245,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const userResult = await pool.query(userQuery, [sanitizedUsername]);
 
         if (userResult.rows.length === 0) {
+            await comparePassword(password, DUMMY_PASSWORD_HASH);
             await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
             res.status(401).json({
                 success: false,
@@ -243,15 +255,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         }
 
         const user = userResult.rows[0];
-
-        // Check if user is active
-        if (!user.is_active) {
-            res.status(403).json({
-                success: false,
-                message: 'Hesabınız devre dışı bırakılmış',
-            });
-            return;
-        }
 
         // Compare password
         const isPasswordValid = await comparePassword(password, user.password);
@@ -265,54 +268,56 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Başarılı giriş - audit log
+        // Only reveal the disabled state after the password has been verified.
+        if (!user.is_active) {
+            await logLoginAttempt(user.id, sanitizedUsername, false, clientIp, userAgent);
+            res.status(403).json({
+                success: false,
+                message: 'Hesabınız devre dışı bırakılmış',
+            });
+            return;
+        }
+
+        const { personnelRecordId, weeklyLoginCount } = await createLoginSession(user.id, clientIp);
+
+        // Record success only after the transactional session writes have committed.
         await logLoginAttempt(user.id, sanitizedUsername, true, clientIp, userAgent);
 
-        // Create personnel_record entry for login time tracking
-        const personnelRecordQuery = `
-            INSERT INTO personnel_records (personnel_id, login_time, login_ip)
-            VALUES ($1, CURRENT_TIMESTAMP, $2)
-            RETURNING id
-        `;
-        const personnelRecordResult = await pool.query(personnelRecordQuery, [user.id, clientIp]);
-        const personnelRecordId = personnelRecordResult.rows[0].id;
-
-        const weeklyCounterResult = await pool.query(
-            `UPDATE personnel
-             SET weekly_login_count = CASE
-                     WHEN weekly_login_week_start IS DISTINCT FROM date_trunc('week', CURRENT_DATE)::date THEN 1
-                     ELSE weekly_login_count + 1
-                 END,
-                 weekly_login_week_start = date_trunc('week', CURRENT_DATE)::date,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1
-             RETURNING weekly_login_count`,
-            [user.id]
-        );
-        const weeklyLoginCount = Number(weeklyCounterResult.rows[0]?.weekly_login_count || 0);
-
-        const weeklyRankingCelebration = await getWeeklyRankingCelebration(
-            user.id,
-            user.first_name,
-            user.last_name,
-            user.role,
-            weeklyLoginCount
-        );
+        let weeklyRankingCelebration: WeeklyRankingCelebration | null = null;
+        let topPerformers: TopPerformerRow[] = [];
+        try {
+            if (user.role === 'admin' && weeklyLoginCount === 1) {
+                topPerformers = await getWeeklyTopPerformers();
+            } else {
+                weeklyRankingCelebration = await getWeeklyRankingCelebration(
+                    user.id,
+                    user.first_name,
+                    user.last_name,
+                    user.role,
+                    weeklyLoginCount
+                );
+            }
+        } catch (error) {
+            // Ranking information is optional and must never block a valid login.
+            console.error('Login ranking information could not be loaded:', error);
+        }
 
         // Generate JWT token
         const token = generateToken({
             userId: user.id,
             username: user.username,
             role: user.role,
-            personnelRecordId: personnelRecordId,
+            personnelRecordId,
+            isAdmin: user.role === 'admin',
         });
+
+        setAuthCookies(res, token);
 
         // Return success response
         res.status(200).json({
             success: true,
             message: 'Giriş başarılı',
             data: {
-                token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -323,6 +328,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                     is_active: user.is_active,
                 },
                 weeklyRankingCelebration,
+                topPerformers,
             },
         });
     } catch (error) {
@@ -344,6 +350,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
     // GÜVENLİK: Audit log kaydı
     const userId = req.user?.userId;
+    const personnelRecordId = req.user?.personnelRecordId;
     const clientIp = getClientIp(req);
 
     if (userId) {
@@ -369,22 +376,27 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
         await logLogout(userId, clientIp);
 
-        // Update personnel_record with logout time
-        try {
-            const updateQuery = `
-                UPDATE personnel_records
-                SET logout_time = CURRENT_TIMESTAMP,
-                    logout_ip = $2,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE personnel_id = $1 AND logout_time IS NULL
-            `;
-            await pool.query(updateQuery, [userId, clientIp]);
-        } catch (error) {
-            console.error('Error updating personnel_record on logout:', error);
-            // Don't fail logout if personnel_record update fails
+        // Close only the session represented by this token.
+        if (personnelRecordId) {
+            try {
+                const updateQuery = `
+                    UPDATE personnel_records
+                    SET logout_time = CURRENT_TIMESTAMP,
+                        logout_ip = $3,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                      AND personnel_id = $2
+                      AND logout_time IS NULL
+                `;
+                await pool.query(updateQuery, [personnelRecordId, userId, clientIp]);
+            } catch (error) {
+                console.error('Error updating personnel_record on logout:', error);
+                // Don't fail logout if personnel_record update fails
+            }
         }
     }
 
+    clearAuthCookies(res);
     res.status(200).json({
         success: true,
         message: 'Çıkış başarılı',
@@ -409,12 +421,14 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
         const userQuery = `
             SELECT id, username, first_name, last_name, role, is_active
             FROM personnel
-            WHERE id = $1 AND deleted_at IS NULL
+            WHERE id = $1
+              AND deleted_at IS NULL
+              AND is_active = TRUE
         `;
         const userResult = await pool.query(userQuery, [req.user.userId]);
 
         if (userResult.rows.length === 0) {
-            res.status(404).json({
+            res.status(401).json({
                 success: false,
                 message: 'Kullanıcı bulunamadı',
             });

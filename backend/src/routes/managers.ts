@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
     getAllManagers,
+    getManagerOptions,
     createManager,
     updateManager,
     deleteManager,
@@ -25,6 +26,9 @@ router.put('/records/:id', adminAuthMiddleware, updateManagerRecord);
 
 // All other routes require authentication
 router.use(authMiddleware);
+
+// Active managers used by manager record forms
+router.get('/options', getManagerOptions);
 
 // Get all manager records
 router.get('/records', getManagerRecords);

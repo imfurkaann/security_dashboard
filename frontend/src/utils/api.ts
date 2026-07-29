@@ -9,8 +9,6 @@ import { getRealtimeClientId } from '../realtime/clientId';
 
 // Constants
 const MAX_REQUEST_SIZE = 50000; // 50KB
-const TOKEN_MIN_LENGTH = 10;
-const TOKEN_MAX_LENGTH = 1000;
 
 // HTTP Status Codes
 const HTTP_STATUS = {
@@ -26,18 +24,19 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
     timeout: API_TIMEOUT,
-    withCredentials: false,
+    withCredentials: true,
 });
 
-/**
- * Gets the appropriate token based on current path
- */
-const getToken = (): string | null => {
-    const isAdminPath = window.location.pathname.startsWith('/admin');
-    if (isAdminPath) {
-        return localStorage.getItem('adminToken') || localStorage.getItem(STORAGE_KEYS.TOKEN);
+const getCookieValue = (name: string): string | null => {
+    if (typeof document === 'undefined') return null;
+    const prefix = `${encodeURIComponent(name)}=`;
+    const cookie = document.cookie.split('; ').find((item) => item.startsWith(prefix));
+    if (!cookie) return null;
+    try {
+        return decodeURIComponent(cookie.slice(prefix.length));
+    } catch {
+        return null;
     }
-    return localStorage.getItem(STORAGE_KEYS.TOKEN);
 };
 
 const getSelectedGate = (): string | null => {
@@ -53,22 +52,21 @@ const getSelectedGate = (): string | null => {
 };
 
 /**
- * Validates token format
- */
-const isValidToken = (token: string | null): token is string => {
-    return !!token && token.length > TOKEN_MIN_LENGTH && token.length < TOKEN_MAX_LENGTH;
-};
-
-/**
- * Request interceptor - Token injection and security checks
+ * Request interceptor - CSRF protection and security checks
  */
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        const token = getToken();
+        const isFormDataRequest = typeof FormData !== 'undefined' && config.data instanceof FormData;
 
-        // Add token if valid
-        if (isValidToken(token)) {
-            config.headers.Authorization = `Bearer ${token}`;
+        // Global JSON başlığı FormData içeriğini boş JSON nesnesine dönüştürmemeli.
+        // Başlığı kaldırınca tarayıcı doğru multipart boundary değerini kendisi ekler.
+        if (isFormDataRequest) {
+            config.headers.delete('Content-Type');
+        }
+
+        const csrfToken = getCookieValue('security_csrf');
+        if (csrfToken) {
+            config.headers['X-CSRF-Token'] = csrfToken;
         }
 
         const gate = getSelectedGate();
@@ -79,7 +77,7 @@ api.interceptors.request.use(
         config.headers['X-Realtime-Client-Id'] = getRealtimeClientId();
 
         // Request body size validation (client-side DoS prevention)
-        if (config.data) {
+        if (config.data && !isFormDataRequest) {
             const dataSize = JSON.stringify(config.data).length;
             if (dataSize > MAX_REQUEST_SIZE) {
                 console.error('[API] İstek boyutu çok büyük:', dataSize);

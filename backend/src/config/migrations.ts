@@ -83,48 +83,62 @@ const splitSqlStatements = (sql: string): string[] => {
     return statements;
 };
 
-// Migration dosyasını çalıştır
+// Migration dosyasını tek bir transaction içinde çalıştır.
+// Statement seviyesindeki savepoint'ler yalnızca güvenli "zaten var" durumlarını
+// tolere eder; diğer hatalarda migration tamamen geri alınır.
 const executeMigration = async (filePath: string, fileName: string): Promise<boolean> => {
+    const client = await pool.connect();
     try {
         const sql = fs.readFileSync(filePath, 'utf-8');
-
-        // SQL'i statement'lara böl
         const statements = splitSqlStatements(sql);
-
         let skippedCount = 0;
 
-        // Her statement'ı ayrı ayrı çalıştır (her biri kendi transaction'ında)
-        for (const statement of statements) {
-            const client = await pool.connect();
+        await client.query('BEGIN');
+        for (let index = 0; index < statements.length; index++) {
+            const statement = statements[index];
+            const normalized = statement.trim().replace(/;$/, '').trim().toUpperCase();
+
+            // Bazı eski dosyalardaki transaction komutlarını runner yönetir.
+            if (normalized === 'BEGIN' || normalized === 'COMMIT' || normalized === 'ROLLBACK') {
+                continue;
+            }
+
+            const savepoint = `migration_statement_${index}`;
+            await client.query(`SAVEPOINT ${savepoint}`);
             try {
                 await client.query(statement);
-            } catch (stmtError) {
-                const errorMessage = stmtError instanceof Error ? stmtError.message : '';
-                // "already exists" hatalarını tolere et (tablo, index, constraint vb.)
-                if (errorMessage.includes('already exists') ||
-                    errorMessage.includes('duplicate key') ||
-                    errorMessage.includes('zaten var') ||
-                    errorMessage.includes('does not exist')) {
+                await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+            } catch (statementError) {
+                await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+                const code = typeof statementError === 'object'
+                    && statementError !== null
+                    && 'code' in statementError
+                    ? String((statementError as { code?: string }).code || '')
+                    : '';
+                const safeDuplicateCodes = new Set(['42P06', '42P07', '42701', '42710']);
+                if (safeDuplicateCodes.has(code)) {
                     skippedCount++;
+                    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
                     continue;
                 }
-                // Diğer hatalar için hata fırlat
-                throw stmtError;
-            } finally {
-                client.release();
+                throw statementError;
             }
         }
+        await client.query('COMMIT');
 
         if (skippedCount > 0) {
-            console.log(`  ✅ ${fileName} başarıyla çalıştırıldı (${skippedCount} atlandı - zaten mevcut)`);
+            console.log(`  ✅ ${fileName} başarıyla çalıştırıldı (${skippedCount} güvenli tekrar atlandı)`);
         } else {
             console.log(`  ✅ ${fileName} başarıyla çalıştırıldı`);
         }
         return true;
     } catch (error) {
+        await client.query('ROLLBACK');
         const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
         console.error(`  ❌ ${fileName} başarısız: ${errorMessage}`);
         return false;
+    } finally {
+        client.release();
     }
 };
 
@@ -188,8 +202,7 @@ export const runMigrations = async (): Promise<void> => {
             if (!success) {
                 console.error(`\n❌ Migration durdu: ${file} başarısız oldu.`);
                 console.error('Lütfen hatayı düzeltin ve tekrar çalıştırın.');
-                // Migration hatasında uygulamayı durdurmayalım, sadece logla
-                break;
+                throw new Error(`Migration başarısız: ${file}`);
             }
         }
 
@@ -198,7 +211,7 @@ export const runMigrations = async (): Promise<void> => {
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
         console.error('❌ Migration hatası:', errorMessage);
-        // Migration hatasında uygulamayı durdurmayalım
+        throw error;
     }
 };
 

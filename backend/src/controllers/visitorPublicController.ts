@@ -255,27 +255,6 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
             clientIp
         );
 
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/visitors/pending-qr',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/visitors/records'),
-            payload: {
-                id,
-                vehicle_plate: normalizedPlate,
-                full_name: normalizedFullName,
-                company_name: normalizedCompanyName,
-                visiting_person: normalizedVisitingPerson,
-                person_count: personCountToInsert,
-                children_count: childrenCountValue,
-                gate,
-                phone: normalizedPhone,
-                created_at: new Date().toISOString()
-            }
-        });
-
         res.status(201).json({
             success: true,
             message: 'Kayit basariyla alindi',

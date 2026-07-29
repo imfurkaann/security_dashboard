@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_URL } from '../constants';
+import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface WhatsAppStatus {
@@ -16,14 +15,6 @@ interface WhatsAppGroup {
     id: string;
     name: string;
 }
-
-const getAdminHeaders = () => {
-    const token = localStorage.getItem('adminToken');
-    return {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-    };
-};
 
 const formatDateTime = (value: string | null) => {
     if (!value) return '-';
@@ -58,9 +49,7 @@ export default function AdminWhatsAppSettings() {
         setLoadingStatus(true);
         setError('');
         try {
-            const response = await axios.get(`${API_URL}/admin/whatsapp/status`, {
-                headers: getAdminHeaders(),
-            });
+            const response = await api.get('/admin/whatsapp/status');
             const nextStatus: WhatsAppStatus = response.data?.data;
             setStatus(nextStatus);
             if (nextStatus?.targetJid) {
@@ -79,9 +68,7 @@ export default function AdminWhatsAppSettings() {
         setError('');
         setMessage('');
         try {
-            const response = await axios.get(`${API_URL}/admin/whatsapp/groups`, {
-                headers: getAdminHeaders(),
-            });
+            const response = await api.get('/admin/whatsapp/groups');
             const list: WhatsAppGroup[] = response.data?.data || [];
             setGroups(list);
             setMessage(`${list.length} grup bulundu.`);
@@ -94,9 +81,7 @@ export default function AdminWhatsAppSettings() {
 
     const fetchQr = useCallback(async () => {
         try {
-            const response = await axios.get(`${API_URL}/admin/whatsapp/qr`, {
-                headers: getAdminHeaders(),
-            });
+            const response = await api.get('/admin/whatsapp/qr');
             setQrPayload(response.data?.data?.qr || null);
         } catch {
             setQrPayload(null);
@@ -113,11 +98,9 @@ export default function AdminWhatsAppSettings() {
         setError('');
         setMessage('');
         try {
-            await axios.post(
-                `${API_URL}/admin/whatsapp/target-group`,
-                { targetJid: effectiveGroup },
-                { headers: getAdminHeaders() }
-            );
+            await api.post('/admin/whatsapp/target-group', {
+                targetJid: effectiveGroup,
+            });
             setMessage('WhatsApp hedef grubu kaydedildi.');
             await fetchStatus();
         } catch (err: any) {
@@ -132,11 +115,7 @@ export default function AdminWhatsAppSettings() {
         setError('');
         setMessage('');
         try {
-            const response = await axios.post(
-                `${API_URL}/admin/whatsapp/reconnect`,
-                {},
-                { headers: getAdminHeaders() }
-            );
+            const response = await api.post('/admin/whatsapp/reconnect', {});
             setConnectionStarted(true);
             setMessage(response.data?.message || 'Yeniden bağlantı başlatıldı.');
             await fetchStatus();
@@ -158,11 +137,7 @@ export default function AdminWhatsAppSettings() {
         setError('');
         setMessage('');
         try {
-            const response = await axios.post(
-                `${API_URL}/admin/whatsapp/reset-session`,
-                {},
-                { headers: getAdminHeaders() }
-            );
+            const response = await api.post('/admin/whatsapp/reset-session', {});
             setConnectionStarted(true);
             setMessage(response.data?.message || 'WhatsApp oturumu sıfırlandı.');
             await fetchStatus();
@@ -189,11 +164,7 @@ export default function AdminWhatsAppSettings() {
         setError('');
         setMessage('');
         try {
-            const response = await axios.post(
-                `${API_URL}/admin/whatsapp/reconnect`,
-                {},
-                { headers: getAdminHeaders() }
-            );
+            const response = await api.post('/admin/whatsapp/reconnect', {});
             setConnectionStarted(true);
             setMessage(response.data?.message || 'Yeni bağlantı başlatıldı. QR kodunu okutun.');
             await fetchStatus();

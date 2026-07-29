@@ -1,11 +1,14 @@
-import { Pool, PoolConfig } from 'pg';
+import { Pool, PoolClient, PoolConfig } from 'pg';
 import dotenv from 'dotenv';
+import { readSecret } from './secrets';
 
 dotenv.config();
 
+const databasePassword = readSecret('DB_PASSWORD', 'DB_PASSWORD_FILE');
 // Veritabanı yapılandırma kontrolü
-const requiredEnvVars = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
+const requiredEnvVars = ['DB_HOST', 'DB_NAME', 'DB_USER'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (!databasePassword) missingVars.push('DB_PASSWORD veya DB_PASSWORD_FILE');
 
 if (missingVars.length > 0) {
     console.error('❌ Eksik veritabanı yapılandırması:', missingVars.join(', '));
@@ -29,7 +32,7 @@ const poolConfig: PoolConfig = {
     }),
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    password: databasePassword,
     // Bağlantı havuzu ayarları
     max: 20,                        // Maksimum bağlantı sayısı
     min: 2,                         // Minimum bağlantı sayısı
@@ -69,15 +72,17 @@ pool.on('remove', () => {
 
 // Bağlantı test fonksiyonu
 export const testConnection = async (): Promise<boolean> => {
+    let client: PoolClient | null = null;
     try {
-        const client = await pool.connect();
+        client = await pool.connect();
         await client.query('SELECT 1');
-        client.release();
         console.log('✅ Veritabanı bağlantı testi başarılı');
         return true;
     } catch (error) {
         console.error('❌ Veritabanı bağlantı testi başarısız:', error);
         return false;
+    } finally {
+        client?.release();
     }
 };
 

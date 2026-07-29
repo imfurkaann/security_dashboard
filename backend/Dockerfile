@@ -39,7 +39,7 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/healthcheck.js ./
+COPY --from=builder /app/runtime-healthcheck.js ./
 
 # Kullanıcıyı değiştir
 USER nodejs
@@ -49,7 +49,7 @@ EXPOSE 5000
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node healthcheck.js || exit 1
+    CMD node runtime-healthcheck.js || exit 1
 
 # Başlat
 CMD ["node", "dist/server.js"]

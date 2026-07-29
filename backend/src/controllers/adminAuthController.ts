@@ -6,148 +6,38 @@ import os from 'os';
 import pool from '../config/database';
 import { comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
-import { sanitizeInput, isValidLength } from '../utils/validation';
+import { isValidLength } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { generateLogoutExport } from '../services/exportService';
+import {
+    createLoginSession,
+    getWeeklyTopPerformers,
+    type TopPerformerRow,
+} from '../services/loginSessionService';
+import { logLoginAttempt, logLogout } from '../utils/auditLog';
+import { clearAuthCookies, setAuthCookies } from '../utils/authCookies';
 
-interface TopPerformerRow {
-    id: string;
-    firstName: string;
-    lastName: string;
-    username: string;
-    totalCount: number;
-    rank: number;
-}
-
-const getWeeklyTopPerformers = async (): Promise<TopPerformerRow[]> => {
-    const rankingResult = await pool.query(
-        `WITH period_window AS (
-            SELECT
-                (date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 day')::date AS start_date,
-                date_trunc('week', CURRENT_DATE)::date AS end_date
-        ),
-        personnel_base AS (
-            SELECT p.id, p.first_name, p.last_name, p.username
-            FROM personnel p
-            WHERE p.deleted_at IS NULL
-              AND p.is_active = TRUE
-              AND p.role = 'personnel'
-        ),
-        vehicle_counts AS (
-            SELECT vr.given_by AS personnel_id, COUNT(*)::int AS vehicle_count
-            FROM vehicle_records vr
-            CROSS JOIN period_window pw
-            WHERE vr.deleted_at IS NULL
-              AND vr.given_by IS NOT NULL
-              AND vr.given_date >= pw.start_date
-              AND vr.given_date < pw.end_date
-            GROUP BY vr.given_by
-        ),
-        visitor_counts AS (
-            SELECT vr.entry_by AS personnel_id, COUNT(*)::int AS visitor_count
-            FROM visitor_records vr
-            CROSS JOIN period_window pw
-            WHERE vr.deleted_at IS NULL
-              AND vr.entry_by IS NOT NULL
-              AND vr.entry_date >= pw.start_date
-              AND vr.entry_date < pw.end_date
-            GROUP BY vr.entry_by
-        ),
-        manager_counts AS (
-            SELECT mr.entry_by AS personnel_id, COUNT(*)::int AS manager_count
-            FROM managers_records mr
-            CROSS JOIN period_window pw
-            WHERE mr.deleted_at IS NULL
-              AND mr.entry_by IS NOT NULL
-              AND mr.entry_date >= pw.start_date
-              AND mr.entry_date < pw.end_date
-            GROUP BY mr.entry_by
-        ),
-        fire_alarm_counts AS (
-            SELECT fa.recorded_by AS personnel_id, COUNT(*)::int AS fire_alarm_count
-            FROM fire_alarms fa
-            CROSS JOIN period_window pw
-            WHERE fa.deleted_at IS NULL
-              AND fa.recorded_by IS NOT NULL
-              AND fa.alarm_time::date >= pw.start_date
-              AND fa.alarm_time::date < pw.end_date
-            GROUP BY fa.recorded_by
-        ),
-        sgk_counts AS (
-            SELECT sr.personnel_id AS personnel_id, COUNT(*)::int AS sgk_count
-            FROM sgk_records sr
-            CROSS JOIN period_window pw
-            WHERE sr.deleted_at IS NULL
-              AND sr.personnel_id IS NOT NULL
-              AND sr.upload_date::date >= pw.start_date
-              AND sr.upload_date::date < pw.end_date
-            GROUP BY sr.personnel_id
-        ),
-        ranked AS (
-            SELECT
-                pb.id,
-                pb.first_name,
-                pb.last_name,
-                pb.username,
-                (
-                    COALESCE(vc.vehicle_count, 0)
-                    + COALESCE(vic.visitor_count, 0)
-                    + COALESCE(mc.manager_count, 0)
-                    + COALESCE(fac.fire_alarm_count, 0)
-                    + COALESCE(sc.sgk_count, 0)
-                )::int AS total_count,
-                DENSE_RANK() OVER (
-                    ORDER BY
-                        (
-                            COALESCE(vc.vehicle_count, 0)
-                            + COALESCE(vic.visitor_count, 0)
-                            + COALESCE(mc.manager_count, 0)
-                            + COALESCE(fac.fire_alarm_count, 0)
-                            + COALESCE(sc.sgk_count, 0)
-                        ) DESC,
-                        pb.first_name ASC,
-                        pb.last_name ASC
-                )::int AS ranking
-            FROM personnel_base pb
-            LEFT JOIN vehicle_counts vc ON vc.personnel_id = pb.id
-            LEFT JOIN visitor_counts vic ON vic.personnel_id = pb.id
-            LEFT JOIN manager_counts mc ON mc.personnel_id = pb.id
-            LEFT JOIN fire_alarm_counts fac ON fac.personnel_id = pb.id
-            LEFT JOIN sgk_counts sc ON sc.personnel_id = pb.id
-        )
-        SELECT id, first_name, last_name, username, total_count, ranking
-        FROM ranked
-        WHERE total_count > 0
-        ORDER BY ranking ASC, first_name ASC, last_name ASC
-        LIMIT 3`
-    );
-
-    return rankingResult.rows.map((row) => ({
-        id: row.id,
-        firstName: row.first_name,
-        lastName: row.last_name,
-        username: row.username,
-        totalCount: Number(row.total_count),
-        rank: Number(row.ranking),
-    }));
-};
+const DUMMY_PASSWORD_HASH = '$2a$10$fTErQltYuvKSDtMMqLtzJ.ymeJ5TgU9fdgHwmBmeLb1Z6d7FtlgaC';
 
 /**
  * Admin login validation rules
  */
 export const adminLoginValidation = [
     body('username')
+        .isString()
+        .withMessage('Kullanıcı adı geçersizdir')
         .trim()
         .notEmpty()
         .withMessage('Kullanıcı adı gereklidir')
-        .isLength({ min: 3 })
-        .withMessage('Kullanıcı adı en az 3 karakter olmalıdır'),
+        .isLength({ min: 3, max: 100 })
+        .withMessage('Kullanıcı adı 3-100 karakter arasında olmalıdır'),
     body('password')
-        .trim()
+        .isString()
+        .withMessage('Şifre geçersizdir')
         .notEmpty()
         .withMessage('Şifre gereklidir')
-        .isLength({ min: 6 })
-        .withMessage('Şifre en az 6 karakter olmalıdır'),
+        .isLength({ min: 6, max: 128 })
+        .withMessage('Şifre 6-128 karakter arasında olmalıdır'),
 ];
 
 /**
@@ -174,8 +64,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 
         const { username, password } = req.body;
 
-        // Input sanitization
-        const sanitizedUsername = sanitizeInput(username, 100);
+        const sanitizedUsername = String(username).trim();
 
         if (!sanitizedUsername || !password) {
             res.status(400).json({
@@ -203,6 +92,8 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
         const userResult = await pool.query(userQuery, [sanitizedUsername]);
 
         if (userResult.rows.length === 0) {
+            await comparePassword(password, DUMMY_PASSWORD_HASH);
+            await logLoginAttempt(null, sanitizedUsername, false, clientIp, userAgent);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
@@ -212,19 +103,11 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
 
         const user = userResult.rows[0];
 
-        // Check if user has admin role
-        if (user.role !== 'admin') {
-            res.status(403).json({
-                success: false,
-                message: 'Yetkisiz erişim - Admin yetkisi gerekli',
-            });
-            return;
-        }
-
         // Compare password
         const isPasswordValid = await comparePassword(password, user.password);
 
         if (!isPasswordValid) {
+            await logLoginAttempt(user.id, sanitizedUsername, false, clientIp, userAgent);
             res.status(401).json({
                 success: false,
                 message: 'Kullanıcı adı veya şifre hatalı',
@@ -232,30 +115,20 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
+        // Check the role only after password verification to avoid account enumeration.
+        if (user.role !== 'admin') {
+            await logLoginAttempt(user.id, sanitizedUsername, false, clientIp, userAgent);
+            res.status(403).json({
+                success: false,
+                message: 'Yetkisiz erişim - Admin yetkisi gerekli',
+            });
+            return;
+        }
+
         // Successful login
 
-        // Create personnel_record entry for admin login time tracking
-        const personnelRecordQuery = `
-            INSERT INTO personnel_records (personnel_id, login_time, login_ip)
-            VALUES ($1, CURRENT_TIMESTAMP, $2)
-            RETURNING id
-        `;
-        const personnelRecordResult = await pool.query(personnelRecordQuery, [user.id, clientIp]);
-        const personnelRecordId = personnelRecordResult.rows[0].id;
-
-        const weeklyCounterResult = await pool.query(
-            `UPDATE personnel
-             SET weekly_login_count = CASE
-                     WHEN weekly_login_week_start IS DISTINCT FROM date_trunc('week', CURRENT_DATE)::date THEN 1
-                     ELSE weekly_login_count + 1
-                 END,
-                 weekly_login_week_start = date_trunc('week', CURRENT_DATE)::date,
-                 updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1
-             RETURNING weekly_login_count`,
-            [user.id]
-        );
-        const weeklyLoginCount = Number(weeklyCounterResult.rows[0]?.weekly_login_count || 0);
+        const { personnelRecordId, weeklyLoginCount } = await createLoginSession(user.id, clientIp);
+        await logLoginAttempt(user.id, sanitizedUsername, true, clientIp, userAgent);
 
         // Generate JWT token with admin flag
         const token = generateToken({
@@ -266,9 +139,15 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
             personnelRecordId: personnelRecordId,
         });
 
+        setAuthCookies(res, token);
+
         let topPerformers: TopPerformerRow[] = [];
         if (weeklyLoginCount === 1) {
-            topPerformers = await getWeeklyTopPerformers();
+            try {
+                topPerformers = await getWeeklyTopPerformers();
+            } catch (error) {
+                console.error('Admin login ranking information could not be loaded:', error);
+            }
         }
 
         // Return success response
@@ -276,7 +155,6 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
             success: true,
             message: 'Giriş başarılı',
             data: {
-                token,
                 admin: {
                     id: user.id,
                     username: user.username,
@@ -304,6 +182,7 @@ export const adminLogin = async (req: Request, res: Response): Promise<void> => 
  */
 export const adminLogout = async (req: Request, res: Response): Promise<void> => {
     const adminId = req.admin?.userId;
+    const personnelRecordId = req.admin?.personnelRecordId;
     const clientIp = getClientIp(req);
 
     if (adminId) {
@@ -325,21 +204,28 @@ export const adminLogout = async (req: Request, res: Response): Promise<void> =>
             console.error('[Admin Logout] Export sırasında hata:', error);
         }
 
-        // Update personnel_record with logout time
-        try {
-            const updateQuery = `
-                UPDATE personnel_records
-                SET logout_time = CURRENT_TIMESTAMP,
-                    logout_ip = $2,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE personnel_id = $1 AND logout_time IS NULL
-            `;
-            await pool.query(updateQuery, [adminId, clientIp]);
-        } catch (error) {
-            console.error('Error updating personnel_record on admin logout:', error);
+        await logLogout(adminId, clientIp);
+
+        // Close only the session represented by this token.
+        if (personnelRecordId) {
+            try {
+                const updateQuery = `
+                    UPDATE personnel_records
+                    SET logout_time = CURRENT_TIMESTAMP,
+                        logout_ip = $3,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $1
+                      AND personnel_id = $2
+                      AND logout_time IS NULL
+                `;
+                await pool.query(updateQuery, [personnelRecordId, adminId, clientIp]);
+            } catch (error) {
+                console.error('Error updating personnel_record on admin logout:', error);
+            }
         }
     }
 
+    clearAuthCookies(res);
     res.status(200).json({
         success: true,
         message: 'Çıkış başarılı',

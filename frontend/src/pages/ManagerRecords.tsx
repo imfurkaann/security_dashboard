@@ -36,8 +36,11 @@ export default function ManagerRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
@@ -55,32 +58,53 @@ export default function ManagerRecords() {
             if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
 
             const res = await api.get(`/managers/records?${params.toString()}`);
-            const fetchedRecords = res.data || [];
+            if (requestVersion !== requestVersionRef.current) return;
+            const fetchedRecords: ManagerRecord[] = res.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetchedRecords]);
+                setRecords((previous) => {
+                    const merged = new Map(previous.map((record) => [record.id, record]));
+                    fetchedRecords.forEach((record) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current += fetchedRecords.length;
             } else {
                 setRecords(fetchedRecords);
+                nextOffsetRef.current = fetchedRecords.length;
             }
-
             setHasMore(fetchedRecords.length === PAGE_SIZE);
         } catch (error) {
-            message.error('Veriler yüklenemedi');
+            if (requestVersion !== requestVersionRef.current) return;
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, [filters]);
 
     useEffect(() => {
+        const requestVersion = ++requestVersionRef.current;
         setLoading(true);
-        void fetchData(0, false);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
+        const timer = window.setTimeout(() => void fetchData(0, false, requestVersion), 300);
+        return () => window.clearTimeout(timer);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['managers'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: () => {
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            nextOffsetRef.current = 0;
+            void fetchData(0, false, requestVersion);
+        },
         enabled: true,
     });
 
@@ -88,38 +112,29 @@ export default function ManagerRecords() {
         const node = tableScrollRef.current;
         if (!node) return;
 
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
+        const loadNextPage = () => {
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
         };
-
-        node.addEventListener('scroll', onScroll);
-
+        const onScroll = () => {
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < 300) loadNextPage();
+        };
         const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
+            const remaining = document.documentElement.scrollHeight - windowHeight - scrollTop;
+            if (remaining < 400) loadNextPage();
         };
-
+        node.addEventListener('scroll', onScroll);
         window.addEventListener('scroll', onWindowScroll);
-
         return () => {
             node.removeEventListener('scroll', onScroll);
             window.removeEventListener('scroll', onWindowScroll);
         };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    }, [fetchData, loadingMore, hasMore]);
 
     // Filtered records are handled on backend now
     const filteredRecords = records;
@@ -221,7 +236,8 @@ export default function ManagerRecords() {
             const exportGroupsMap = new Map<string, ManagerRecord[]>();
 
             exportableRecords.forEach((record) => {
-                const dayKey = dayjs(record.entry_date).format('YYYY-MM-DD');
+                const groupingDate = filterBy === 'entry' ? record.entry_date : record.exit_date;
+                const dayKey = dayjs(groupingDate).format('YYYY-MM-DD');
                 if (!exportGroupsMap.has(dayKey)) {
                     exportGroupsMap.set(dayKey, []);
                 }
@@ -234,9 +250,13 @@ export default function ManagerRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = (a.entry_date || '').localeCompare(b.entry_date || '');
+                        const dateA = filterBy === 'entry' ? a.entry_date : a.exit_date;
+                        const dateB = filterBy === 'entry' ? b.entry_date : b.exit_date;
+                        const dateCompare = (dateA || '').localeCompare(dateB || '');
                         if (dateCompare !== 0) return dateCompare;
-                        return (a.entry_time || '').localeCompare(b.entry_time || '');
+                        const timeA = filterBy === 'entry' ? a.entry_time : a.exit_time;
+                        const timeB = filterBy === 'entry' ? b.entry_time : b.exit_time;
+                        return (timeA || '').localeCompare(timeB || '');
                     })
                 }));
 
@@ -279,7 +299,8 @@ export default function ManagerRecords() {
             message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -314,7 +335,8 @@ export default function ManagerRecords() {
                     message.success('Kayıt silindi');
                 } catch (error) {
                     console.error('Kayıt silinemedi:', error);
-                    message.error('Kayıt silinirken bir hata oluştu');
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'Kayıt silinirken bir hata oluştu');
                 }
             }
         });
@@ -327,7 +349,8 @@ export default function ManagerRecords() {
             message.success('Kayıt geri alındı');
         } catch (error) {
             console.error('Kayıt geri alınamadı:', error);
-            message.error('Kayıt geri alınırken bir hata oluştu');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıt geri alınırken bir hata oluştu');
         }
     };
 

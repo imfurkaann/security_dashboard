@@ -61,6 +61,9 @@ export default function AdminManagerRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
     const [isExporting, setIsExporting] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null);
@@ -99,13 +102,22 @@ export default function AdminManagerRecords() {
         exitDateEnd: ''
     });
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchManagers = useCallback(async () => {
+        try {
+            const response = await api.get('/managers/options');
+            setManagersList(response.data || []);
+        } catch (error) {
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Müdür listesi yüklenemedi');
+        }
+    }, []);
+
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
             params.append('limit', String(PAGE_SIZE));
             params.append('offset', String(offset));
-
             if (filters.manager_name) params.append('manager_name', filters.manager_name);
             if (filters.entry_by) params.append('entry_by', filters.entry_by);
             if (filters.exit_by) params.append('exit_by', filters.exit_by);
@@ -116,38 +128,58 @@ export default function AdminManagerRecords() {
             if (filters.exitDateStart) params.append('exitDateStart', filters.exitDateStart);
             if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
 
-            const [recordsRes, managersRes] = await Promise.all([
-                api.get(`/managers/records?${params.toString()}&_t=${Date.now()}`),
-                managersList.length === 0 ? api.get('/vehicles/managers') : Promise.resolve(null)
-            ]);
-
-            const fetched: ManagerRecord[] = recordsRes.data || [];
+            const response = await api.get(`/managers/records?${params.toString()}`);
+            if (requestVersion !== requestVersionRef.current) return;
+            const fetched: ManagerRecord[] = response.data || [];
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords((previous) => {
+                    const merged = new Map(previous.map((record) => [record.id, record]));
+                    fetched.forEach((record) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current += fetched.length;
             } else {
                 setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
             }
-
-            if (managersRes) setManagersList(managersRes.data || []);
-
             setHasMore(fetched.length === PAGE_SIZE);
         } catch (error) {
-            message.error('Veriler yüklenemedi');
+            if (requestVersion !== requestVersionRef.current) return;
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
-    }, [filters, managersList.length]);
+    }, [filters]);
 
     useEffect(() => {
+        void fetchManagers();
+    }, [fetchManagers]);
+
+    useEffect(() => {
+        const requestVersion = ++requestVersionRef.current;
         setLoading(true);
-        void fetchData(0, false);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
+        const timer = window.setTimeout(() => void fetchData(0, false, requestVersion), 300);
+        return () => window.clearTimeout(timer);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['managers'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: () => {
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            nextOffsetRef.current = 0;
+            void fetchData(0, false, requestVersion);
+            void fetchManagers();
+        },
         enabled: true,
     });
 
@@ -249,7 +281,8 @@ export default function AdminManagerRecords() {
             const exportGroupsMap = new Map<string, ManagerRecord[]>();
 
             exportableRecords.forEach((record) => {
-                const dayKey = dayjs(record.entry_date).format('YYYY-MM-DD');
+                const groupingDate = filterBy === 'entry' ? record.entry_date : record.exit_date;
+                const dayKey = dayjs(groupingDate).format('YYYY-MM-DD');
                 if (!exportGroupsMap.has(dayKey)) {
                     exportGroupsMap.set(dayKey, []);
                 }
@@ -262,9 +295,13 @@ export default function AdminManagerRecords() {
                     dayKey,
                     dayLabel: dayjs(dayKey).format('DD MMMM YYYY dddd'),
                     records: [...items].sort((a, b) => {
-                        const dateCompare = (a.entry_date || '').localeCompare(b.entry_date || '');
+                        const dateA = filterBy === 'entry' ? a.entry_date : a.exit_date;
+                        const dateB = filterBy === 'entry' ? b.entry_date : b.exit_date;
+                        const dateCompare = (dateA || '').localeCompare(dateB || '');
                         if (dateCompare !== 0) return dateCompare;
-                        return (a.entry_time || '').localeCompare(b.entry_time || '');
+                        const timeA = filterBy === 'entry' ? a.entry_time : a.exit_time;
+                        const timeB = filterBy === 'entry' ? b.entry_time : b.exit_time;
+                        return (timeA || '').localeCompare(timeB || '');
                     })
                 }));
 
@@ -307,7 +344,8 @@ export default function AdminManagerRecords() {
             message.success('Kayıtlar başarıyla indirildi');
         } catch (error) {
             console.error('Export hatası:', error);
-            message.error('Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
+            const err = error as { response?: { data?: { message?: string } } };
+            message.error(err.response?.data?.message || 'Kayıtlar indirilirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.');
         } finally {
             setIsExporting(false);
         }
@@ -342,7 +380,8 @@ export default function AdminManagerRecords() {
                     message.success('Kayıt silindi');
                 } catch (error) {
                     console.error('Kayıt silinemedi:', error);
-                    message.error('Kayıt silinirken bir hata oluştu');
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'Kayıt silinirken bir hata oluştu');
                 }
             }
         });
@@ -361,7 +400,8 @@ export default function AdminManagerRecords() {
                     message.success('Kayıt geri alındı');
                 } catch (error) {
                     console.error('Kayıt geri alınamadı:', error);
-                    message.error('Kayıt geri alınırken bir hata oluştu');
+                    const err = error as { response?: { data?: { message?: string } } };
+                    message.error(err.response?.data?.message || 'Kayıt geri alınırken bir hata oluştu');
                 }
             }
         });
@@ -402,6 +442,10 @@ export default function AdminManagerRecords() {
 
         if (createEntryDate && createExitDate && createExitDate < createEntryDate) {
             message.warning('Çıkış tarihi giriş tarihinden önce olamaz');
+            return;
+        }
+        if ((createExitDate && !createExitTime) || (!createExitDate && createExitTime)) {
+            message.warning('Çıkış tarihi ve saati birlikte girilmelidir');
             return;
         }
 
@@ -460,6 +504,18 @@ export default function AdminManagerRecords() {
 
         if (editNotes.length > 1000) {
             message.warning('Açıklama en fazla 1000 karakter olabilir');
+            return;
+        }
+        if (!editEntryDate || !editEntryTime) {
+            message.warning('Giriş tarihi ve saati zorunludur');
+            return;
+        }
+        if (editExitDate && editExitDate < editEntryDate) {
+            message.warning('Çıkış tarihi giriş tarihinden önce olamaz');
+            return;
+        }
+        if ((editExitDate && !editExitTime) || (!editExitDate && editExitTime)) {
+            message.warning('Çıkış tarihi ve saati birlikte girilmelidir');
             return;
         }
 
@@ -532,43 +588,33 @@ export default function AdminManagerRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    // Infinite scroll: load more when scrolling near bottom (container + window fallback)
+    // Infinite scroll: guarded against duplicate and stale page requests.
     useEffect(() => {
         const node = tableScrollRef.current;
         if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300; // px from bottom to trigger
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
+        const loadNextPage = () => {
+            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
         };
-
-        node.addEventListener('scroll', onScroll);
-
+        const onScroll = () => {
+            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
+            if (remaining < 300) loadNextPage();
+        };
         const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
             const scrollTop = window.scrollY || document.documentElement.scrollTop;
             const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
+            const remaining = document.documentElement.scrollHeight - windowHeight - scrollTop;
+            if (remaining < 400) loadNextPage();
         };
-
+        node.addEventListener('scroll', onScroll);
         window.addEventListener('scroll', onWindowScroll);
-
         return () => {
             node.removeEventListener('scroll', onScroll);
             window.removeEventListener('scroll', onWindowScroll);
         };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    }, [fetchData, loadingMore, hasMore]);
 
     const isScrollingTable = useRef(false);
     const isScrollingBar = useRef(false);

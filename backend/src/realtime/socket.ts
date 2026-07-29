@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
+import { getTokenFromCookieHeader } from '../utils/authCookies';
 
 export type ApiMutationEvent = {
     method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -75,7 +76,9 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
     // JWT Authentication middleware
     io.use((socket, next) => {
         try {
-            const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+            const token = getTokenFromCookieHeader(socket.handshake.headers.cookie)
+                || socket.handshake.auth?.token
+                || socket.handshake.headers?.authorization?.replace('Bearer ', '');
             
             if (!token) {
                 (socket as any).user = null;
@@ -112,6 +115,16 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
             // Join admin room explicitly if user is admin
             if (user.isAdmin) {
                 socket.join('role:admin');
+            }
+
+            const expiresAt = Number(user.exp) * 1000;
+            if (Number.isFinite(expiresAt)) {
+                const remainingLifetime = Math.max(0, expiresAt - Date.now());
+                const expiryTimer = setTimeout(
+                    () => socket.disconnect(true),
+                    Math.min(remainingLifetime, 2_147_483_647)
+                );
+                socket.once('disconnect', () => clearTimeout(expiryTimer));
             }
         }
 

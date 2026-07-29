@@ -17,14 +17,6 @@ export function useAuth() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     const checkAuth = useCallback(async () => {
-        const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-
-        if (!token) {
-            setIsAuthenticated(false);
-            setLoading(false);
-            return;
-        }
-
         try {
             const response = await api.get('/auth/me');
             if (response.data.success && response.data.data) {

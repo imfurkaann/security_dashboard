@@ -6,6 +6,7 @@ import {
     loginValidation,
 } from '../controllers/authController';
 import { authMiddleware } from '../middleware/auth';
+import { loginRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ const router = Router();
  * @desc    Login user
  * @access  Public
  */
-router.post('/login', loginValidation, login);
+router.post('/login', loginRateLimiter, loginValidation, login);
 
 /**
  * @route   POST /api/auth/logout

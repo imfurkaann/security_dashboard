@@ -4,12 +4,22 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import dayjs from '../utils/dayjsConfig';
 import { isValidLength } from '../utils/validation';
-import type { ManagerRecord, Manager, ManagerFilterType } from '../types';
-import ActionButton from '../components/ActionButton';
+import type { ManagerRecord, ManagerFilterType } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { message, Modal } from 'antd';
 import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
+
+const getIstanbulDate = (): string => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+};
 
 interface CompactActionButtonProps {
     onClick: () => void;
@@ -71,6 +81,7 @@ interface Personnel {
 export default function Managers() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,23 +100,28 @@ export default function Managers() {
     const isAdminPage = location.pathname.startsWith('/admin');
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+    const recordsRequestVersionRef = useRef(0);
 
     // Fetch manager records
     const fetchData = useCallback(async () => {
+        const requestVersion = ++recordsRequestVersionRef.current;
         try {
-            const res = await api.get('/managers/records?includeDeleted=true');
+            const activityDate = getIstanbulDate();
+            const res = await api.get(`/managers/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`);
+            if (requestVersion !== recordsRequestVersionRef.current) return;
             setRecords(res.data || []);
         } catch (err) {
+            if (requestVersion !== recordsRequestVersionRef.current) return;
             console.error('Müdür verisi yüklenemedi', err);
         } finally {
-            setLoading(false);
+            if (requestVersion === recordsRequestVersionRef.current) setLoading(false);
         }
     }, []);
 
     // Fetch managers list
     const fetchManagers = useCallback(async () => {
         try {
-            const res = await api.get('/vehicles/managers');
+            const res = await api.get('/managers/options');
             setManagersList(res.data || []);
         } catch (err) {
             console.warn('Müdür listesi yüklenemedi', err);
@@ -118,6 +134,7 @@ export default function Managers() {
     }, [fetchData, fetchManagers]);
 
     const refreshManagersRealtime = useCallback(async () => {
+        if (document.hidden) return;
         await Promise.all([fetchData(), fetchManagers()]);
     }, [fetchData, fetchManagers]);
 
@@ -126,6 +143,21 @@ export default function Managers() {
         onMutation: refreshManagersRealtime,
         enabled: true,
     });
+
+    useEffect(() => {
+        const intervalId = window.setInterval(() => void refreshManagersRealtime(), 30000);
+        const handleFocus = () => void refreshManagersRealtime();
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') void refreshManagersRealtime();
+        };
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => {
+            window.clearInterval(intervalId);
+            window.removeEventListener('focus', handleFocus);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, [refreshManagersRealtime]);
 
     // Reset form to initial state
     const resetForm = useCallback(() => {
@@ -148,13 +180,9 @@ export default function Managers() {
         setShowModal(true);
     }, [resetForm, isAdminPage]);
 
-    // Open modal for editing
+    // Open modal for editing (admin view only)
     const openModalForEdit = useCallback((rec: ManagerRecord) => {
-        const found = managersList.find(p => {
-            const name = p.first_name ? `${p.first_name} ${p.last_name}` : p.full_name;
-            return name === (rec.manager || '');
-        });
-        setSelectedManagerId(found ? found.id : null);
+        setSelectedManagerId(rec.manager_id || null);
         setNotes(rec.notes || '');
         setEntryDate(rec.entry_date ? dayjs(rec.entry_date).format('YYYY-MM-DD') : '');
         setExitDate(rec.exit_date ? dayjs(rec.exit_date).format('YYYY-MM-DD') : '');
@@ -163,54 +191,61 @@ export default function Managers() {
         setIsEditing(true);
         setEditingId(rec.id);
         setShowModal(true);
-    }, [managersList]);
+    }, []);
 
     // Form submission handler
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!selectedManagerId) {
+        if (isSubmitting) return;
+        if (!isEditing && !selectedManagerId) {
             message.warning('Lütfen listeden bir müdür seçin.');
             return;
         }
-
-        // Frontend validasyon
         if (!isValidLength(notes, 0, 1000)) {
             message.error('Açıklama en fazla 1000 karakter olabilir');
             return;
         }
-
-        if (isAdminPage && !isEditing && entryDate && exitDate && exitDate < entryDate) {
+        if (isAdminPage && entryDate && exitDate && exitDate < entryDate) {
             message.error('Çıkış tarihi giriş tarihinden önce olamaz');
+            return;
+        }
+        if (isAdminPage && ((exitDate && !exitTime) || (!exitDate && exitTime))) {
+            message.error('Çıkış tarihi ve saati birlikte girilmelidir');
             return;
         }
 
         try {
-            const payload = {
-                manager_id: selectedManagerId,
-                notes: notes?.trim() || null,
-                entry_date: isAdminPage && !isEditing ? (entryDate || null) : null,
-                exit_date: isAdminPage && !isEditing ? (exitDate || null) : null,
-                entry_time: entryTime || null,
-                exit_time: exitTime || null
-            };
-
+            setIsSubmitting(true);
             if (isEditing && editingId) {
-                await api.put(`/managers/records/${editingId}`, payload);
+                await api.put(`/managers/records/${editingId}`, {
+                    notes: notes.trim() || null,
+                    entry_date: entryDate,
+                    entry_time: entryTime,
+                    exit_date: exitDate || null,
+                    exit_time: exitTime || null
+                });
                 message.success('Müdür kaydı güncellendi');
             } else {
-                await api.post('/managers/records', payload);
+                await api.post('/managers/records', {
+                    manager_id: selectedManagerId,
+                    notes: notes.trim() || null,
+                    entry_date: isAdminPage ? (entryDate || null) : null,
+                    exit_date: isAdminPage ? (exitDate || null) : null,
+                    entry_time: entryTime || null,
+                    exit_time: isAdminPage ? (exitTime || null) : null
+                });
                 message.success('Müdür giriş kaydı oluşturuldu');
             }
-
             setShowModal(false);
             resetForm();
-            fetchData();
+            await fetchData();
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
-            message.error(err?.response?.data?.message || 'İşlem başarısız');
+            message.error(err.response?.data?.message || 'İşlem başarısız');
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [selectedManagerId, notes, entryDate, exitDate, entryTime, exitTime, isAdminPage, isEditing, editingId, resetForm, fetchData]);
+    }, [selectedManagerId, notes, entryDate, exitDate, entryTime, exitTime, isAdminPage, isEditing, editingId, isSubmitting, resetForm, fetchData]);
 
     // Handle manager exit
     const handleExit = useCallback(async (id: string) => {
@@ -560,6 +595,18 @@ export default function Managers() {
                                                     {/* İşlem */}
                                                     <td className="px-3 py-2.5 whitespace-nowrap align-top">
                                                         <div className="flex flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap">
+                                                            {isAdminPage && !rec.deleted_at && (
+                                                                <CompactActionButton
+                                                                    onClick={() => openModalForEdit(rec)}
+                                                                    variant="primary"
+                                                                    label="Düzenle"
+                                                                    icon={
+                                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.862 3.487a2.121 2.121 0 013 3L8.5 17.85 4 19l1.15-4.5L16.862 3.487z" />
+                                                                        </svg>
+                                                                    }
+                                                                />
+                                                            )}
                                                             {rec.status === 'inside' && !rec.deleted_at && (
                                                                 <CompactActionButton
                                                                     onClick={() => handleExit(rec.id)}
@@ -668,7 +715,7 @@ export default function Managers() {
                 <form onSubmit={handleSubmit} className="space-y-3">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Personel Seç</label>
-                        <select required value={selectedManagerId || ''} onChange={(e) => {
+                        <select required={!isEditing} disabled={isEditing} value={selectedManagerId || ''} onChange={(e) => {
                             const id = e.target.value || null;
                             setSelectedManagerId(id);
                         }} className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
@@ -680,7 +727,7 @@ export default function Managers() {
                     </div>
 
                     {/* Entry Time */}
-                    {isAdminPage && !isEditing && (
+                    {isAdminPage && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -720,14 +767,14 @@ export default function Managers() {
                             className="w-full px-4 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             style={{ colorScheme: 'light' }}
                         />
-                        <p className="mt-1 text-xs text-gray-500">Boş bırakırsanız anlık saat kaydedilir</p>
+                        {!isEditing && <p className="mt-1 text-xs text-gray-500">Boş bırakırsanız anlık saat kaydedilir</p>}
                     </div>
 
                     {/* Exit Time - only show when editing exited records */}
-                    {(isAdminPage || (isEditing && records.find(r => r.id === editingId)?.status === 'exited')) && (
+                    {isAdminPage && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Çıkış Saati (isteğe bağlı)
+                                Çıkış Saati {exitDate ? '(zorunlu)' : '(isteğe bağlı)'}
                             </label>
                             <input
                                 type="time"
@@ -752,7 +799,7 @@ export default function Managers() {
                     </div>
 
                     <div className="flex gap-3 pt-4 border-t border-gray-200">
-                        <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
+                        <button type="submit" disabled={isSubmitting} className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 text-white py-2.5 rounded-lg font-medium transition">{isSubmitting ? 'Kaydediliyor...' : (isEditing ? 'Güncelle' : 'Kaydet')}</button>
                         <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-medium transition">İptal</button>
                     </div>
                 </form>

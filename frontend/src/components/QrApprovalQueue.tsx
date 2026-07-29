@@ -171,8 +171,9 @@ export default function QrApprovalQueue() {
 
     // QR public pages should never display the approval modal
     const isQrPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/qr');
-    const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : null;
-    const isAuthenticated = !!token;
+    const hasStoredUser = typeof window !== 'undefined'
+        && Boolean(localStorage.getItem('user') || localStorage.getItem('adminUser'));
+    const isAuthenticated = !isQrPage && hasStoredUser;
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -326,12 +327,15 @@ export default function QrApprovalQueue() {
                 const endpoint = `/sgk/pending-qr/${activeRecord.id}/files/${selectedPreviewFile.id}`;
                 const response = await api.get(endpoint, { responseType: 'blob' });
 
+                const responseContentType = response.headers['content-type'];
+                const contentType = typeof responseContentType === 'string'
+                    ? responseContentType
+                    : 'application/octet-stream';
                 const blob = new Blob([response.data], {
-                    type: response.headers['content-type'] || 'application/octet-stream'
+                    type: contentType
                 });
 
                 const url = URL.createObjectURL(blob);
-                const contentType = response.headers['content-type'] || '';
 
                 setPdfUrl((previousUrl) => {
                     if (previousUrl) {

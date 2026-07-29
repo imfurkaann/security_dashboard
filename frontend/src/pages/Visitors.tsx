@@ -30,6 +30,17 @@ const normalizeSearchText = (value: string | null | undefined): string => {
     return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
 };
 
+const getIstanbulDate = (): string => {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(new Date());
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+};
+
 const getVisitorTags = (record: VisitorRecord): string[] => {
     const tags: string[] = [];
     if (record.subcontractor_worker) tags.push('Taşeron İşçi');
@@ -143,6 +154,8 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     exit_time: ''
 };
 
+type VisitorSuggestionField = 'full_name' | 'company_name' | 'vehicle_plate';
+
 export default function Visitors() {
     const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [records, setRecords] = useState<VisitorRecord[]>([]);
@@ -152,6 +165,7 @@ export default function Visitors() {
     const [whatsappMessage, setWhatsappMessage] = useState('');
     const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [filter, setFilter] = useState<VisitorFilterType>('today');
@@ -168,16 +182,27 @@ export default function Visitors() {
     const [predefinedSuggestions, setPredefinedSuggestions] = useState<PredefinedVisitor[]>([]);
     const [showPredefinedSuggestions, setShowPredefinedSuggestions] = useState(false);
     const [isSearchingPredefined, setIsSearchingPredefined] = useState(false);
-    const selectedPredefinedRef = useRef<string | null>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const [activeSuggestionField, setActiveSuggestionField] = useState<VisitorSuggestionField>('full_name');
+    const suppressNextSuggestionSearchRef = useRef(false);
+    const suggestionBlurTimeoutRef = useRef<number | null>(null);
+    const nameInputRef = useRef<HTMLInputElement>(null);
+    const companyInputRef = useRef<HTMLInputElement>(null);
+    const plateInputRef = useRef<HTMLInputElement>(null);
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+    const recordsRequestVersionRef = useRef(0);
+    const predefinedRequestVersionRef = useRef(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     const updateDropdownPosition = useCallback(() => {
-        if (!inputRef.current) return;
-        const rect = inputRef.current.getBoundingClientRect();
+        const activeInput = activeSuggestionField === 'full_name'
+            ? nameInputRef.current
+            : activeSuggestionField === 'company_name'
+                ? companyInputRef.current
+                : plateInputRef.current;
+        if (!activeInput) return;
+        const rect = activeInput.getBoundingClientRect();
         setDropdownStyle({
             position: 'fixed',
             left: `${rect.left}px`,
@@ -185,7 +210,7 @@ export default function Visitors() {
             top: `${rect.bottom + 4}px`,
             zIndex: 9999,
         });
-    }, []);
+    }, [activeSuggestionField]);
 
     useEffect(() => {
         if (!showPredefinedSuggestions || predefinedSuggestions.length === 0) return;
@@ -205,45 +230,62 @@ export default function Visitors() {
     }, [showPredefinedSuggestions, predefinedSuggestions, updateDropdownPosition]);
 
     useEffect(() => {
+        const requestVersion = ++predefinedRequestVersionRef.current;
         if (!showModal) {
             setPredefinedSuggestions([]);
             setShowPredefinedSuggestions(false);
+            setIsSearchingPredefined(false);
             return;
         }
 
-        const query = formData.full_name?.trim() || '';
+        const query = String(formData[activeSuggestionField] || '').trim();
 
-        if (!query || query.length < 2) {
+        if (query.length < 2) {
             setPredefinedSuggestions([]);
             setShowPredefinedSuggestions(false);
+            setIsSearchingPredefined(false);
             return;
         }
 
-        if (selectedPredefinedRef.current === formData.full_name) {
+        if (suppressNextSuggestionSearchRef.current) {
+            suppressNextSuggestionSearchRef.current = false;
             return;
         }
 
-        const delayDebounceFn = setTimeout(async () => {
+        const delayDebounceFn = window.setTimeout(async () => {
             try {
                 setIsSearchingPredefined(true);
-                const response = await api.get(`/predefined-visitors/search?q=${encodeURIComponent(formData.full_name)}`);
+                const response = await api.get('/predefined-visitors/search', {
+                    params: { q: query, field: activeSuggestionField }
+                });
+                if (requestVersion !== predefinedRequestVersionRef.current) return;
                 if (response.data?.success) {
-                    const data = response.data.data || [];
+                    const data: PredefinedVisitor[] = response.data.data || [];
                     setPredefinedSuggestions(data);
                     setShowPredefinedSuggestions(data.length > 0);
                 }
             } catch (error) {
+                if (requestVersion !== predefinedRequestVersionRef.current) return;
+                setPredefinedSuggestions([]);
+                setShowPredefinedSuggestions(false);
                 console.error('Predefined visitors search failed:', error);
             } finally {
-                setIsSearchingPredefined(false);
+                if (requestVersion === predefinedRequestVersionRef.current) setIsSearchingPredefined(false);
             }
         }, 300);
 
-        return () => clearTimeout(delayDebounceFn);
-    }, [formData.full_name, showModal]);
+        return () => {
+            window.clearTimeout(delayDebounceFn);
+            if (requestVersion === predefinedRequestVersionRef.current) predefinedRequestVersionRef.current++;
+        };
+    }, [activeSuggestionField, formData.full_name, formData.company_name, formData.vehicle_plate, showModal]);
 
     const handleSelectPredefined = (visitor: PredefinedVisitor) => {
-        selectedPredefinedRef.current = visitor.full_name;
+        suppressNextSuggestionSearchRef.current = true;
+        if (suggestionBlurTimeoutRef.current !== null) {
+            window.clearTimeout(suggestionBlurTimeoutRef.current);
+            suggestionBlurTimeoutRef.current = null;
+        }
         setFormData((prev) => ({
             ...prev,
             full_name: visitor.full_name,
@@ -252,6 +294,7 @@ export default function Visitors() {
             vehicle_plate: visitor.vehicle_plate || prev.vehicle_plate,
             visiting_person: visitor.visiting_person || prev.visiting_person,
             notes: visitor.notes || prev.notes,
+            highlight_color: visitor.highlight_color || prev.highlight_color,
             subcontractor_worker: visitor.subcontractor_worker ?? prev.subcontractor_worker,
             for_electric_station: visitor.for_electric_station ?? prev.for_electric_station,
             daily_guest: visitor.daily_guest ?? prev.daily_guest,
@@ -265,15 +308,52 @@ export default function Visitors() {
         setShowPredefinedSuggestions(false);
     };
 
+    const handleSuggestionFieldChange = (field: VisitorSuggestionField, value: string) => {
+        suppressNextSuggestionSearchRef.current = false;
+        setActiveSuggestionField(field);
+        setPredefinedSuggestions([]);
+        setShowPredefinedSuggestions(false);
+        setFormData((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleSuggestionFieldFocus = (field: VisitorSuggestionField) => {
+        if (suggestionBlurTimeoutRef.current !== null) {
+            window.clearTimeout(suggestionBlurTimeoutRef.current);
+            suggestionBlurTimeoutRef.current = null;
+        }
+
+        if (field !== activeSuggestionField) {
+            setPredefinedSuggestions([]);
+            setShowPredefinedSuggestions(false);
+        } else if (String(formData[field] || '').trim().length >= 2 && predefinedSuggestions.length > 0) {
+            setShowPredefinedSuggestions(true);
+        }
+        setActiveSuggestionField(field);
+    };
+
+    const handleSuggestionFieldBlur = () => {
+        if (suggestionBlurTimeoutRef.current !== null) {
+            window.clearTimeout(suggestionBlurTimeoutRef.current);
+        }
+        suggestionBlurTimeoutRef.current = window.setTimeout(() => {
+            setShowPredefinedSuggestions(false);
+            suggestionBlurTimeoutRef.current = null;
+        }, 200);
+    };
+
     // Fetch visitor records
     const fetchData = useCallback(async () => {
+        const requestVersion = ++recordsRequestVersionRef.current;
         try {
-            const res = await api.get('/visitors/records?includeDeleted=true');
+            const activityDate = getIstanbulDate();
+            const res = await api.get(`/visitors/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`);
+            if (requestVersion !== recordsRequestVersionRef.current) return;
             setRecords(res.data || []);
         } catch (err) {
+            if (requestVersion !== recordsRequestVersionRef.current) return;
             console.error('Ziyaretçi verisi yüklenemedi', err);
         } finally {
-            setLoading(false);
+            if (requestVersion === recordsRequestVersionRef.current) setLoading(false);
         }
     }, []);
 
@@ -285,13 +365,11 @@ export default function Visitors() {
         if (document.hidden) return;
 
         try {
-            const res = await api.get('/visitors/records?includeDeleted=true');
-            const nextRecords: VisitorRecord[] = res.data || [];
-            setRecords(nextRecords);
+            await fetchData();
         } catch (error) {
             console.error('Ziyaretçi canlı yenileme hatası:', error);
         }
-    }, []);
+    }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['visitors'],
@@ -302,7 +380,7 @@ export default function Visitors() {
         // Websocket baglantisi ag/proxy nedeniyle koparsa, sayfayi arka planda taze tut.
         const intervalId = window.setInterval(() => {
             void refreshRecordsWithRealtimeNotification();
-        }, 7000);
+        }, 30000);
 
         const handleFocus = () => {
             void refreshRecordsWithRealtimeNotification();
@@ -332,7 +410,12 @@ export default function Visitors() {
         setOpenTagsDropdown(false);
         setPredefinedSuggestions([]);
         setShowPredefinedSuggestions(false);
-        selectedPredefinedRef.current = null;
+        suppressNextSuggestionSearchRef.current = false;
+        setActiveSuggestionField('full_name');
+        if (suggestionBlurTimeoutRef.current !== null) {
+            window.clearTimeout(suggestionBlurTimeoutRef.current);
+            suggestionBlurTimeoutRef.current = null;
+        }
     }, []);
 
     // Open modal for new record
@@ -401,6 +484,7 @@ export default function Visitors() {
     // Form submission handler
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSubmitting) return;
 
         // Frontend validasyon
         const validation = validateVisitorForm(formData);
@@ -418,6 +502,7 @@ export default function Visitors() {
             return;
         }
 
+        setIsSubmitting(true);
         try {
             const payload = buildPayload();
 
@@ -443,8 +528,10 @@ export default function Visitors() {
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'İşlem başarısız');
+        } finally {
+            setIsSubmitting(false);
         }
-    }, [formData, buildPayload, isEditing, editingId, resetForm, fetchData]);
+    }, [formData, buildPayload, isEditing, editingId, resetForm, fetchData, isSubmitting]);
 
     // Handle visitor exit
     const handleExit = useCallback(async (id: string) => {
@@ -1135,30 +1222,30 @@ export default function Visitors() {
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Ad Soyad</label>
                                         <div className="relative">
                                             <input
-                                                ref={inputRef}
+                                                ref={nameInputRef}
                                                 value={formData.full_name || ''}
-                                                onChange={(e) => {
-                                                    selectedPredefinedRef.current = null;
-                                                    setFormData({ ...formData, full_name: e.target.value });
-                                                }}
-                                                onFocus={() => {
-                                                    if (predefinedSuggestions.length > 0) {
-                                                        setShowPredefinedSuggestions(true);
-                                                    }
-                                                }}
-                                                onBlur={() => {
-                                                    setTimeout(() => {
-                                                        setShowPredefinedSuggestions(false);
-                                                    }, 200);
-                                                }}
+                                                onChange={(e) => handleSuggestionFieldChange('full_name', e.target.value)}
+                                                onFocus={() => handleSuggestionFieldFocus('full_name')}
+                                                onBlur={handleSuggestionFieldBlur}
+                                                autoComplete="off"
+                                                aria-autocomplete="list"
+                                                aria-controls="visitor-history-suggestions"
+                                                aria-expanded={activeSuggestionField === 'full_name' && showPredefinedSuggestions}
+                                                aria-busy={activeSuggestionField === 'full_name' && isSearchingPredefined}
                                                 placeholder="Ziyaretçinin adı soyadı"
                                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             />
                                             {showPredefinedSuggestions && predefinedSuggestions.length > 0 && createPortal(
-                                                <div 
+                                                <div
+                                                    id="visitor-history-suggestions"
+                                                    role="listbox"
+                                                    aria-label="Son dönemde sık giriş yapan ziyaretçiler"
                                                     style={dropdownStyle}
-                                                    className="bg-white border border-gray-300 rounded-lg shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-100"
+                                                    className="bg-white border border-gray-300 rounded-lg shadow-xl max-h-56 overflow-y-auto divide-y divide-gray-100"
                                                 >
+                                                    <div className="sticky top-0 z-10 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-600">
+                                                        Son dönemde sık giriş yapanlar — seçerek formu doldurun
+                                                    </div>
                                                     {predefinedSuggestions.map((visitor) => {
                                                         const tags: string[] = [];
                                                         if (visitor.subcontractor_worker) tags.push('Taşeron İşçi');
@@ -1182,7 +1269,9 @@ export default function Visitors() {
                                                                     e.preventDefault();
                                                                     handleSelectPredefined(visitor);
                                                                 }}
-                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 transition flex flex-col gap-1"
+                                                                role="option"
+                                                                aria-selected="false"
+                                                                className="w-full text-left px-3 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none transition flex flex-col gap-1"
                                                             >
                                                                 {/* İsim */}
                                                                 <span className="text-sm font-semibold text-gray-900">{visitor.full_name}</span>
@@ -1202,6 +1291,11 @@ export default function Visitors() {
                                                                     {visitor.phone && (
                                                                         <span className="bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
                                                                             Tel: <span className="text-gray-900 font-medium">{formatPhoneNumber(visitor.phone)}</span>
+                                                                        </span>
+                                                                    )}
+                                                                    {(visitor.visit_count || 0) > 0 && (
+                                                                        <span className="bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 text-emerald-700 font-medium">
+                                                                            Sık ziyaretçi · Son 90 günde {visitor.visit_count} giriş
                                                                         </span>
                                                                     )}
                                                                     {tags.map((t, i) => (
@@ -1226,12 +1320,38 @@ export default function Visitors() {
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Plaka</label>
-                                        <input value={formData.vehicle_plate || ''} onChange={(e) => setFormData({ ...formData, vehicle_plate: e.target.value })} placeholder="TR 34 XXX 34" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                        <input
+                                            ref={plateInputRef}
+                                            value={formData.vehicle_plate || ''}
+                                            onChange={(e) => handleSuggestionFieldChange('vehicle_plate', e.target.value)}
+                                            onFocus={() => handleSuggestionFieldFocus('vehicle_plate')}
+                                            onBlur={handleSuggestionFieldBlur}
+                                            autoComplete="off"
+                                            aria-autocomplete="list"
+                                            aria-controls="visitor-history-suggestions"
+                                            aria-expanded={activeSuggestionField === 'vehicle_plate' && showPredefinedSuggestions}
+                                            aria-busy={activeSuggestionField === 'vehicle_plate' && isSearchingPredefined}
+                                            placeholder="TR 34 XXX 34"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Firma</label>
-                                        <input value={formData.company_name || ''} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} placeholder="Firma adı" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                                        <input
+                                            ref={companyInputRef}
+                                            value={formData.company_name || ''}
+                                            onChange={(e) => handleSuggestionFieldChange('company_name', e.target.value)}
+                                            onFocus={() => handleSuggestionFieldFocus('company_name')}
+                                            onBlur={handleSuggestionFieldBlur}
+                                            autoComplete="off"
+                                            aria-autocomplete="list"
+                                            aria-controls="visitor-history-suggestions"
+                                            aria-expanded={activeSuggestionField === 'company_name' && showPredefinedSuggestions}
+                                            aria-busy={activeSuggestionField === 'company_name' && isSearchingPredefined}
+                                            placeholder="Firma adı"
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
                                     </div>
 
                                     <div>
@@ -1340,8 +1460,8 @@ export default function Visitors() {
                                 </div>
 
                                 <div className="flex gap-3 pt-4">
-                                    <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition">{isEditing ? 'Güncelle' : 'Kaydet'}</button>
-                                    <button type="button" onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition">İptal</button>
+                                    <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">{isSubmitting ? 'Kaydediliyor...' : (isEditing ? 'Güncelle' : 'Kaydet')}</button>
+                                    <button type="button" disabled={isSubmitting} onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed">İptal</button>
                                 </div>
                             </form>
                         </div>

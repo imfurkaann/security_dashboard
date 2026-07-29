@@ -21,14 +21,6 @@ export function useWebSocketNotifications() {
       // QR sayfalarinda bildirim gostermeyelim.
       if (window.location.pathname.startsWith('/qr')) return;
 
-      // Debug: log every incoming api:mutation event
-      try {
-        // eslint-disable-next-line no-console
-        console.debug('[useWebSocketNotifications] api:mutation event', event);
-      } catch (err) {
-        // ignore logging errors
-      }
-
       try {
         // QR Ziyaretçi Kaydı
         if (
