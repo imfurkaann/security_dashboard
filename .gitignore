@@ -30,6 +30,7 @@ Thumbs.db
 # Database
 *.sql.backup
 *.dump
+!db_yedek.dump
 
 # Local Docker secret material
 secrets/
