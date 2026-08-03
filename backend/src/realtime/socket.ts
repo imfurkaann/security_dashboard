@@ -50,17 +50,24 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
                     callback(null, origin || true);
                     return;
                 }
+                const publicHostIp = process.env.PUBLIC_HOST_IP?.trim();
+                const frontendPort = process.env.FRONTEND_PORT || '33334';
                 const allowedOrigins = [
-                    process.env.FRONTEND_URL || 'http://localhost:5174',
+                    process.env.FRONTEND_URL,
+                    publicHostIp ? `http://${publicHostIp}:${frontendPort}` : null,
+                    publicHostIp ? `http://${publicHostIp}` : null,
+                    publicHostIp ? `https://${publicHostIp}:${frontendPort}` : null,
+                    publicHostIp ? `https://${publicHostIp}` : null,
+                    'http://localhost:5174',
                     'http://localhost:5173',
                     'http://localhost:3000',
                     'http://localhost',
                     'http://localhost:80'
-                ].filter(Boolean);
-                const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-                const localNetworkPattern = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+                ].filter(Boolean) as string[];
+                const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+                const ipv4Pattern = /^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/;
 
-                if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin) || localNetworkPattern.test(origin)) {
+                if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin) || ipv4Pattern.test(origin)) {
                     callback(null, origin || true);
                 } else {
                     console.warn(`[realtime] CORS policy violation for WebSocket connection: ${origin}`);

@@ -77,20 +77,27 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 // GÜVENLİK: CORS yapılandırması
 // CORS_ORIGIN="*" ayarlandığında tüm originlere izin verir (yerel ağ paylaşımı için)
 const corsOriginSetting = process.env.CORS_ORIGIN;
+const publicHostIp = process.env.PUBLIC_HOST_IP?.trim();
+const frontendPort = process.env.FRONTEND_PORT || '33334';
 
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5174',
+    process.env.FRONTEND_URL,
+    publicHostIp ? `http://${publicHostIp}:${frontendPort}` : null,
+    publicHostIp ? `http://${publicHostIp}` : null,
+    publicHostIp ? `https://${publicHostIp}:${frontendPort}` : null,
+    publicHostIp ? `https://${publicHostIp}` : null,
+    'http://localhost:5174',
     'http://localhost:5173',
     'http://localhost:3000',
     'http://localhost',       // Docker frontend (port 80)
     'http://localhost:80'     // Docker frontend (explicit port)
-].filter(Boolean);
+].filter(Boolean) as string[];
 
-const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 app.use(cors({
     origin: (origin, callback) => {
-        // Eğer CORS_ORIGIN="*" ise tüm originlere izin ver (yerel ağ paylaşımı)
+        // Eğer CORS_ORIGIN="*" ise tüm originlere izin ver (yerel ağ / sunucu ortamı için)
         if (corsOriginSetting === '*') {
             callback(null, true);
             return;
@@ -99,9 +106,9 @@ app.use(cors({
         if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin)) {
             callback(null, true);
         } else {
-            // Yerel ağ IP'leri için de izin ver (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
-            const localNetworkPattern = /^http:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-            if (origin && localNetworkPattern.test(origin)) {
+            // IPv4 IP adresleri (192.168.x.x, 10.x.x.x, 172.x.x.x veya kamuya açık sunucu IP'leri)
+            const ipv4Pattern = /^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/;
+            if (origin && ipv4Pattern.test(origin)) {
                 callback(null, true);
             } else {
                 console.warn(`Reddedilen CORS isteği: ${origin}`);
