@@ -38,17 +38,25 @@ chmod -R 755 backend/reports backend/sgk_kayitlari
 # 4. Firewall (UFW) Port Kontrolü (Hata verirse atla)
 if command -v ufw > /dev/null 2>&1; then
     echo "🛡️  UFW güvenlik duvarı kontrol ediliyor..."
-    sudo ufw allow 33334/tcp 2>/dev/null || echo "⚠️  UFW izni verilemedi (sudo yetkisi yoksa sunucu panelinden 33334 portunu açın)."
+    sudo ufw allow 33334/tcp 2>/dev/null || true
 fi
 
-# 5. Docker Compose Komutunu Tespit Et (docker compose vs docker-compose)
+# 5. Docker Soket ve Sudo İzni Kontrolü
+SUDO_PREFIX=""
+if ! docker ps >/dev/null 2>&1; then
+    if sudo -n docker ps >/dev/null 2>&1 || sudo docker ps >/dev/null 2>&1; then
+        SUDO_PREFIX="sudo "
+    fi
+fi
+
+# 6. Docker Compose Komutunu Tespit Et (docker compose vs docker-compose)
 COMPOSE_CMD=""
-if docker compose version >/dev/null 2>&1; then
-    COMPOSE_CMD="docker compose"
+if ${SUDO_PREFIX}docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="${SUDO_PREFIX}docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
-    COMPOSE_CMD="docker-compose"
+    COMPOSE_CMD="${SUDO_PREFIX}docker-compose"
 else
-    echo "❌ HATA: Docker Compose bulunamadı! Lütfen 'docker-compose' veya 'docker compose' eklentisini yükleyin."
+    echo "❌ HATA: Docker Compose bulunamadı! Lütfen 'docker-compose' veya 'docker compose' yükleyin."
     exit 1
 fi
 
