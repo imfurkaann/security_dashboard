@@ -35,20 +35,32 @@ fi
 mkdir -p backend/reports backend/sgk_kayitlari database/migrations
 chmod -R 755 backend/reports backend/sgk_kayitlari
 
-# 4. Firewall (UFW) Port Kontrolü
+# 4. Firewall (UFW) Port Kontrolü (Hata verirse atla)
 if command -v ufw > /dev/null 2>&1; then
-    echo "🛡️  UFW güvenlik duvarı kontrol ediliyor... 33334 portuna izin veriliyor..."
-    sudo ufw allow 33334/tcp || true
+    echo "🛡️  UFW güvenlik duvarı kontrol ediliyor..."
+    sudo ufw allow 33334/tcp 2>/dev/null || echo "⚠️  UFW izni verilemedi (sudo yetkisi yoksa sunucu panelinden 33334 portunu açın)."
 fi
 
-# 5. Docker Konteynırlarını Build Et ve Başlat
+# 5. Docker Compose Komutunu Tespit Et (docker compose vs docker-compose)
+COMPOSE_CMD=""
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD="docker-compose"
+else
+    echo "❌ HATA: Docker Compose bulunamadı! Lütfen 'docker-compose' veya 'docker compose' eklentisini yükleyin."
+    exit 1
+fi
+
+echo "🐳 Docker Compose komutu kullanılacak: $COMPOSE_CMD"
 echo "🐳 Docker konteynırları inşa ediliyor ve başlatılıyor..."
-docker compose build --no-cache
-docker compose up -d
+
+$COMPOSE_CMD build --no-cache
+$COMPOSE_CMD up -d
 
 echo "======================================================================"
 echo "✅ DEPLOYMENT TAMAMLANDI!"
 echo "🌐 Sisteme Erişim Adresi: http://162.19.242.35:33334"
-echo "📊 Konteyner Durumları için: docker compose ps"
-echo "📜 Canlı Loglar için:        docker compose logs -f"
+echo "📊 Konteyner Durumları için: $COMPOSE_CMD ps"
+echo "📜 Canlı Loglar için:        $COMPOSE_CMD logs -f"
 echo "======================================================================"
