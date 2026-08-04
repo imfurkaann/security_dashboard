@@ -2,8 +2,16 @@
 -- Date: 2025-12-23
 -- Description: Veritabanı varsayılan timezone'unu Türkiye olarak ayarla
 
--- Veritabanı düzeyinde timezone ayarı
-ALTER DATABASE CURRENT SET timezone TO 'Europe/Istanbul';
+-- Veritabanı düzeyinde timezone ayarı (dinamik veritabanı adı ile)
+DO $$ 
+DECLARE
+    db_name text;
+BEGIN
+    SELECT current_database() INTO db_name;
+    EXECUTE format('ALTER DATABASE %I SET timezone TO %L', db_name, 'Europe/Istanbul');
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Could not alter database timezone, setting session timezone instead';
+END $$;
 
 -- Mevcut oturum için timezone ayarı
 SET timezone = 'Europe/Istanbul';
