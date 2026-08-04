@@ -68,11 +68,18 @@ ON visitor_records(personnel_name);
 COMMENT ON COLUMN visitor_records.personnel_name IS 'Ziyaretçiyi kaydeden personelin adı soyadı';
 
 -- Mevcut kayıtların personnel_name değerlerini güncelle
-UPDATE visitor_records vr
-SET personnel_name = CONCAT(p.first_name, ' ', p.last_name)
-FROM personnel p
-WHERE vr.personnel_id = p.id 
-  AND vr.personnel_name IS NULL;
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'visitor_records' AND column_name = 'entry_by') THEN
+        UPDATE visitor_records vr
+        SET personnel_name = CONCAT(p.first_name, ' ', p.last_name)
+        FROM personnel p
+        WHERE vr.entry_by = p.id 
+          AND vr.personnel_name IS NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'visitor_records' AND column_name = 'personnel_id') THEN
+        EXECUTE 'UPDATE visitor_records vr SET personnel_name = CONCAT(p.first_name, '' '', p.last_name) FROM personnel p WHERE vr.personnel_id = p.id AND vr.personnel_name IS NULL';
+    END IF;
+END $$;
 
 -- ==========================================
 -- 5. VEHICLE_RECORDS - personnel_name ekle
@@ -87,11 +94,18 @@ ON vehicle_records(personnel_name);
 COMMENT ON COLUMN vehicle_records.personnel_name IS 'Aracı teslim alan/veren personelin adı soyadı';
 
 -- Mevcut kayıtların personnel_name değerlerini güncelle
-UPDATE vehicle_records vr
-SET personnel_name = CONCAT(p.first_name, ' ', p.last_name)
-FROM personnel p
-WHERE vr.personnel_id = p.id 
-  AND vr.personnel_name IS NULL;
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicle_records' AND column_name = 'given_by') THEN
+        UPDATE vehicle_records vr
+        SET personnel_name = CONCAT(p.first_name, ' ', p.last_name)
+        FROM personnel p
+        WHERE vr.given_by = p.id 
+          AND vr.personnel_name IS NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicle_records' AND column_name = 'personnel_id') THEN
+        EXECUTE 'UPDATE vehicle_records vr SET personnel_name = CONCAT(p.first_name, '' '', p.last_name) FROM personnel p WHERE vr.personnel_id = p.id AND vr.personnel_name IS NULL';
+    END IF;
+END $$;
 
 -- ==========================================
 -- TRIGGER FONKSIYONLARI
@@ -140,10 +154,12 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION sync_visitor_personnel_name()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.personnel_id IS NOT NULL THEN
-        SELECT CONCAT(first_name, ' ', last_name) INTO NEW.personnel_name
-        FROM personnel
-        WHERE id = NEW.personnel_id;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'visitor_records' AND column_name = 'entry_by') THEN
+        IF NEW.entry_by IS NOT NULL THEN
+            SELECT CONCAT(first_name, ' ', last_name) INTO NEW.personnel_name
+            FROM personnel
+            WHERE id = NEW.entry_by;
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -153,10 +169,12 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION sync_vehicle_personnel_name()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.personnel_id IS NOT NULL THEN
-        SELECT CONCAT(first_name, ' ', last_name) INTO NEW.personnel_name
-        FROM personnel
-        WHERE id = NEW.personnel_id;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'vehicle_records' AND column_name = 'given_by') THEN
+        IF NEW.given_by IS NOT NULL THEN
+            SELECT CONCAT(first_name, ' ', last_name) INTO NEW.personnel_name
+            FROM personnel
+            WHERE id = NEW.given_by;
+        END IF;
     END IF;
     RETURN NEW;
 END;
