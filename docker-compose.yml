@@ -39,7 +39,7 @@ services:
       NODE_ENV: production
       PORT: 5000
       FRONTEND_PORT: ${FRONTEND_PORT:-33334}
-      PUBLIC_HOST_IP: ${PUBLIC_HOST_IP:-162.19.242.35}
+      PUBLIC_HOST_IP: ${PUBLIC_HOST_IP:-169.58.124.2}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-security_management}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Sunucu Deployment Betiği - Güvenlik Yönetim Sistemi
-# Hedef Adres: http://162.19.242.35:33334
+# Hedef Adres: http://169.58.124.2:33334
 # ==============================================================================
 
 set -e
@@ -13,7 +13,7 @@ if [ ! -f .env ]; then
     echo "📄 .env dosyası oluşturuluyor..."
     cat <<EOT > .env
 WHATSAPP_ENABLED=true
-PUBLIC_HOST_IP=162.19.242.35
+PUBLIC_HOST_IP=169.58.124.2
 FRONTEND_PORT=33334
 CORS_ORIGIN=*
 EOT
@@ -68,7 +68,7 @@ $COMPOSE_CMD up -d
 
 echo "======================================================================"
 echo "✅ DEPLOYMENT TAMAMLANDI!"
-echo "🌐 Sisteme Erişim Adresi: http://162.19.242.35:33334"
+echo "🌐 Sisteme Erişim Adresi: http://169.58.124.2:33334"
 echo "📊 Konteyner Durumları için: $COMPOSE_CMD ps"
 echo "📜 Canlı Loglar için:        $COMPOSE_CMD logs -f"
 echo "======================================================================"
