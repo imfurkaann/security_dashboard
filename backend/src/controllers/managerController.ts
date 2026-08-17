@@ -106,13 +106,13 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
         }
 
         if (req.query.entry_by) {
-            filters.push(`(LOWER(translate(mr.entry_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate(${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(pe.first_name, ' ', pe.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate(${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
+            filters.push(`(LOWER(translate(mr.entry_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(pe.first_name, ' ', pe.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.entry_by}%`);
             paramIndex++;
         }
 
         if (req.query.exit_by) {
-            filters.push(`(LOWER(translate(mr.exit_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate(${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(px.first_name, ' ', px.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate(${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
+            filters.push(`(LOWER(translate(mr.exit_by_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) OR LOWER(translate(CONCAT(px.first_name, ' ', px.last_name), 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramIndex}, 'IİĞÜŞÖÇ', 'ıiğüşöç')))`);
             queryParams.push(`%${req.query.exit_by}%`);
             paramIndex++;
         }
@@ -166,6 +166,7 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
 
         const query = `
             SELECT
+                COUNT(*) OVER()::int AS total_count,
                 mr.id,
                 mr.manager_id,
                 mr.manager_name,
@@ -205,6 +206,9 @@ export const getManagerRecords = async (req: Request, res: Response): Promise<vo
             res.status(413).json({ success: false, message: 'Dışa aktarım sonucu çok büyük; lütfen tarih aralığını daraltın' });
             return;
         }
+
+
+        res.setHeader('X-Total-Count', String(result.rows[0]?.total_count ?? 0));
 
         const formatted = result.rows.map((row: any) => ({
             id: row.id,
@@ -667,6 +671,24 @@ export const createManagerRecord = async (req: Request, res: Response): Promise<
         return;
     }
 
+    const chronology = await pool.query(
+        `SELECT
+            (COALESCE($1::date, CURRENT_DATE) + COALESCE($2::time, CURRENT_TIME))
+                <= (CURRENT_TIMESTAMP + INTERVAL '5 minutes') AS entry_valid,
+            CASE WHEN $3::date IS NULL THEN true ELSE
+                ($3::date + $4::time) >= (COALESCE($1::date, CURRENT_DATE) + COALESCE($2::time, CURRENT_TIME))
+            END AS exit_valid`,
+        [effectiveEntryDate, typeof entry_time === 'string' ? entry_time : null, effectiveExitDate, effectiveExitTime]
+    );
+    if (!chronology.rows[0]?.entry_valid) {
+        res.status(400).json({ success: false, message: 'Giriş tarihi ve saati gelecekte olamaz' });
+        return;
+    }
+    if (!chronology.rows[0]?.exit_valid) {
+        res.status(400).json({ success: false, message: 'Çıkış zamanı giriş zamanından önce olamaz' });
+        return;
+    }
+
     const id = uuidv4();
     const sanitizedNotes = sanitizePlainText(notes as string | null | undefined, 1000);
     const client = await pool.connect();
@@ -762,6 +784,7 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
                  status = 'exited',
                  updated_at = now()
              WHERE id = $1 AND deleted_at IS NULL AND status = 'inside'
+               AND (CURRENT_DATE + COALESCE($3::time, CURRENT_TIME)) >= (entry_date + entry_time)
              RETURNING id`,
             [id, req.user?.userId || null, typeof exit_time === 'string' ? exit_time : null]
         );
@@ -769,7 +792,7 @@ export const exitManager = async (req: Request, res: Response): Promise<void> =>
             const existing = await pool.query('SELECT id FROM managers_records WHERE id = $1 AND deleted_at IS NULL', [id]);
             res.status(existing.rows.length === 0 ? 404 : 409).json({
                 success: false,
-                message: existing.rows.length === 0 ? 'KayÄ±t bulunamadÄ±' : 'MÃ¼dÃ¼r iÃ§in Ã§Ä±kÄ±ÅŸ daha Ã¶nce kaydedilmiÅŸ'
+                message: existing.rows.length === 0 ? 'KayÄ±t bulunamadÄ±' : 'Çıkış zamanı giriş zamanından önce olamaz veya çıkış daha önce kaydedilmiş'
             });
             return;
         }
@@ -852,9 +875,9 @@ export const updateManagerRecord = async (req: Request, res: Response): Promise<
             res.status(400).json({ success: false, message: 'Ã‡Ä±kÄ±ÅŸ tarihi ve saati birlikte girilmelidir' });
             return;
         }
-        if (nextExitDate && nextExitDate < nextEntryDate) {
+        if (nextExitDate && `${nextExitDate}T${nextExitTime}` < `${nextEntryDate}T${nextEntryTime}`) {
             await client.query('ROLLBACK');
-            res.status(400).json({ success: false, message: 'Ã‡Ä±kÄ±ÅŸ tarihi giriÅŸ tarihinden Ã¶nce olamaz' });
+            res.status(400).json({ success: false, message: 'Çıkış zamanı giriş zamanından önce olamaz' });
             return;
         }
 

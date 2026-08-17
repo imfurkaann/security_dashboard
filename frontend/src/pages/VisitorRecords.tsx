@@ -8,7 +8,12 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
 import { formatPhoneNumber } from '../utils/validation';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
 
@@ -23,6 +28,7 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.tour_exit) tags.push('Tur Çıkış');
     if (record.meeting) tags.push('Görüşme');
     if (record.delivery) tags.push('Teslimat');
+    if (record.guide) tags.push('Rehber');
     return tags;
 };
 
@@ -150,6 +156,7 @@ export default function VisitorRecords() {
             if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
             if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
             if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+            if (filters.visitor_tag === 'guide') params.append('guide', 'true');
 
             if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
             if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
@@ -172,7 +179,7 @@ export default function VisitorRecords() {
                 nextOffsetRef.current = fetched.length;
             }
 
-            setHasMore(fetched.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (error) {
             if (requestVersion !== requestVersionRef.current) return;
             message.error('Veriler yüklenemedi');
@@ -201,53 +208,28 @@ export default function VisitorRecords() {
 
     useRealtimeRefetch({
         topics: ['visitors'],
-        onMutation: () => {
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
             const requestVersion = ++requestVersionRef.current;
             loadMoreInFlightRef.current = false;
-            nextOffsetRef.current = 0;
-            void fetchData(0, false, requestVersion);
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, requestVersion));
         },
     });
 
-    // Infinite scroll: load more on scroll near bottom (like admin view)
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
-            const threshold = 300; // px from bottom to trigger
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                loadMoreInFlightRef.current = true;
-                setLoadingMore(true);
-                void fetchData(nextOffsetRef.current, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-        // Also listen to window scroll as a fallback when the page itself scrolls
-        const onWindowScroll = () => {
-            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
-            const threshold = 400; // px from bottom
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                loadMoreInFlightRef.current = true;
-                setLoadingMore(true);
-                void fetchData(nextOffsetRef.current, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     // Filtered records are handled on backend now
     const filteredRecords = records;
@@ -358,6 +340,7 @@ export default function VisitorRecords() {
             if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
             if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
             if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+            if (filters.visitor_tag === 'guide') params.append('guide', 'true');
 
             if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
             if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
@@ -374,7 +357,7 @@ export default function VisitorRecords() {
                 const start = dayjs(rangeStart!);
                 const end = dayjs(rangeEnd!);
                 return d.isBetween(start, end, 'day', '[]'); // inclusive
-            }).filter(r => !r.deleted_at);
+            });
 
             if (exportableRecords.length === 0) {
                 message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -451,7 +434,9 @@ export default function VisitorRecords() {
                         record.person_count !== null && record.person_count !== undefined ? record.person_count.toString() : '-',
                         record.children_count !== null && record.children_count !== undefined ? record.children_count.toString() : '0',
                         record.phone || '-',
-                        record.status || '-',
+                        record.data_quality_warning
+                            ? 'Zaman Tutarsızlığı'
+                            : record.deleted_at ? 'Silindi' : record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
                         record.entry_by || '-',
                         record.exit_by || '-',
                         record.notes || '-'
@@ -697,15 +682,7 @@ export default function VisitorRecords() {
 
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={filters.gate}
-                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={filters.gate} onChange={(gate) => setFilters({ ...filters, gate })} />
                         </div>
 
                         <div className="xl:col-span-2">
@@ -758,6 +735,7 @@ export default function VisitorRecords() {
                                 <option value="tour_exit">Tur Çıkış</option>
                                 <option value="meeting">Görüşme</option>
                                 <option value="delivery">Teslimat</option>
+                                <option value="guide">Rehber</option>
                             </select>
                         </div>
 
@@ -914,6 +892,11 @@ export default function VisitorRecords() {
                                                         ) : (
                                                             <span className="text-xs text-gray-400">-</span>
                                                         )}
+                                                        {record.data_quality_warning && (
+                                                            <div className="mt-1 text-[10px] font-semibold text-red-700" title={record.data_quality_warning}>
+                                                                Zaman tutarsızlığı
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
                                                         <div className="flex flex-wrap gap-1 max-w-[140px]">
@@ -966,6 +949,7 @@ export default function VisitorRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>

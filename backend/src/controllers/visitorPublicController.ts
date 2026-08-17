@@ -3,12 +3,17 @@ import { v4 as uuidv4 } from 'uuid';
 import pool from '../config/database';
 import { safeQuery, safeTransaction } from '../config/dbSecurity';
 import { getClientIp } from '../middleware/rateLimiter';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 import { logDataChange } from '../utils/auditLog';
 import { getResolvedGateFromRequest } from '../utils/gate';
 import { normalizePlate, sanitizePlainText, validateTC } from '../utils/validation';
 import { consumeQrFormToken, issueQrFormToken } from '../services/visitorQrTokenStore';
-import { deleteFile, hashPassport, hashTC } from '../utils/fileUpload';
+import {
+    deleteFile,
+    hashPassport,
+    hashTC,
+    getPassportHashCandidates,
+    getTCHashCandidates
+} from '../utils/fileUpload';
 
 const GUEST_QR_USERNAME = 'qr_misafir';
 const GUEST_QR_PASSWORD_HASH = '$2a$10$EVcWI526jww.2pZF47pUeuERrJVQwEmq9fj4Buwh/p4TjmSm9.5u.';
@@ -115,7 +120,7 @@ const getOrCreateGuestPersonnelId = async (): Promise<string> => {
 export const getQrVisitorFormToken = async (req: Request, res: Response): Promise<void> => {
     try {
         const clientIp = getClientIp(req);
-        const { token, expiresInSeconds } = issueQrFormToken(clientIp);
+        const { token, expiresInSeconds } = await issueQrFormToken(clientIp);
 
         res.status(200).json({
             success: true,
@@ -152,7 +157,7 @@ export const createQrVisitorRecord = async (req: Request, res: Response): Promis
             return;
         }
 
-        const tokenValidation = consumeQrFormToken(String(formToken || ''), clientIp);
+        const tokenValidation = await consumeQrFormToken(String(formToken || ''), clientIp);
         if (!tokenValidation.isValid) {
             res.status(400).json({
                 success: false,
@@ -340,6 +345,7 @@ const getOrCreateQrSgkPersonnelId = async (): Promise<string> => {
 
 export const createQrSgkRecord = async (req: Request, res: Response): Promise<void> => {
     const uploadedFiles = extractUploadedFiles(req);
+    let committed = false;
 
     try {
         const { formToken, website, tc_no, passport_no, full_name, company_name, notes } = req.body;
@@ -351,7 +357,7 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const tokenValidation = consumeQrFormToken(String(formToken || ''), clientIp);
+        const tokenValidation = await consumeQrFormToken(String(formToken || ''), clientIp);
         if (!tokenValidation.isValid) {
             uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({
@@ -413,8 +419,8 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             hashedTC = hashTC(cleanTC);
 
             const existingByTC = await safeQuery<{ id: string }>(
-                'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL',
-                [hashedTC]
+                'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND deleted_at IS NULL',
+                [getTCHashCandidates(cleanTC)]
             );
 
             if (existingByTC.rows.length > 0) {
@@ -434,8 +440,8 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             hashedPassport = hashPassport(cleanPassport);
 
             const existingByPassport = await safeQuery<{ id: string }>(
-                'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL',
-                [hashedPassport]
+                'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND deleted_at IS NULL',
+                [getPassportHashCandidates(cleanPassport)]
             );
 
             if (existingByPassport.rows.length > 0) {
@@ -449,8 +455,6 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
         const id = uuidv4();
         const currentDate = new Date();
         const personnelId = await getOrCreateQrSgkPersonnelId();
-        let committed = false;
-
         const fileRecords = uploadedFiles.map((file, i) => ({
             id: uuidv4(),
             pending_sgk_id: id,
@@ -515,43 +519,26 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        await logDataChange(
-            'pending_qr_sgk',
-            id,
-            'INSERT',
-            null,
-            {
-                full_name: normalizedFullName,
-                company_name: normalizedCompanyName,
-                notes: sanitizedNotes,
-                source: 'qr_sgk_pending',
-                recorded_by_name: SGK_QR_ENTRY_NAME,
-                gate
-            },
-            personnelId,
-            clientIp
-        );
-
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/sgk/pending-qr',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/sgk/records'),
-            payload: {
+        try {
+            await logDataChange(
+                'pending_qr_sgk',
                 id,
-                hashed_tc: hashedTC,
-                hashed_passport: hashedPassport,
-                full_name: normalizedFullName,
-                company_name: normalizedCompanyName,
-                notes: sanitizedNotes,
-                status: 'pending',
-                created_at: currentDate.toISOString(),
-                files: fileRecords,
-                gate
-            }
-        });
+                'INSERT',
+                null,
+                {
+                    full_name: normalizedFullName,
+                    company_name: normalizedCompanyName,
+                    notes: sanitizedNotes,
+                    source: 'qr_sgk_pending',
+                    recorded_by_name: SGK_QR_ENTRY_NAME,
+                    gate
+                },
+                personnelId,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Create QR SGK audit log error:', auditError);
+        }
 
         res.status(201).json({
             success: true,
@@ -560,7 +547,9 @@ export const createQrSgkRecord = async (req: Request, res: Response): Promise<vo
         });
     } catch (error) {
         console.error('Create QR SGK record error:', error);
-        uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        if (!committed) {
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        }
         res.status(500).json({ success: false, message: 'SGK kaydi olusturulamadi' });
     }
 };

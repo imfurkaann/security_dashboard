@@ -6,6 +6,11 @@ import 'antd/dist/reset.css';
 import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import { INCIDENT_CATEGORY_OPTIONS, getIncidentCategoryLabels } from '../utils/incidentCategories';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 interface CompactActionButtonProps {
     onClick: () => void;
@@ -57,6 +62,9 @@ interface IncidentRecord {
     id: string;
     description: string;
     incident_type: string;
+    severity: string | null;
+    location: string | null;
+    categories?: Record<string, boolean> | null;
     shift_label: string | null;
     report_content: string | null;
     report_date: string;
@@ -86,6 +94,9 @@ export default function IncidentRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
     const isScrollingTable = useRef(false);
     const isScrollingBar = useRef(false);
@@ -123,11 +134,17 @@ export default function IncidentRecords() {
     const [dateStart, setDateStart] = useState('');
     const [dateEnd, setDateEnd] = useState('');
     const [selectedGate, setSelectedGate] = useState('');
+    const [keyword, setKeyword] = useState('');
+    const [category, setCategory] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [severityFilter, setSeverityFilter] = useState('');
 
-    // Static gate options for stable filter dropdown
-    const uniqueGates = ['Ana Kapı', 'Sahil Kapı'];
+    // Kayıtlardaki kapılar öneri olarak sunulur; yeni tanımlanan kapılar da yazılarak filtrelenebilir.
+    const uniqueGates = useMemo(() => Array.from(new Set(
+        records.map((record) => record.gate).filter((gate): gate is string => Boolean(gate))
+    )).sort((a, b) => a.localeCompare(b, 'tr-TR')), [records]);
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params: Record<string, string | number | boolean> = {
                 includeDeleted: true,
@@ -138,30 +155,50 @@ export default function IncidentRecords() {
 
             if (reportedBy) params.reported_by = reportedBy;
             if (selectedGate) params.gate = selectedGate;
+            if (keyword) params.keyword = keyword;
+            if (category) params.category = category;
+            if (statusFilter !== 'all') params.status = statusFilter;
+            if (severityFilter) params.severity = severityFilter;
             if (dateStart) params.dateStart = dateStart;
             if (dateEnd) params.dateEnd = dateEnd;
 
             const res = await api.get('/incidents/records', { params });
+            if (requestVersion !== requestVersionRef.current) return;
             const fetched = res.data?.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords(prev => {
+                    const merged = new Map(prev.map(record => [record.id, record]));
+                    fetched.forEach((record: IncidentRecord) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
             } else {
                 setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
             }
 
-            setHasMore(fetched.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             console.error('Veriler yüklenemedi:', error);
+            message.error('Veriler yüklenemedi');
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
-    }, [reportedBy, dateStart, dateEnd, selectedGate]);
+    }, [reportedBy, dateStart, dateEnd, selectedGate, keyword, category, statusFilter, severityFilter]);
 
     useEffect(() => {
+        const requestVersion = ++requestVersionRef.current;
         setLoading(true);
-        void fetchData(0, false);
+        setHasMore(true);
+        nextOffsetRef.current = 0;
+        loadMoreInFlightRef.current = false;
+        void fetchData(0, false, requestVersion);
     }, [fetchData]);
 
     const renderPreviewText = (value: string | null | undefined, title: string) => {
@@ -209,47 +246,29 @@ export default function IncidentRecords() {
         };
     }, [records.length, loading]);
 
-    // Infinite scroll: load more on scroll near bottom
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     useRealtimeRefetch({
         topics: ['incidents'],
-        onMutation: fetchData,
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, requestVersion));
+        },
         enabled: true,
     });
 
@@ -286,6 +305,10 @@ export default function IncidentRecords() {
         setDateStart('');
         setDateEnd('');
         setSelectedGate('');
+        setKeyword('');
+        setCategory('');
+        setStatusFilter('all');
+        setSeverityFilter('');
     };
 
     // Open report modal
@@ -306,25 +329,16 @@ export default function IncidentRecords() {
         setIsExporting(true);
 
         try {
-            const res = await api.get('/incidents/records?includeDeleted=true&unlimited=true');
-            const allRecords: IncidentRecord[] = res.data?.data || [];
-
-            const start = dayjs(dateStart).startOf('day');
-            const end = dayjs(dateEnd).endOf('day');
-
-            const exportableRecords = allRecords.filter((record) => {
-                const dateStr = record.report_date || record.created_at;
-                if (!dateStr) return false;
-                const d = dayjs(dateStr);
-                return d.isBetween(start, end, 'millisecond', '[]');
-            });
-
-            if (exportableRecords.length === 0) {
-                message.warning('Seçilen tarih aralığında indirilecek rapor bulunamadı.');
-                return;
-            }
-
-            const exportRes = await api.post('/incidents/records/export', { records: exportableRecords }, { responseType: 'blob' });
+            const exportRes = await api.post('/incidents/records/export', {
+                dateStart,
+                dateEnd,
+                reported_by: reportedBy || undefined,
+                gate: selectedGate || undefined,
+                keyword: keyword || undefined,
+                category: category || undefined,
+                status: statusFilter !== 'all' ? statusFilter : undefined,
+                severity: severityFilter || undefined,
+            }, { responseType: 'blob' });
 
             const blob = new Blob([exportRes.data], { type: 'application/zip' });
             const url = window.URL.createObjectURL(blob);
@@ -345,7 +359,7 @@ export default function IncidentRecords() {
         } finally {
             setIsExporting(false);
         }
-    }, [dateStart, dateEnd, isExporting]);
+    }, [dateStart, dateEnd, reportedBy, selectedGate, keyword, category, statusFilter, severityFilter, isExporting]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -364,7 +378,7 @@ export default function IncidentRecords() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Olay Kayıtları</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Tüm geçmiş kayıtları görüntüleyin ve filtreleyin</p>
                             </div>
                         </div>
                         <button
@@ -407,6 +421,45 @@ export default function IncidentRecords() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="lg:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">İçerik / Konum Arama</label>
+                            <input
+                                type="text"
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                placeholder="Hırsızlık, kişi, oda, problem veya konum..."
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Olay Kategorisi</label>
+                            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md">
+                                <option value="">Tüm kategoriler</option>
+                                {INCIDENT_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Durum</label>
+                            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md">
+                                <option value="all">Tümü</option>
+                                <option value="open">Açık</option>
+                                <option value="resolved">Çözüldü</option>
+                                <option value="deleted">Silinen Kayıtlar</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Önem Derecesi</label>
+                            <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)} className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md">
+                                <option value="">Tümü</option>
+                                <option value="low">Düşük</option>
+                                <option value="medium">Orta</option>
+                                <option value="high">Yüksek</option>
+                                <option value="critical">Kritik</option>
+                            </select>
+                        </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Raporu Kaydeden</label>
                             <input
@@ -420,18 +473,21 @@ export default function IncidentRecords() {
 
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
+                            <input
+                                list="incident-gate-options"
+                                type="text"
                                 value={selectedGate}
                                 onChange={(e) => setSelectedGate(e.target.value)}
+                                placeholder="Tüm kapılar"
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="">Tümü</option>
+                            />
+                            <datalist id="incident-gate-options">
                                 {uniqueGates.map((gate) => (
                                     <option key={gate} value={gate}>
                                         {gate}
                                     </option>
                                 ))}
-                            </select>
+                            </datalist>
                         </div>
 
                         <div className="lg:col-span-2">
@@ -517,6 +573,13 @@ export default function IncidentRecords() {
                                                         <div className="text-xs text-gray-900 break-words whitespace-pre-wrap">
                                                             {record.description || '-'}
                                                         </div>
+                                                        {getIncidentCategoryLabels(record.categories).length > 0 && (
+                                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                                {getIncidentCategoryLabels(record.categories).map((label) => (
+                                                                    <span key={label} className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">{label}</span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2.5 align-top whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.reported_by}</div>
@@ -540,6 +603,7 @@ export default function IncidentRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>
@@ -580,7 +644,11 @@ export default function IncidentRecords() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-500 mb-1">Kapı</label>
-                                    <p className="text-gray-900">{(selectedReport as any).gate || '-'}</p>
+                                    <p className="text-gray-900">{selectedReport.gate || '-'}</p>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-gray-500 mb-1">Olay Kategorileri</label>
+                                    <p className="text-gray-900">{getIncidentCategoryLabels(selectedReport.categories).join(', ') || '-'}</p>
                                 </div>
                             </div>
 

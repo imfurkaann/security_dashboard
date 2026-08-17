@@ -8,6 +8,12 @@ import { message, Modal as AntdModal } from 'antd';
 import Modal from '../components/Modal';
 import { Car, Pencil, AlertCircle, FileText } from 'lucide-react';
 import 'antd/dist/reset.css';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
+
+const PAGE_SIZE = 200;
 
 // Initial form state
 const INITIAL_FORM_DATA: VehicleFormData = {
@@ -70,6 +76,8 @@ export default function Vehicles() {
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
     const [managers, setManagers] = useState<Manager[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
     const [showModal, setShowModal] = useState(false); const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState(''); const [showCustomManager, setShowCustomManager] = useState(false);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
@@ -83,23 +91,46 @@ export default function Vehicles() {
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
+    const requestVersionRef = useRef(0);
 
     // Fetch all data in parallel
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        const requestVersion = append ? requestVersionRef.current : ++requestVersionRef.current;
         try {
             const activityDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
-            const [vehiclesRes, recordsRes, managersRes] = await Promise.all([
-                api.get('/vehicles'),
-                api.get(`/vehicles/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`),
-                api.get('/vehicles/managers'),
+            const recordsUrl = `/vehicles/records?includeDeleted=true&activityDate=${activityDate}&limit=${PAGE_SIZE}&offset=${offset}`;
+            const [recordsRes, vehiclesRes, managersRes] = await Promise.all([
+                api.get(recordsUrl),
+                append ? Promise.resolve(null) : api.get('/vehicles'),
+                append ? Promise.resolve(null) : api.get('/vehicles/managers'),
             ]);
-            setVehicles(vehiclesRes.data || []);
-            setUsages(recordsRes.data || []);
-            setManagers(managersRes.data || []);
+            if (requestVersion !== requestVersionRef.current) return;
+            const fetched: VehicleUsage[] = recordsRes.data || [];
+            if (append) {
+                setUsages((previous) => {
+                    const merged = new Map(previous.map((record) => [record.id, record]));
+                    fetched.forEach((record) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
+            } else {
+                setUsages(fetched);
+                nextOffsetRef.current = fetched.length;
+            }
+            setHasMore(hasNextApiPage(recordsRes, offset + fetched.length, fetched.length, PAGE_SIZE));
+            if (vehiclesRes) setVehicles(vehiclesRes.data || []);
+            if (managersRes) setManagers(managersRes.data || []);
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             console.error('Veri yüklenemedi:', error);
         } finally {
-            setLoading(false);
+            if (append) {
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
+            if (requestVersion === requestVersionRef.current) setLoading(false);
         }
     }, []);
 
@@ -109,8 +140,27 @@ export default function Vehicles() {
 
     useRealtimeRefetch({
         topics: ['vehicles', 'managers'],
-        onMutation: fetchData,
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData);
+        },
         enabled: true,
+    });
+
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: usages.length,
+        contentKey: filter,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
     });
 
 
@@ -736,6 +786,7 @@ export default function Vehicles() {
                                         ))}
                                     </tbody>
                                 </table>
+                                <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredUsages.length} />
                             </div>
                         </div>
                     )}

@@ -8,6 +8,11 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
 
@@ -35,6 +40,8 @@ export default function FireAlarmRecords() {
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const latestFetchId = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
@@ -71,8 +78,7 @@ export default function FireAlarmRecords() {
         );
     }, [alarmNumber, location, recordedBy, resolvedBy, status, gateFilter, falseAlarmFilter, alarmDateStart, alarmDateEnd, resolutionDateStart, resolutionDateEnd]);
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
-        const fetchId = ++latestFetchId.current;
+    const fetchData = useCallback(async (offset = 0, append = false, fetchId = latestFetchId.current) => {
         try {
             const params: Record<string, string | number | boolean> = {
                 includeDeleted: true,
@@ -98,20 +104,28 @@ export default function FireAlarmRecords() {
 
             const fetched = res.data?.data || [];
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords(prev => {
+                    const merged = new Map(prev.map(record => [record.id, record]));
+                    fetched.forEach((record: FireAlarmRecord) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
             } else {
                 setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
             }
 
-            setHasMore(fetched.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (error) {
             if (fetchId !== latestFetchId.current) return;
             console.error('Veriler yüklenemedi:', error);
             message.error('Yangın alarm verileri yüklenemedi');
         } finally {
-            if (fetchId !== latestFetchId.current) return;
-            setLoading(false);
-            setLoadingMore(false);
+            if (fetchId === latestFetchId.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, [
         alarmNumber,
@@ -129,22 +143,36 @@ export default function FireAlarmRecords() {
 
     // Fetch all records + periodic refresh to keep list in sync
     useEffect(() => {
+        const fetchId = ++latestFetchId.current;
         setLoading(true);
-        void fetchData(0, false);
-        const refreshInterval = window.setInterval(() => void fetchData(0, false), 15000);
-        return () => window.clearInterval(refreshInterval);
+        setHasMore(true);
+        nextOffsetRef.current = 0;
+        loadMoreInFlightRef.current = false;
+        void fetchData(0, false, fetchId);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['fire-alarms'],
-        onMutation: fetchData,
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            const fetchId = ++latestFetchId.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, fetchId));
+        },
         enabled: true,
     });
 
     useEffect(() => {
-        const handleFocus = () => void fetchData(0, false);
+        const refreshRecords = () => {
+            const fetchId = ++latestFetchId.current;
+            nextOffsetRef.current = 0;
+            loadMoreInFlightRef.current = false;
+            void fetchData(0, false, fetchId);
+        };
+        const handleFocus = () => refreshRecords();
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') void fetchData(0, false);
+            if (document.visibilityState === 'visible') refreshRecords();
         };
 
         window.addEventListener('focus', handleFocus);
@@ -156,43 +184,19 @@ export default function FireAlarmRecords() {
         };
     }, [fetchData]);
 
-    // Infinite scroll: load more when near bottom
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     // Filtered records
     const filteredRecords = records;
@@ -273,8 +277,7 @@ export default function FireAlarmRecords() {
             const res = await api.get('/fire-alarms/records', { params });
             const allRecords: FireAlarmRecord[] = res.data?.data || [];
 
-            const exportableRecords = allRecords
-                .filter(r => !r.deleted_at);
+            const exportableRecords = allRecords;
 
             if (exportableRecords.length === 0) {
                 message.error('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -315,7 +318,7 @@ export default function FireAlarmRecords() {
                     formatTime(r.alarm_time),
                     r.resolution_time ? formatDate(r.resolution_time) : '-',
                     r.resolution_time ? formatTime(r.resolution_time) : '-',
-                    r.resolved ? 'Çözüldü' : 'Aktif',
+                    r.deleted_at ? 'Silindi' : r.resolved ? 'Çözüldü' : 'Aktif',
                     r.recorded_by_name || '-',
                     r.resolved_by_name || '-',
                     r.resolution_notes || '-'
@@ -586,15 +589,7 @@ export default function FireAlarmRecords() {
 
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={gateFilter}
-                                onChange={(e) => setGateFilter(e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={gateFilter} onChange={setGateFilter} />
                         </div>
 
                         <div className="xl:col-span-2">
@@ -758,6 +753,7 @@ export default function FireAlarmRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>

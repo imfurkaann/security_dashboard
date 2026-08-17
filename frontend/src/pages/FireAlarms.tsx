@@ -49,8 +49,12 @@ function CompactActionButton({
 }
 import api from '../utils/api';
 import { formatDate, formatTime, isToday } from '../utils/dateUtils';
-import { validateFireAlarmForm, isValidLength } from '../utils/validation';
+import { isValidLength } from '../utils/validation';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 interface FireAlarm {
     id: string;
@@ -68,11 +72,15 @@ interface FireAlarm {
 }
 
 type FilterType = 'today' | 'active' | 'resolved' | 'deleted';
+const PAGE_SIZE = 200;
 
 export default function FireAlarms() {
     const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [records, setRecords] = useState<FireAlarm[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
@@ -92,23 +100,40 @@ export default function FireAlarms() {
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [scrollbarSpacerWidth, setScrollbarSpacerWidth] = useState(0);
     const latestFetchId = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
 
     // Fetch fire alarm records
-    const fetchData = useCallback(async () => {
-        const fetchId = ++latestFetchId.current;
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        const fetchId = append ? latestFetchId.current : ++latestFetchId.current;
         try {
-            const res = await api.get(`/fire-alarms/records?includeDeleted=true&_t=${Date.now()}`);
+            const res = await api.get(`/fire-alarms/records?includeDeleted=true&limit=${PAGE_SIZE}&offset=${offset}&_t=${Date.now()}`);
             if (fetchId !== latestFetchId.current) return;
-            setRecords(res.data?.data || []);
+            const fetched: FireAlarm[] = res.data?.data || [];
+            if (append) {
+                setRecords((previous) => {
+                    const merged = new Map(previous.map((record) => [record.id, record]));
+                    fetched.forEach((record) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
+            } else {
+                setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
+            }
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (err) {
             if (fetchId !== latestFetchId.current) return;
             console.error('Yangın alarm verisi yüklenemedi', err);
         } finally {
-            if (fetchId !== latestFetchId.current) return;
-            setLoading(false);
+            if (fetchId === latestFetchId.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, []);
 
@@ -116,9 +141,28 @@ export default function FireAlarms() {
         fetchData();
     }, [fetchData]);
 
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        contentKey: filter,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
+
     useRealtimeRefetch({
         topics: ['fire-alarms'],
-        onMutation: fetchData,
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData);
+        },
         enabled: true,
     });
 
@@ -188,6 +232,7 @@ export default function FireAlarms() {
     // Form submission handler
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSaving) return;
 
         // Frontend validasyon - sadece konum kontrolü
         if (!location.trim()) {
@@ -202,6 +247,7 @@ export default function FireAlarms() {
         }
 
         try {
+            setIsSaving(true);
             const payload = {
                 alarm_number: alarmNumber.trim() || null,
                 location: location.trim(),
@@ -232,12 +278,14 @@ export default function FireAlarms() {
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'İşlem başarısız');
+        } finally {
+            setIsSaving(false);
         }
-    }, [alarmNumber, location, alarmTime, resolutionTime, resolutionNotes, falseAlarm, isEditing, editingId, resetForm, fetchData]);
+    }, [alarmNumber, location, alarmTime, resolutionTime, resolutionNotes, falseAlarm, isEditing, editingId, isSaving, resetForm, fetchData]);
 
     // Handle resolve
     const handleResolve = useCallback(async () => {
-        if (!resolvingId) return;
+        if (!resolvingId || isSaving) return;
 
         // Çözüm notları için uzunluk kontrolü
         if (!isValidLength(resolutionNotes, 0, 1000)) {
@@ -246,6 +294,7 @@ export default function FireAlarms() {
         }
 
         try {
+            setIsSaving(true);
             const response = await api.post(`/fire-alarms/records/${resolvingId}/resolve`, {
                 resolution_notes: resolutionNotes.trim() || null,
                 false_alarm: falseAlarm,
@@ -267,8 +316,10 @@ export default function FireAlarms() {
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'Çözümleme başarısız');
+        } finally {
+            setIsSaving(false);
         }
-    }, [resolvingId, resolutionNotes, falseAlarm, fetchData]);
+    }, [resolvingId, resolutionNotes, falseAlarm, isSaving, fetchData]);
 
     const handleDelete = useCallback((id: string) => {
         Modal.confirm({
@@ -512,7 +563,7 @@ export default function FireAlarms() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Yangın Alarmları Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel yangın alarm kayıtlarını yönetin.</p>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel yangın alarm kayıtlarını yönetin.</p>
                             </div>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 w-full lg:w-auto">
@@ -701,6 +752,7 @@ export default function FireAlarms() {
                                             ))}
                                         </tbody>
                                     </table>
+                                    <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                                 </div>
                             </div>
                         )}
@@ -797,9 +849,10 @@ export default function FireAlarms() {
                     <div className="flex gap-3 pt-4 border-t border-gray-200">
                         <button
                             type="submit"
+                            disabled={isSaving}
                             className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg font-medium transition"
                         >
-                            {isEditing ? 'Güncelle' : 'Kaydet'}
+                            {isSaving ? 'Kaydediliyor...' : (isEditing ? 'Güncelle' : 'Kaydet')}
                         </button>
                         <button
                             type="button"
@@ -853,9 +906,10 @@ export default function FireAlarms() {
                     <div className="flex gap-3 pt-4 border-t border-gray-200">
                         <button
                             onClick={handleResolve}
+                            disabled={isSaving}
                             className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg font-medium transition"
                         >
-                            Çözüldü Olarak İşaretle
+                            {isSaving ? 'Kaydediliyor...' : 'Çözüldü Olarak İşaretle'}
                         </button>
                         <button
                             onClick={() => {

@@ -212,6 +212,7 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
 
         const query = `
             SELECT 
+                COUNT(*) OVER()::int AS total_count,
                 vr.id,
                 vr.vehicle_id,
                 vr.manager_id,
@@ -250,6 +251,8 @@ export const getVehicleRecords = async (req: Request, res: Response): Promise<vo
             res.status(413).json({ success: false, message: 'Dışa aktarım sonucu çok büyük; lütfen tarih aralığını daraltın' });
             return;
         }
+
+        res.setHeader('X-Total-Count', String(result.rows[0]?.total_count ?? 0));
 
         // Format the data
         const formattedData = result.rows.map(row => ({
@@ -381,6 +384,17 @@ export const createVehicleRecord = async (req: Request, res: Response): Promise<
         ) {
             res.status(400).json({ success: false, message: 'Geçersiz teslim saati formatı' });
             return;
+        }
+
+        if (given_time) {
+            const chronology = await pool.query(
+                `SELECT (CURRENT_DATE + $1::time) <= (CURRENT_TIMESTAMP + INTERVAL '5 minutes') AS valid`,
+                [given_time]
+            );
+            if (!chronology.rows[0]?.valid) {
+                res.status(400).json({ success: false, message: 'Teslim saati gelecekte olamaz' });
+                return;
+            }
         }
 
         const id = uuidv4();
@@ -567,7 +581,7 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
 
         // Check if record exists
         const recordCheck = await pool.query(
-            'SELECT id, status, vehicle_id, manager_id, manager_name FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
+            'SELECT id, status, vehicle_id, manager_id, manager_name, given_date, given_time, return_date, return_time FROM vehicle_records WHERE id = $1 AND deleted_at IS NULL',
             [id]
         );
 
@@ -688,6 +702,23 @@ export const updateVehicleRecord = async (req: Request, res: Response): Promise<
                 message: 'Teslim alınmış kayıtta iade saati boş bırakılamaz'
             });
             return;
+        }
+        if (recordStatus === 'in_use' && return_time !== undefined) {
+            res.status(400).json({ success: false, message: 'Kullanımdaki araç için iade saati düzenleme ekranından verilemez' });
+            return;
+        }
+        if (recordStatus === 'returned') {
+            const existing = recordCheck.rows[0];
+            const nextGivenTime = given_time !== undefined ? given_time : existing.given_time;
+            const nextReturnTime = return_time !== undefined ? return_time : existing.return_time;
+            const chronology = await pool.query(
+                `SELECT ($1::date + $2::time) <= ($3::date + $4::time) AS valid`,
+                [existing.given_date, nextGivenTime, existing.return_date, nextReturnTime]
+            );
+            if (!chronology.rows[0]?.valid) {
+                res.status(400).json({ success: false, message: 'İade zamanı teslim zamanından önce olamaz' });
+                return;
+            }
         }
 
         // If vehicle_id is provided, check if new vehicle exists and is available (only if record is still in_use)

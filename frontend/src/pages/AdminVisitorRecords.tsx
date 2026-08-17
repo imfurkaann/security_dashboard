@@ -8,8 +8,13 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VisitorRecord, PredefinedVisitor } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
 import { formatPhoneNumber, validateVisitorForm, normalizePlate, normalizePhone } from '../utils/validation';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
 const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 10000;
@@ -25,6 +30,7 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.tour_exit) tags.push('Tur Çıkış');
     if (record.meeting) tags.push('Görüşme');
     if (record.delivery) tags.push('Teslimat');
+    if (record.guide) tags.push('Rehber');
     return tags;
 };
 
@@ -55,7 +61,8 @@ type VisitorEditTagKey =
     | 'tour_entry'
     | 'tour_exit'
     | 'meeting'
-    | 'delivery';
+    | 'delivery'
+    | 'guide';
 
 type VisitorEditFormData = {
     vehicle_plate: string;
@@ -76,6 +83,7 @@ type VisitorEditFormData = {
     tour_exit: boolean;
     meeting: boolean;
     delivery: boolean;
+    guide: boolean;
     entry_date: string;
     entry_time: string;
     exit_time: string;
@@ -100,6 +108,7 @@ type VisitorCreateFormData = {
     tour_exit: boolean;
     meeting: boolean;
     delivery: boolean;
+    guide: boolean;
     send_whatsapp: boolean;
     entry_date: string;
     entry_time: string;
@@ -124,6 +133,7 @@ const initialCreateFormData = (): VisitorCreateFormData => ({
     tour_exit: false,
     meeting: false,
     delivery: false,
+    guide: false,
     send_whatsapp: false,
     entry_date: dayjs().format('YYYY-MM-DD'),
     entry_time: ''
@@ -138,7 +148,8 @@ const VISITOR_EDIT_TAGS: Array<{ key: VisitorEditTagKey; label: string }> = [
     { key: 'tour_entry', label: 'Tur Giriş' },
     { key: 'tour_exit', label: 'Tur Çıkış' },
     { key: 'meeting', label: 'Görüşme' },
-    { key: 'delivery', label: 'Teslimat' }
+    { key: 'delivery', label: 'Teslimat' },
+    { key: 'guide', label: 'Rehber' }
 ];
 
 const VISITOR_HIGHLIGHT_OPTIONS = [
@@ -216,6 +227,7 @@ const createVisitorEditFormData = (record: VisitorRecord | null): VisitorEditFor
     tour_exit: record?.tour_exit ?? false,
     meeting: record?.meeting ?? false,
     delivery: record?.delivery ?? false,
+    guide: record?.guide ?? false,
     entry_date: record?.entry_date ? dayjs(record.entry_date).format('YYYY-MM-DD') : '',
     entry_time: record?.entry_time || '',
     exit_time: record?.exit_time || ''
@@ -227,6 +239,9 @@ export default function AdminVisitorRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
     const [isExporting, setIsExporting] = useState(false);
     const [textPreview, setTextPreview] = useState<{ title: string; value: string } | null>(null);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -277,7 +292,13 @@ export default function AdminVisitorRecords() {
     });
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
+        if (append && loadMoreInFlightRef.current) return;
+        const requestVersion = append ? requestVersionRef.current : ++requestVersionRef.current;
         try {
+            if (append) {
+                loadMoreInFlightRef.current = true;
+                setLoadingMore(true);
+            }
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
             params.append('limit', String(PAGE_SIZE));
@@ -302,6 +323,7 @@ export default function AdminVisitorRecords() {
             if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
             if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
             if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+            if (filters.visitor_tag === 'guide') params.append('guide', 'true');
 
             if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
             if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
@@ -309,32 +331,48 @@ export default function AdminVisitorRecords() {
             if (filters.exitDateEnd) params.append('exitDateEnd', filters.exitDateEnd);
 
             const res = await api.get(`/visitors/records?${params.toString()}&_t=${Date.now()}`);
+            if (requestVersion !== requestVersionRef.current) return;
             const fetched: VisitorRecord[] = res.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetched]);
+                setRecords(prev => Array.from(new Map(
+                    [...prev, ...fetched].map((record) => [record.id, record]),
+                ).values()));
+                nextOffsetRef.current = offset + fetched.length;
             } else {
                 setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
             }
 
-            setHasMore(fetched.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (append) {
+                loadMoreInFlightRef.current = false;
+                setLoadingMore(false);
+            }
+            if (requestVersion === requestVersionRef.current) setLoading(false);
         }
     }, [filters]);
 
     useEffect(() => {
         setLoading(true);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
         void fetchData(0, false);
     }, [fetchData]);
 
     useRealtimeRefetch({
         topics: ['visitors'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData);
+        },
     });
 
     const openEditModal = useCallback((record: VisitorRecord) => {
@@ -442,6 +480,7 @@ export default function AdminVisitorRecords() {
             tour_exit: visitor.tour_exit ?? prev.tour_exit,
             meeting: visitor.meeting ?? prev.meeting,
             delivery: visitor.delivery ?? prev.delivery,
+            guide: visitor.guide ?? prev.guide,
         }));
         setShowCreatePredefinedSuggestions(false);
     };
@@ -495,6 +534,7 @@ export default function AdminVisitorRecords() {
                 tour_exit: !!createFormData.tour_exit,
                 meeting: !!createFormData.meeting,
                 delivery: !!createFormData.delivery,
+                guide: !!createFormData.guide,
                 send_whatsapp: !!createFormData.send_whatsapp,
                 entry_date: createFormData.entry_date || null,
                 entry_time: createFormData.entry_time || null
@@ -695,6 +735,7 @@ export default function AdminVisitorRecords() {
             if (filters.visitor_tag === 'tour_exit') params.append('tour_exit', 'true');
             if (filters.visitor_tag === 'meeting') params.append('meeting', 'true');
             if (filters.visitor_tag === 'delivery') params.append('delivery', 'true');
+            if (filters.visitor_tag === 'guide') params.append('guide', 'true');
 
             if (filters.entryDateStart) params.append('entryDateStart', filters.entryDateStart);
             if (filters.entryDateEnd) params.append('entryDateEnd', filters.entryDateEnd);
@@ -713,8 +754,7 @@ export default function AdminVisitorRecords() {
                     if (!dateValue) return false;
                     const d = dayjs(dateValue);
                     return d.isBetween(start, end, 'millisecond', '[]');
-                })
-                .filter(record => !record.deleted_at);
+                });
 
             if (exportableRecords.length === 0) {
                 message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -783,7 +823,9 @@ export default function AdminVisitorRecords() {
                     record.person_count ?? '-',
                     record.children_count ?? '-',
                     record.phone || '-',
-                    record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
+                    record.data_quality_warning
+                        ? 'Zaman Tutarsızlığı'
+                        : record.deleted_at ? 'Silindi' : record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
                     record.entry_by || '-',
                     record.exit_by || '-',
                     record.notes || '-'
@@ -867,43 +909,16 @@ export default function AdminVisitorRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    // Infinite scroll: load more when scrolling near bottom (container + window fallback)
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300; // px from bottom to trigger
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     const isScrollingTable = useRef(false);
     const isScrollingBar = useRef(false);
@@ -1066,15 +1081,7 @@ export default function AdminVisitorRecords() {
 
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={filters.gate}
-                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={filters.gate} onChange={(gate) => setFilters({ ...filters, gate })} />
                         </div>
 
                         <div className="xl:col-span-2">
@@ -1127,6 +1134,7 @@ export default function AdminVisitorRecords() {
                                 <option value="tour_exit">Tur Çıkış</option>
                                 <option value="meeting">Görüşme</option>
                                 <option value="delivery">Teslimat</option>
+                                <option value="guide">Rehber</option>
                             </select>
                         </div>
 
@@ -1355,6 +1363,11 @@ export default function AdminVisitorRecords() {
                                                         <span className={`px-2 py-0.5 inline-flex whitespace-nowrap text-[10px] leading-5 font-semibold rounded-full ${record.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                                                             {record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
                                                         </span>
+                                                        {record.data_quality_warning && (
+                                                            <div className="mt-1 text-[10px] font-semibold text-red-700" title={record.data_quality_warning}>
+                                                                Zaman tutarsızlığı
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2.5 whitespace-nowrap">
                                                         <div className="text-xs text-gray-900">{record.entry_by || '-'}</div>
@@ -1368,6 +1381,7 @@ export default function AdminVisitorRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>
@@ -1494,7 +1508,7 @@ export default function AdminVisitorRecords() {
                                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
                                                 >
                                                     <span className="text-sm">
-                                                        {[editFormData.subcontractor_worker && 'Taşeron İşçi', editFormData.for_electric_station && 'Şarj İstasyonu', editFormData.daily_guest && 'Günübirlik Misafir', editFormData.entry_tag && 'Giriş', editFormData.exit_tag && 'Çıkış', editFormData.tour_entry && 'Tur Giriş', editFormData.tour_exit && 'Tur Çıkış', editFormData.meeting && 'Görüşme', editFormData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                        {[editFormData.subcontractor_worker && 'Taşeron İşçi', editFormData.for_electric_station && 'Şarj İstasyonu', editFormData.daily_guest && 'Günübirlik Misafir', editFormData.entry_tag && 'Giriş', editFormData.exit_tag && 'Çıkış', editFormData.tour_entry && 'Tur Giriş', editFormData.tour_exit && 'Tur Çıkış', editFormData.meeting && 'Görüşme', editFormData.delivery && 'Teslimat', editFormData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
                                                     </span>
                                                     <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -1607,6 +1621,7 @@ export default function AdminVisitorRecords() {
                                                         if (visitor.tour_exit) tags.push('Tur Çıkış');
                                                         if (visitor.meeting) tags.push('Görüşme');
                                                         if (visitor.delivery) tags.push('Teslimat');
+                                                        if (visitor.guide) tags.push('Rehber');
                                                         return (
                                                             <button
                                                                 key={visitor.id}
@@ -1730,7 +1745,7 @@ export default function AdminVisitorRecords() {
                                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
                                                 >
                                                     <span className="text-sm">
-                                                        {[createFormData.subcontractor_worker && 'Taşeron İşçi', createFormData.for_electric_station && 'Şarj İstasyonu', createFormData.daily_guest && 'Günübirlik Misafir', createFormData.entry_tag && 'Giriş', createFormData.exit_tag && 'Çıkış', createFormData.tour_entry && 'Tur Giriş', createFormData.tour_exit && 'Tur Çıkış', createFormData.meeting && 'Görüşme', createFormData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                        {[createFormData.subcontractor_worker && 'Taşeron İşçi', createFormData.for_electric_station && 'Şarj İstasyonu', createFormData.daily_guest && 'Günübirlik Misafir', createFormData.entry_tag && 'Giriş', createFormData.exit_tag && 'Çıkış', createFormData.tour_entry && 'Tur Giriş', createFormData.tour_exit && 'Tur Çıkış', createFormData.meeting && 'Görüşme', createFormData.delivery && 'Teslimat', createFormData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
                                                     </span>
                                                     <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${createOpenTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

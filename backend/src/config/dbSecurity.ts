@@ -37,14 +37,20 @@ export const safeQuery = async <T = unknown>(
 
     try {
         // Statement timeout ayarla
-        const timeout = options.timeout || DB_SECURITY_CONFIG.statementTimeout;
+        const requestedTimeout = Number(options.timeout);
+        const timeout = Number.isSafeInteger(requestedTimeout) && requestedTimeout >= 100 && requestedTimeout <= 120_000
+            ? requestedTimeout
+            : DB_SECURITY_CONFIG.statementTimeout;
         await client.query(`SET statement_timeout = ${timeout}`);
 
         // Sorguyu çalıştır
         const result = await client.query(query, params);
 
         // Maksimum satır kontrolü
-        const maxRows = options.maxRows || DB_SECURITY_CONFIG.maxRowsPerQuery;
+        const requestedMaxRows = Number(options.maxRows);
+        const maxRows = Number.isSafeInteger(requestedMaxRows) && requestedMaxRows >= 1 && requestedMaxRows <= DB_SECURITY_CONFIG.maxRowsPerQuery
+            ? requestedMaxRows
+            : DB_SECURITY_CONFIG.maxRowsPerQuery;
         if (result.rows.length > maxRows) {
             console.warn(`Query returned ${result.rows.length} rows, truncating to ${maxRows}`);
             result.rows = result.rows.slice(0, maxRows);

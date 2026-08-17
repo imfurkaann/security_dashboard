@@ -1,7 +1,9 @@
 import { Server as HttpServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt';
 import { getTokenFromCookieHeader } from '../utils/authCookies';
+import { isAllowedOrigin } from '../config/httpSecurity';
+import { getActiveSessionUser } from '../services/sessionService';
 
 export type ApiMutationEvent = {
     method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -35,6 +37,18 @@ export const resolveMutationTopics = (path: string): string[] => {
 };
 
 let io: SocketIOServer | null = null;
+const socketsBySession = new Map<string, Set<Socket>>();
+
+export const disconnectRealtimeSession = (personnelRecordId: number | string): void => {
+    const sessionKey = String(personnelRecordId);
+    const sessionSockets = socketsBySession.get(sessionKey);
+    if (!sessionSockets) return;
+
+    for (const socket of sessionSockets) {
+        socket.disconnect(true);
+    }
+    socketsBySession.delete(sessionKey);
+};
 
 export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
     if (io) {
@@ -43,31 +57,17 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
 
     io = new SocketIOServer(httpServer, {
         path: '/api/socket.io/',
+        maxHttpBufferSize: 100_000,
+        perMessageDeflate: false,
+        pingInterval: 25_000,
+        pingTimeout: 20_000,
+        connectionStateRecovery: {
+            maxDisconnectionDuration: 2 * 60 * 1000,
+            skipMiddlewares: false,
+        },
         cors: {
             origin: (origin, callback) => {
-                const corsOriginSetting = process.env.CORS_ORIGIN;
-                if (corsOriginSetting === '*') {
-                    callback(null, origin || true);
-                    return;
-                }
-                const publicHostIp = process.env.PUBLIC_HOST_IP?.trim();
-                const frontendPort = process.env.FRONTEND_PORT || '33334';
-                const allowedOrigins = [
-                    process.env.FRONTEND_URL,
-                    publicHostIp ? `http://${publicHostIp}:${frontendPort}` : null,
-                    publicHostIp ? `http://${publicHostIp}` : null,
-                    publicHostIp ? `https://${publicHostIp}:${frontendPort}` : null,
-                    publicHostIp ? `https://${publicHostIp}` : null,
-                    'http://localhost:5174',
-                    'http://localhost:5173',
-                    'http://localhost:3000',
-                    'http://localhost',
-                    'http://localhost:80'
-                ].filter(Boolean) as string[];
-                const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-                const ipv4Pattern = /^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/;
-
-                if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin) || ipv4Pattern.test(origin)) {
+                if (isAllowedOrigin(origin)) {
                     callback(null, origin || true);
                 } else {
                     console.warn(`[realtime] CORS policy violation for WebSocket connection: ${origin}`);
@@ -81,29 +81,36 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
     });
 
     // JWT Authentication middleware
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
         try {
-            const token = getTokenFromCookieHeader(socket.handshake.headers.cookie)
-                || socket.handshake.auth?.token
-                || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+            const token = getTokenFromCookieHeader(socket.handshake.headers.cookie);
             
             if (!token) {
-                (socket as any).user = null;
-                return next();
+                return next(new Error('Yetkilendirme gerekli'));
             }
 
             const decoded = verifyToken(token);
             if (!decoded) {
-                (socket as any).user = null;
-                return next();
+                return next(new Error('Geçersiz oturum'));
             }
 
-            (socket as any).user = decoded;
+            // HTTP isteklerindeki oturum kontrolüyle aynı kuralları uygula.
+            // Böylece devre dışı bırakılmış bir kullanıcı, token süresi dolana
+            // kadar WebSocket üzerinden kayıt güncellemelerini izleyemez.
+            const activeSessionUser = await getActiveSessionUser(decoded);
+            if (!activeSessionUser) {
+                return next(new Error('Oturum kapatılmış'));
+            }
+
+            (socket as any).user = {
+                ...decoded,
+                username: activeSessionUser.username,
+                role: activeSessionUser.role,
+            };
             next();
         } catch (err) {
             console.error('[realtime] Authentication middleware error:', err);
-            (socket as any).user = null;
-            next();
+            next(new Error('Yetkilendirme servisi kullanılamıyor'));
         }
     });
 
@@ -124,6 +131,18 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
                 socket.join('role:admin');
             }
 
+            if (user.personnelRecordId !== undefined && user.personnelRecordId !== null) {
+                const sessionKey = String(user.personnelRecordId);
+                const sessionSockets = socketsBySession.get(sessionKey) || new Set<Socket>();
+                sessionSockets.add(socket);
+                socketsBySession.set(sessionKey, sessionSockets);
+                socket.once('disconnect', () => {
+                    const currentSockets = socketsBySession.get(sessionKey);
+                    currentSockets?.delete(socket);
+                    if (currentSockets?.size === 0) socketsBySession.delete(sessionKey);
+                });
+            }
+
             const expiresAt = Number(user.exp) * 1000;
             if (Number.isFinite(expiresAt)) {
                 const remainingLifetime = Math.max(0, expiresAt - Date.now());
@@ -133,6 +152,18 @@ export const initRealtime = (httpServer: HttpServer): SocketIOServer => {
                 );
                 socket.once('disconnect', () => clearTimeout(expiryTimer));
             }
+
+            // Revoked, logged-out or disabled sessions must stop receiving data
+            // without waiting for JWT expiry.
+            const sessionCheckTimer = setInterval(async () => {
+                try {
+                    const activeSessionUser = await getActiveSessionUser(user);
+                    if (!activeSessionUser) socket.disconnect(true);
+                } catch {
+                    socket.disconnect(true);
+                }
+            }, 60_000);
+            socket.once('disconnect', () => clearInterval(sessionCheckTimer));
         }
 
         socket.emit('realtime:connected', {

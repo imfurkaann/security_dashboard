@@ -7,6 +7,10 @@ import { validateVisitorForm, normalizePlate, normalizePhone, formatPhoneNumber 
 import type { VisitorRecord, VisitorFormData, VisitorFilterType, PredefinedVisitor } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 import { message, Modal } from 'antd';
 import 'antd/dist/reset.css';
 
@@ -21,10 +25,12 @@ const VISITOR_TAGS_OPTIONS = [
     { id: 'tour_exit', label: 'Tur Çıkış' },
     { id: 'meeting', label: 'Görüşme' },
     { id: 'delivery', label: 'Teslimat' },
+    { id: 'guide', label: 'Rehber' },
 ];
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
+const PAGE_SIZE = 200;
 
 const normalizeSearchText = (value: string | null | undefined): string => {
     return (value || '').toLocaleLowerCase('tr-TR').normalize('NFC');
@@ -52,6 +58,7 @@ const getVisitorTags = (record: VisitorRecord): string[] => {
     if (record.tour_exit) tags.push('Tur Çıkış');
     if (record.meeting) tags.push('Görüşme');
     if (record.delivery) tags.push('Teslimat');
+    if (record.guide) tags.push('Rehber');
     return tags;
 };
 
@@ -149,6 +156,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
     tour_exit: false,
     meeting: false,
     delivery: false,
+    guide: false,
     send_whatsapp: true,
     entry_time: '',  // Boş string = mevcut saat kullanılacak
     exit_time: ''
@@ -160,6 +168,8 @@ export default function Visitors() {
     const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
@@ -190,6 +200,8 @@ export default function Visitors() {
     const plateInputRef = useRef<HTMLInputElement>(null);
     const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
     const recordsRequestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
     const predefinedRequestVersionRef = useRef(0);
     const navigate = useNavigate();
     const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -304,6 +316,7 @@ export default function Visitors() {
             tour_exit: visitor.tour_exit ?? prev.tour_exit,
             meeting: visitor.meeting ?? prev.meeting,
             delivery: visitor.delivery ?? prev.delivery,
+            guide: visitor.guide ?? prev.guide,
         }));
         setShowPredefinedSuggestions(false);
     };
@@ -342,20 +355,55 @@ export default function Visitors() {
     };
 
     // Fetch visitor records
-    const fetchData = useCallback(async () => {
-        const requestVersion = ++recordsRequestVersionRef.current;
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        if (append && loadMoreInFlightRef.current) return;
+        const requestVersion = append
+            ? recordsRequestVersionRef.current
+            : ++recordsRequestVersionRef.current;
         try {
+            if (append) {
+                loadMoreInFlightRef.current = true;
+                setLoadingMore(true);
+            }
             const activityDate = getIstanbulDate();
-            const res = await api.get(`/visitors/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`);
+            const res = await api.get(`/visitors/records?includeDeleted=true&activityDate=${activityDate}&limit=${PAGE_SIZE}&offset=${offset}`);
             if (requestVersion !== recordsRequestVersionRef.current) return;
-            setRecords(res.data || []);
+            const fetched: VisitorRecord[] = Array.isArray(res.data) ? res.data : [];
+            if (append) {
+                setRecords((previous) => {
+                    const merged = [...previous, ...fetched];
+                    return Array.from(new Map(merged.map((record) => [record.id, record])).values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
+            } else {
+                setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
+            }
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (err) {
             if (requestVersion !== recordsRequestVersionRef.current) return;
             console.error('Ziyaretçi verisi yüklenemedi', err);
         } finally {
+            if (append) {
+                loadMoreInFlightRef.current = false;
+                setLoadingMore(false);
+            }
             if (requestVersion === recordsRequestVersionRef.current) setLoading(false);
         }
     }, []);
+
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        enabled: !loading,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        contentKey: `${filter}:${columnFilters.fullName}:${columnFilters.vehiclePlate}:${columnFilters.companyName}:${columnFilters.visitingPerson}`,
+        onLoadMore: () => {
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     useEffect(() => {
         fetchData();
@@ -364,8 +412,10 @@ export default function Visitors() {
     const refreshRecordsWithRealtimeNotification = useCallback(async () => {
         if (document.hidden) return;
 
+        const loadedItemCount = nextOffsetRef.current;
+        loadMoreInFlightRef.current = false;
         try {
-            await fetchData();
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData);
         } catch (error) {
             console.error('Ziyaretçi canlı yenileme hatası:', error);
         }
@@ -446,6 +496,7 @@ export default function Visitors() {
             tour_exit: rec.tour_exit ?? false,
             meeting: rec.meeting ?? false,
             delivery: rec.delivery ?? false,
+            guide: rec.guide ?? false,
             send_whatsapp: false,  // WhatsApp sadece yeni kayıtlarda kullanılır
             entry_time: rec.entry_time ? formatTime(rec.entry_time) : '',  // HH:MM formatına çevir
             exit_time: rec.exit_time ? formatTime(rec.exit_time) : ''  // HH:MM formatına çevir
@@ -476,6 +527,7 @@ export default function Visitors() {
         tour_exit: !!formData.tour_exit,
         meeting: !!formData.meeting,
         delivery: !!formData.delivery,
+        guide: !!formData.guide,
         send_whatsapp: !!formData.send_whatsapp,  // WhatsApp modalı her yeni kayıtta otomatik açılsın (kullanıcının seçimine göre)
         entry_time: formData.entry_time || null,  // Giriş saati
         exit_time: formData.exit_time || null  // Çıkış saati
@@ -1162,6 +1214,11 @@ export default function Visitors() {
                                                     <span className={`px-2 py-0.5 inline-flex text-[11px] leading-5 font-semibold rounded-full ${rec.status === 'inside' ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}>
                                                         {rec.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı'}
                                                     </span>
+                                                    {rec.data_quality_warning && (
+                                                        <div className="mt-1 text-[10px] font-semibold text-red-700" title={rec.data_quality_warning}>
+                                                            Zaman tutarsızlığı
+                                                        </div>
+                                                    )}
                                                 </td>
 
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
@@ -1175,6 +1232,7 @@ export default function Visitors() {
                                         ))}
                                     </tbody>
                                 </table>
+                                <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                             </div>
                         </div>
                     )}
@@ -1257,6 +1315,7 @@ export default function Visitors() {
                                                         if (visitor.tour_exit) tags.push('Tur Çıkış');
                                                         if (visitor.meeting) tags.push('Görüşme');
                                                         if (visitor.delivery) tags.push('Teslimat');
+                                                        if (visitor.guide) tags.push('Rehber');
                                                         return (
                                                             <button
                                                                 key={visitor.id}
@@ -1417,7 +1476,7 @@ export default function Visitors() {
                                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left bg-white hover:bg-gray-50 flex justify-between items-center"
                                                 >
                                                     <span className="text-sm">
-                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.meeting && 'Görüşme', formData.delivery && 'Teslimat'].filter(Boolean).join(', ') || 'Seçiniz...'}
+                                                        {[formData.subcontractor_worker && 'Taşeron İşçi', formData.for_electric_station && 'Şarj İstasyonu', formData.daily_guest && 'Günübirlik Misafir', formData.entry_tag && 'Giriş', formData.exit_tag && 'Çıkış', formData.tour_entry && 'Tur Giriş', formData.tour_exit && 'Tur Çıkış', formData.meeting && 'Görüşme', formData.delivery && 'Teslimat', formData.guide && 'Rehber'].filter(Boolean).join(', ') || 'Seçiniz...'}
                                                     </span>
                                                     <svg className={`w-5 h-5 transition-transform flex-shrink-0 ${openTagsDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />

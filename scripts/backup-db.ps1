@@ -64,6 +64,25 @@ try {
     # Geçici dosyayı container içinden sil
     docker exec -t security_db rm $containerTempPath
 
+    # Veritabanı yedekleri bütün kişisel kayıtları içerir. Windows EFS ile
+    # kullanıcı hesabına bağlı olarak diskte şifrele; şifreleme uygulanamazsa
+    # korunmasız bir yedeği başarılı kabul etme.
+    if (-not (Test-Path $localBackupPath)) {
+        throw "Yedek dosyası yerel diskte bulunamadı; şifreleme uygulanamadı."
+    }
+
+    try {
+        [System.IO.File]::Encrypt($localBackupPath)
+        $backupAttributes = [System.IO.File]::GetAttributes($localBackupPath)
+        if (($backupAttributes -band [System.IO.FileAttributes]::Encrypted) -eq 0) {
+            throw "Dosya EFS şifreli olarak işaretlenmedi."
+        }
+        Write-Log "Yedek Windows EFS ile diskte şifrelendi." "SUCCESS"
+    } catch {
+        Remove-Item -LiteralPath $localBackupPath -Force -ErrorAction SilentlyContinue
+        throw "Yedek diskte şifrelenemedi; korunmasız kopya güvenlik için silindi. Hata: $_"
+    }
+
     if (Test-Path $localBackupPath) {
         $fileSize = (Get-Item $localBackupPath).Length / 1KB
         Write-Log "Yedek basariyla alindi: $backupFileName ({0:N2} KB)" "SUCCESS"

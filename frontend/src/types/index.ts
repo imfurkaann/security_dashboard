@@ -97,11 +97,13 @@ export interface VisitorRecord {
     tour_exit?: boolean;
     meeting?: boolean;
     delivery?: boolean;
+    guide?: boolean;
     entry_date: string | null;
     entry_time: string | null;
     exit_date: string | null;
     exit_time: string | null;
     status: 'inside' | 'exited';
+    data_quality_warning?: string | null;
     entry_by: string | null;  // Girişi kaydeden personel
     exit_by: string | null;  // Çıkışı kaydeden personel
     // Compatibility fields sometimes used in UI/export
@@ -197,8 +199,6 @@ export interface SgkFileMeta {
 
 export interface SgkRecord {
     id: string;
-    hashed_tc: string | null;
-    hashed_passport: string | null;
     full_name: string;
     company_name: string | null;
     file_path: string | null;
@@ -249,6 +249,7 @@ export interface VisitorFormData {
     tour_exit: boolean;
     meeting: boolean;
     delivery: boolean;
+    guide: boolean;
     send_whatsapp?: boolean;  // WhatsApp bildirimi (opsiyonel, sadece yeni kayıtlarda)
     entry_time?: string;  // Giriş saati (HH:MM formatında)
     exit_time?: string;  // Çıkış saati (HH:MM formatında)

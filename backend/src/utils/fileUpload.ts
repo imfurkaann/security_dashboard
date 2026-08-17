@@ -2,9 +2,16 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { readSecret } from '../config/secrets';
 
 // SGK kayıtları için dosya yükleme klasörü
 const UPLOAD_DIR = path.join(__dirname, '../../sgk_kayitlari');
+const identifierHashKey = readSecret('PII_HASH_KEY', 'PII_HASH_KEY_FILE')
+    || readSecret('JWT_SECRET', 'JWT_SECRET_FILE');
+
+if (!identifierHashKey) {
+    throw new Error('PII_HASH_KEY/PII_HASH_KEY_FILE veya JWT secret tanımlanmalıdır');
+}
 
 const parseUploadLimitMb = (value: string | undefined, fallbackMb: number): number => {
     const parsed = Number(value);
@@ -33,6 +40,10 @@ export const SGK_MAX_FILE_SIZE_BYTES = SGK_MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export const SGK_MAX_TOTAL_UPLOAD_SIZE_MB = parseUploadLimitMb(process.env.SGK_MAX_TOTAL_UPLOAD_SIZE_MB, 50);
 export const SGK_MAX_TOTAL_UPLOAD_SIZE_BYTES = SGK_MAX_TOTAL_UPLOAD_SIZE_MB * 1024 * 1024;
+export const SGK_MAX_FILE_COUNT = Math.max(
+    1,
+    Math.min(Number.parseInt(process.env.SGK_MAX_FILE_COUNT || '25', 10) || 25, 100)
+);
 
 // Klasör yoksa oluştur
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -43,14 +54,28 @@ if (!fs.existsSync(UPLOAD_DIR)) {
  * TC Kimlik numarasını hash'le (KVKK uyumu için)
  */
 export const hashTC = (tcNo: string): string => {
-    return crypto.createHash('sha256').update(tcNo).digest('hex');
+    return `h1:${crypto.createHmac('sha256', identifierHashKey).update(`tc:${tcNo}`).digest('hex')}`;
 };
+
+export const getTCHashCandidates = (tcNo: string): string[] => [
+    hashTC(tcNo),
+    crypto.createHash('sha256').update(tcNo).digest('hex')
+];
 
 /**
  * Pasaport numarasını hash'le (KVKK uyumu için)
  */
 export const hashPassport = (passportNo: string): string => {
-    return crypto.createHash('sha256').update(passportNo.toUpperCase().trim()).digest('hex');
+    const normalized = passportNo.toUpperCase().trim();
+    return `h1:${crypto.createHmac('sha256', identifierHashKey).update(`passport:${normalized}`).digest('hex')}`;
+};
+
+export const getPassportHashCandidates = (passportNo: string): string[] => {
+    const normalized = passportNo.toUpperCase().trim();
+    return [
+        hashPassport(normalized),
+        crypto.createHash('sha256').update(normalized).digest('hex')
+    ];
 };
 
 /**
@@ -154,18 +179,16 @@ const storage = multer.diskStorage({
  * File filter - PDF, JPG, JPEG, PNG dosyalarına izin ver
  */
 const fileFilter = (_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedMimeTypes = [
-        'application/pdf',
-        'image/jpeg',
-        'image/jpg',
-        'image/png'
-    ];
-
     // Fallback: some mobile browsers/providers send PDFs as application/octet-stream
     // so also allow by file extension when mimetype is generic
     const ext = path.extname(file.originalname || '').toLowerCase();
+    const isGenericMime = !file.mimetype || file.mimetype === 'application/octet-stream';
 
-    if (allowedMimeTypes.includes(file.mimetype) || (ext === '.pdf' && (file.mimetype === 'application/octet-stream' || !file.mimetype))) {
+    const isPdf = ext === '.pdf' && (file.mimetype === 'application/pdf' || isGenericMime);
+    const isJpeg = ['.jpg', '.jpeg'].includes(ext) && (['image/jpeg', 'image/jpg'].includes(file.mimetype) || isGenericMime);
+    const isPng = ext === '.png' && (file.mimetype === 'image/png' || isGenericMime);
+
+    if (isPdf || isJpeg || isPng) {
         cb(null, true);
     } else {
         cb(new Error('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir'));
@@ -179,9 +202,42 @@ export const sgkUpload = multer({
     storage: storage,
     fileFilter: fileFilter,
     limits: {
-        fileSize: SGK_MAX_FILE_SIZE_BYTES
+        fileSize: SGK_MAX_FILE_SIZE_BYTES,
+        files: SGK_MAX_FILE_COUNT
     }
 });
+
+const hasAllowedFileSignature = (file: Express.Multer.File): boolean => {
+    const filePath = (file as any).path as string | undefined;
+    if (!filePath) return false;
+
+    let descriptor: number | null = null;
+    try {
+        descriptor = fs.openSync(filePath, 'r');
+        const header = Buffer.alloc(12);
+        const bytesRead = fs.readSync(descriptor, header, 0, header.length, 0);
+        const ext = path.extname(file.originalname || file.filename || '').toLowerCase();
+
+        if (ext === '.pdf') {
+            return bytesRead >= 5 && header.subarray(0, 5).toString('ascii') === '%PDF-';
+        }
+
+        if (ext === '.jpg' || ext === '.jpeg') {
+            return bytesRead >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+        }
+
+        if (ext === '.png') {
+            return bytesRead >= 8 && header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        }
+
+        return false;
+    } catch (error) {
+        console.error('SGK file signature validation failed:', error);
+        return false;
+    } finally {
+        if (descriptor !== null) fs.closeSync(descriptor);
+    }
+};
 
 export const collectUploadedFiles = (req: Express.Request): Express.Multer.File[] => {
     const filesFromSingle = (req as any).file ? [((req as any).file as Express.Multer.File)] : [];
@@ -204,16 +260,46 @@ export const enforceSgkTotalUploadLimit: import('express').RequestHandler = (req
     const uploadedFiles = collectUploadedFiles(req);
     const totalBytes = uploadedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
 
+    const cleanup = () => uploadedFiles.forEach((file) => {
+        if (file && (file as any).filename) {
+            try {
+                deleteFile((file as any).filename);
+            } catch (error) {
+                console.error('Rejected SGK upload could not be cleaned up:', error);
+            }
+        }
+    });
+
+    if (uploadedFiles.length > SGK_MAX_FILE_COUNT) {
+        cleanup();
+        res.status(413).json({
+            success: false,
+            message: `Tek seferde en fazla ${SGK_MAX_FILE_COUNT} belge yüklenebilir.`
+        });
+        return;
+    }
+
+    if (uploadedFiles.some((file) => file.fieldname !== 'pdf_files')) {
+        cleanup();
+        res.status(400).json({ success: false, message: 'Geçersiz dosya alanı.' });
+        return;
+    }
+
+    if (uploadedFiles.some((file) => !hasAllowedFileSignature(file))) {
+        cleanup();
+        res.status(400).json({
+            success: false,
+            message: 'Dosya içeriği geçersiz. Yalnızca gerçek PDF, JPG ve PNG belgeleri kabul edilir.'
+        });
+        return;
+    }
+
     if (totalBytes <= SGK_MAX_TOTAL_UPLOAD_SIZE_BYTES) {
         next();
         return;
     }
 
-    uploadedFiles.forEach((file) => {
-        if (file && (file as any).filename) {
-            deleteFile((file as any).filename);
-        }
-    });
+    cleanup();
 
     res.status(413).json({
         success: false,
@@ -225,7 +311,17 @@ export const enforceSgkTotalUploadLimit: import('express').RequestHandler = (req
  * Dosya yolunu al (absolute path garantili)
  */
 export const getFilePath = (fileName: string): string => {
-    return path.resolve(UPLOAD_DIR, fileName);
+    if (!fileName || path.basename(fileName) !== fileName || fileName.includes('\0')) {
+        throw new Error('Geçersiz saklanan dosya adı');
+    }
+
+    const resolvedPath = path.resolve(UPLOAD_DIR, fileName);
+    const uploadRoot = path.resolve(UPLOAD_DIR) + path.sep;
+    if (!resolvedPath.startsWith(uploadRoot)) {
+        throw new Error('Dosya yolu yükleme klasörü dışında olamaz');
+    }
+
+    return resolvedPath;
 };
 
 /**

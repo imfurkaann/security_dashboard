@@ -7,7 +7,12 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle, Manager } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 const { RangePicker } = DatePicker;
 
 interface CompactActionButtonProps {
@@ -111,9 +116,18 @@ export default function AdminVehicleRecords() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const PAGE_SIZE = 200;
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
     const fetchData = useCallback(async (offset = 0, append = false) => {
+        if (append && loadMoreInFlightRef.current) return;
+        const requestVersion = append ? requestVersionRef.current : ++requestVersionRef.current;
         try {
+            if (append) {
+                loadMoreInFlightRef.current = true;
+                setLoadingMore(true);
+            }
             const params = new URLSearchParams();
             params.append('includeDeleted', 'true');
             params.append('limit', String(PAGE_SIZE));
@@ -136,16 +150,21 @@ export default function AdminVehicleRecords() {
                 vehicles.length === 0 ? api.get('/vehicles') : Promise.resolve(null),
                 managers.length === 0 ? api.get('/vehicles/managers') : Promise.resolve(null)
             ]);
+            if (requestVersion !== requestVersionRef.current) return;
 
             const fetchedRecords = recordsRes.data || [];
 
             if (append) {
-                setRecords(prev => [...prev, ...fetchedRecords]);
+                setRecords(prev => Array.from(new Map(
+                    [...prev, ...fetchedRecords].map((record) => [record.id, record]),
+                ).values()));
+                nextOffsetRef.current = offset + fetchedRecords.length;
             } else {
                 setRecords(fetchedRecords);
+                nextOffsetRef.current = fetchedRecords.length;
             }
 
-            setHasMore(fetchedRecords.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(recordsRes, offset + fetchedRecords.length, fetchedRecords.length, PAGE_SIZE));
             if (vehiclesRes) {
                 setVehicles(vehiclesRes.data || []);
             }
@@ -153,60 +172,44 @@ export default function AdminVehicleRecords() {
                 setManagers(managersRes.data || []);
             }
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             message.error('Veriler yüklenemedi');
             console.error('Veriler yüklenemedi:', error);
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (append) {
+                loadMoreInFlightRef.current = false;
+                setLoadingMore(false);
+            }
+            if (requestVersion === requestVersionRef.current) setLoading(false);
         }
     }, [filters, vehicles.length, managers.length]);
 
     useEffect(() => {
         setLoading(true);
+        setHasMore(true);
+        loadMoreInFlightRef.current = false;
+        nextOffsetRef.current = 0;
         void fetchData(0, false);
     }, [fetchData]);
 
-    // Infinite scroll: load more on scroll near bottom
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(records.length, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore, records.length]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     useRealtimeRefetch({
         topics: ['vehicles'],
-        onMutation: () => void fetchData(0, false),
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData);
+        },
         enabled: true,
     });
 
@@ -313,8 +316,7 @@ export default function AdminVehicleRecords() {
                     if (!dateValue) return false;
                     const d = dayjs(dateValue);
                     return d.isBetween(start, end, 'millisecond', '[]');
-                })
-                .filter(record => !record.deleted_at);
+                });
 
             if (exportableRecords.length === 0) {
                 message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -384,7 +386,7 @@ export default function AdminVehicleRecords() {
                     record.return_time ? formatTime(record.return_time) : '-',
                     record.given_by || '-',
                     record.returned_by || '-',
-                    record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
+                    record.deleted_at ? 'Silindi' : record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
                     record.notes || '-'
                 ],
                 sheetName: 'Araç Kayıtları',
@@ -718,15 +720,7 @@ export default function AdminVehicleRecords() {
 
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={filters.gate}
-                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={filters.gate} onChange={(gate) => setFilters({ ...filters, gate })} />
                         </div>
 
                         <div className="xl:col-span-1">
@@ -958,6 +952,7 @@ export default function AdminVehicleRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>

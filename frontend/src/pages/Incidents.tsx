@@ -374,7 +374,7 @@ export default function Incidents() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Vardiya Rapor Sistemi</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Günlük güvenlik vardiya raporlarını kaydedin</p>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Günlük güvenlik vardiya raporlarını kaydedin</p>
                             </div>
                         </div>
                         <button

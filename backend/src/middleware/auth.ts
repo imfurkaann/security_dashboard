@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
-import pool from '../config/database';
 import { clearAuthCookies, getRequestToken } from '../utils/authCookies';
+import { getActiveSessionUser } from '../services/sessionService';
 
 // Extend Express Request type to include user
 declare global {
@@ -71,19 +71,9 @@ export const authMiddleware = async (
 
         // JWT validity alone is not enough: disabled/deleted users and role changes
         // must take effect without waiting for token expiration.
-        const userResult = await pool.query<{
-            username: string;
-            role: string;
-        }>(
-            `SELECT username, role
-             FROM personnel
-             WHERE id = $1
-               AND deleted_at IS NULL
-               AND is_active = TRUE`,
-            [decoded.userId]
-        );
+        const activeSessionUser = await getActiveSessionUser(decoded);
 
-        if (userResult.rows.length !== 1) {
+        if (!activeSessionUser) {
             clearAuthCookies(res);
             res.status(401).json({
                 success: false,
@@ -94,8 +84,8 @@ export const authMiddleware = async (
 
         req.user = {
             ...decoded,
-            username: userResult.rows[0].username,
-            role: userResult.rows[0].role,
+            username: activeSessionUser.username,
+            role: activeSessionUser.role,
         };
         next();
     } catch (error) {

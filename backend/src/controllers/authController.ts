@@ -13,6 +13,7 @@ import {
     type TopPerformerRow,
 } from '../services/loginSessionService';
 import { clearAuthCookies, setAuthCookies } from '../utils/authCookies';
+import { disconnectRealtimeSession } from '../realtime/socket';
 
 // Keeps password verification cost similar when a username does not exist.
 const DUMMY_PASSWORD_HASH = '$2a$10$fTErQltYuvKSDtMMqLtzJ.ymeJ5TgU9fdgHwmBmeLb1Z6d7FtlgaC';
@@ -345,8 +346,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
  * POST /api/auth/logout
  */
 export const logout = async (req: Request, res: Response): Promise<void> => {
-    // Not: JWT stateless olduğu için server-side logout yok
-    // Client token'ı localStorage'dan silmeli
+    // Tokenın temsil ettiği DB oturumu aşağıda kapatılır. Auth middleware her
+    // istekte açık oturumu doğruladığı için bu işlem tokenı anında geçersiz kılar.
 
     // GÜVENLİK: Audit log kaydı
     const userId = req.user?.userId;
@@ -374,8 +375,6 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
             console.log('[Logout] Günlük export devre dışı bırakıldı (LOGOUT_EXPORT_ENABLED!=true)');
         }
 
-        await logLogout(userId, clientIp);
-
         // Close only the session represented by this token.
         if (personnelRecordId) {
             try {
@@ -388,12 +387,23 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
                       AND personnel_id = $2
                       AND logout_time IS NULL
                 `;
-                await pool.query(updateQuery, [personnelRecordId, userId, clientIp]);
+                const closedSession = await pool.query(updateQuery, [personnelRecordId, userId, clientIp]);
+                if (closedSession.rowCount !== 1) {
+                    throw new Error('Açık oturum kaydı atomik olarak kapatılamadı');
+                }
+                disconnectRealtimeSession(personnelRecordId);
             } catch (error) {
                 console.error('Error updating personnel_record on logout:', error);
-                // Don't fail logout if personnel_record update fails
+                clearAuthCookies(res);
+                res.status(503).json({
+                    success: false,
+                    message: 'Oturum sunucuda güvenli biçimde kapatılamadı. Lütfen tekrar deneyin.'
+                });
+                return;
             }
         }
+
+        await logLogout(userId, clientIp);
     }
 
     clearAuthCookies(res);

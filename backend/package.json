@@ -17,6 +17,8 @@
     "test:incidents": "jest --testPathPattern=incidents.test.ts --forceExit",
     "test:statistics": "jest --testPathPattern=statistics.test.ts --forceExit",
     "test:security": "jest --testPathPattern=security.test.ts --forceExit",
+    "test:security-concurrency": "ts-node src/scripts/securityConcurrencyCheck.ts",
+    "security:provision-db-role": "ts-node src/scripts/provisionApplicationRole.ts",
     "test:admin": "jest --testPathPattern=admin.test.ts --forceExit",
     "test:validation": "jest --testPathPattern=validation.test.ts --forceExit",
     "test:all": "node tests/runAllTests.js",
@@ -41,15 +43,13 @@
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
     "express-validator": "^7.2.1",
-    "html-to-docx": "^1.8.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
     "pg": "^8.14.1",
     "pino": "^10.3.1",
     "qrcode-terminal": "^0.12.0",
     "socket.io": "^4.8.1",
-    "uuid": "^11.1.0",
-    "xlsx": "^0.18.5"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -68,5 +68,10 @@
     "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    }
   }
 }

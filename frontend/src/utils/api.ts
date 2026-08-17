@@ -51,6 +51,22 @@ const getSelectedGate = (): string | null => {
     return null;
 };
 
+const clearExpiredSessionState = (): void => {
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.removeItem(STORAGE_KEYS.ADMIN_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.ADMIN_USER);
+    localStorage.removeItem(STORAGE_KEYS.SELECTED_GATE);
+    localStorage.removeItem(STORAGE_KEYS.WEEKLY_RANKING_CELEBRATION);
+    localStorage.removeItem(STORAGE_KEYS.ADMIN_TOP_PERFORMERS_POPUP);
+
+    // Sunucu bir oturumu iptal ettiğinde açık sayfadaki kişisel kayıtların
+    // React belleğinde görünmeye devam etmesini engelle.
+    if (window.location.pathname !== '/login') {
+        window.location.replace('/login');
+    }
+};
+
 /**
  * Request interceptor - CSRF protection and security checks
  */
@@ -100,9 +116,8 @@ api.interceptors.response.use(
 
         switch (status) {
             case HTTP_STATUS.UNAUTHORIZED:
-                // Otomatik çıkış devre dışı - Sadece hata göster
                 console.warn('[API] 401 Unauthorized - Token geçersiz veya süresi dolmuş');
-                // NOT: Kullanıcı manuel olarak çıkış yapmalı
+                clearExpiredSessionState();
                 break;
 
             case HTTP_STATUS.TOO_MANY_REQUESTS:

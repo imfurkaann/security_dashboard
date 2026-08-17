@@ -6,9 +6,15 @@ import dayjs from '../utils/dayjsConfig';
 import { isValidLength } from '../utils/validation';
 import type { ManagerRecord, ManagerFilterType } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 import { message, Modal } from 'antd';
 import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
+
+const PAGE_SIZE = 200;
 
 const getIstanbulDate = (): string => {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -81,6 +87,8 @@ interface Personnel {
 export default function Managers() {
     const [records, setRecords] = useState<ManagerRecord[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -101,22 +109,59 @@ export default function Managers() {
     const tableScrollRef = useRef<HTMLDivElement>(null);
     const bottomScrollRef = useRef<HTMLDivElement>(null);
     const recordsRequestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
     // Fetch manager records
-    const fetchData = useCallback(async () => {
-        const requestVersion = ++recordsRequestVersionRef.current;
+    const fetchData = useCallback(async (offset = 0, append = false) => {
+        if (append && loadMoreInFlightRef.current) return;
+        const requestVersion = append
+            ? recordsRequestVersionRef.current
+            : ++recordsRequestVersionRef.current;
         try {
+            if (append) {
+                loadMoreInFlightRef.current = true;
+                setLoadingMore(true);
+            }
             const activityDate = getIstanbulDate();
-            const res = await api.get(`/managers/records?includeDeleted=true&activityDate=${activityDate}&limit=10000`);
+            const res = await api.get(`/managers/records?includeDeleted=true&activityDate=${activityDate}&limit=${PAGE_SIZE}&offset=${offset}`);
             if (requestVersion !== recordsRequestVersionRef.current) return;
-            setRecords(res.data || []);
+            const fetched: ManagerRecord[] = Array.isArray(res.data) ? res.data : [];
+            if (append) {
+                setRecords((previous) => {
+                    const merged = [...previous, ...fetched];
+                    return Array.from(new Map(merged.map((record) => [record.id, record])).values());
+                });
+                nextOffsetRef.current = offset + fetched.length;
+            } else {
+                setRecords(fetched);
+                nextOffsetRef.current = fetched.length;
+            }
+            setHasMore(hasNextApiPage(res, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (err) {
             if (requestVersion !== recordsRequestVersionRef.current) return;
             console.error('Müdür verisi yüklenemedi', err);
         } finally {
+            if (append) {
+                loadMoreInFlightRef.current = false;
+                setLoadingMore(false);
+            }
             if (requestVersion === recordsRequestVersionRef.current) setLoading(false);
         }
     }, []);
+
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        enabled: !loading,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        contentKey: filterMode,
+        onLoadMore: () => {
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     // Fetch managers list
     const fetchManagers = useCallback(async () => {
@@ -135,7 +180,12 @@ export default function Managers() {
 
     const refreshManagersRealtime = useCallback(async () => {
         if (document.hidden) return;
-        await Promise.all([fetchData(), fetchManagers()]);
+        const loadedItemCount = nextOffsetRef.current;
+        loadMoreInFlightRef.current = false;
+        await Promise.all([
+            refreshLoadedPages(loadedItemCount, PAGE_SIZE, fetchData),
+            fetchManagers(),
+        ]);
     }, [fetchData, fetchManagers]);
 
     useRealtimeRefetch({
@@ -691,6 +741,7 @@ export default function Managers() {
                                             ))}
                                         </tbody>
                                     </table>
+                                    <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                                 </div>
                             </div>
                         )}

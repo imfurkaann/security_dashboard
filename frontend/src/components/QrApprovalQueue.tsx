@@ -36,8 +36,6 @@ interface SgkPendingFile {
 
 interface PendingQrSgkData {
     id: string;
-    hashed_tc: string | null;
-    hashed_passport: string | null;
     full_name: string;
     company_name: string;
     notes: string | null;

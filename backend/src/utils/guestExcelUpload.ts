@@ -15,13 +15,12 @@ const MAX_FILE_SIZE_BYTES = GUEST_EXCEL_MAX_FILE_SIZE_MB * 1024 * 1024;
 const storage = multer.memoryStorage();
 
 const allowedMimeTypes = new Set([
-    'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 ]);
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
     const fileName = file.originalname.toLowerCase();
-    const hasExcelExtension = fileName.endsWith('.xls') || fileName.endsWith('.xlsx');
+    const hasExcelExtension = fileName.endsWith('.xlsx');
     const hasAllowedMimeType = allowedMimeTypes.has(file.mimetype)
         || file.mimetype === 'application/octet-stream';
 
@@ -30,7 +29,7 @@ const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
         return;
     }
 
-    cb(new Error('Sadece geçerli Excel dosyaları (.xls, .xlsx) yüklenebilir'));
+    cb(new Error('Güvenlik nedeniyle yalnızca geçerli .xlsx dosyaları yüklenebilir'));
 };
 
 const guestExcelUpload = multer({

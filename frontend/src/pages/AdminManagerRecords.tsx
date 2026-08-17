@@ -7,7 +7,12 @@ import api from '../utils/api';
 import { formatDate, formatTime } from '../utils/dateUtils';
 import type { ManagerRecord } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
 interface CompactActionButtonProps {
@@ -142,7 +147,7 @@ export default function AdminManagerRecords() {
                 setRecords(fetched);
                 nextOffsetRef.current = fetched.length;
             }
-            setHasMore(fetched.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(response, offset + fetched.length, fetched.length, PAGE_SIZE));
         } catch (error) {
             if (requestVersion !== requestVersionRef.current) return;
             const err = error as { response?: { data?: { message?: string } } };
@@ -173,11 +178,12 @@ export default function AdminManagerRecords() {
 
     useRealtimeRefetch({
         topics: ['managers'],
-        onMutation: () => {
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
             const requestVersion = ++requestVersionRef.current;
             loadMoreInFlightRef.current = false;
-            nextOffsetRef.current = 0;
-            void fetchData(0, false, requestVersion);
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, requestVersion));
             void fetchManagers();
         },
         enabled: true,
@@ -270,8 +276,7 @@ export default function AdminManagerRecords() {
                     if (!dateValue) return false;
                     const d = dayjs(dateValue);
                     return d.isBetween(start, end, 'millisecond', '[]');
-                })
-                .filter(record => !record.deleted_at);
+                });
 
             if (exportableRecords.length === 0) {
                 message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -331,7 +336,7 @@ export default function AdminManagerRecords() {
                     record.entry_time ? formatTime(record.entry_time) : '-',
                     record.exit_date ? formatDate(record.exit_date) : '-',
                     record.exit_time ? formatTime(record.exit_time) : '-',
-                    record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
+                    record.deleted_at ? 'Silindi' : record.status === 'inside' ? 'İçeride' : 'Çıkış Yapıldı',
                     record.entry_by || '-',
                     record.exit_by || '-',
                     record.notes || '-'
@@ -588,33 +593,19 @@ export default function AdminManagerRecords() {
         };
     }, [filteredRecords.length, loading]);
 
-    // Infinite scroll: guarded against duplicate and stale page requests.
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-        const loadNextPage = () => {
-            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
             loadMoreInFlightRef.current = true;
             setLoadingMore(true);
             void fetchData(nextOffsetRef.current, true);
-        };
-        const onScroll = () => {
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < 300) loadNextPage();
-        };
-        const onWindowScroll = () => {
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const remaining = document.documentElement.scrollHeight - windowHeight - scrollTop;
-            if (remaining < 400) loadNextPage();
-        };
-        node.addEventListener('scroll', onScroll);
-        window.addEventListener('scroll', onWindowScroll);
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore]);
+        },
+    });
 
     const isScrollingTable = useRef(false);
     const isScrollingBar = useRef(false);
@@ -779,15 +770,7 @@ export default function AdminManagerRecords() {
                         {/* Gate */}
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={filters.gate}
-                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={filters.gate} onChange={(gate) => setFilters({ ...filters, gate })} />
                         </div>
 
                         {/* Entry Date Range */}
@@ -993,6 +976,7 @@ export default function AdminManagerRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>

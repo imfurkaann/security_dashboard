@@ -2,8 +2,8 @@
  * Audit Log Service
  * GÜVENLİK: Tüm kritik veritabanı işlemlerini kaydeder
  * 
- * DURUM: Audit logging şu anda DEAKTIF durumdadır.
- * Herhangi bir log kaydı tutulmamaktadır.
+ * Audit logging güvenli varsayılan olarak açıktır. Yalnızca açıkça
+ * AUDIT_LOG_ENABLED=false verilirse kapatılır.
  */
 import pool from '../config/database';
 
@@ -31,13 +31,11 @@ export interface AuditLogEntry {
  * Audit log kaydı oluştur
  * GÜVENLİK: Bu fonksiyon asenkron olarak çalışır, ana işlemi bloklamamalı
  * 
- * DEAKTIF DURUM: Audit logging şu anda devre dışı bırakılmıştır.
- * Herhangi bir log kaydı tutulmamaktadır.
  */
 export const createAuditLog = async (entry: AuditLogEntry): Promise<void> => {
     const authAuditEnabled = process.env.AUTH_AUDIT_LOG_ENABLED === 'true';
     const guestRegistryAuditEnabled = process.env.GUEST_REGISTRY_AUDIT_LOG_ENABLED === 'true';
-    const fullAuditEnabled = process.env.AUDIT_LOG_ENABLED === 'true';
+    const fullAuditEnabled = process.env.AUDIT_LOG_ENABLED !== 'false';
     const isAuthAudit = authAuditEnabled && entry.tableName === 'auth';
     const isGuestRegistryAudit = guestRegistryAuditEnabled && entry.tableName === 'misafir_kayitlari';
     if (!fullAuditEnabled && !isAuthAudit && !isGuestRegistryAudit) {

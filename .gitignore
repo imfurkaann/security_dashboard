@@ -6,6 +6,9 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Environment variables
+.env
+backend/.env
+frontend/.env
 .env.local
 .env.development.local
 .env.test.local
@@ -30,7 +33,8 @@ Thumbs.db
 # Database
 *.sql.backup
 *.dump
-!db_yedek.dump
+/db_yedek.dump
+/database/local_backup.sql
 
 # Local Docker secret material
 secrets/

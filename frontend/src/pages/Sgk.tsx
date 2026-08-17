@@ -7,6 +7,8 @@ import { formatDate } from '../utils/dateUtils';
 import type { SgkRecord, SgkFormData, SgkFileMeta } from '../types';
 import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
 
 interface CompactActionButtonProps {
     onClick: () => void;
@@ -63,6 +65,9 @@ const INITIAL_FORM_DATA: SgkFormData = {
 };
 
 const ZOOM_STEPS: number[] = [1, 2, 4, 8];
+const PAGE_SIZE = 200;
+const MAX_DOCUMENT_COUNT = 25;
+const MAX_TOTAL_FILE_BYTES = 50 * 1024 * 1024;
 
 const looksLikeMojibake = (value: string): boolean => /Ã|Å|Ä|Ð|Ñ|â/.test(value);
 
@@ -83,13 +88,17 @@ const normalizeDisplayFileName = (value: string): string => {
 export default function Sgk() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
-    const PAGE_SIZE = 200;
+    const [totalRecords, setTotalRecords] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const requestVersionRef = useRef(0);
+    const loadMoreInFlightRef = useRef(false);
+    const nextOffsetRef = useRef(0);
 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
     const [formData, setFormData] = useState<SgkFormData>(INITIAL_FORM_DATA);
     const [editAppendFiles, setEditAppendFiles] = useState<File[]>([]);
     const [editReplaceFiles, setEditReplaceFiles] = useState<File[]>([]);
@@ -185,7 +194,7 @@ export default function Sgk() {
     const [searchMode, setSearchMode] = useState<'all' | 'tc' | 'passport'>('all');
     const [searching, setSearching] = useState(false);
 
-    const fetchData = useCallback(async (offset = 0, append = false) => {
+    const fetchData = useCallback(async (offset = 0, append = false, requestVersion = requestVersionRef.current) => {
         try {
             const params: Record<string, string | number | boolean> = {
                 limit: PAGE_SIZE,
@@ -197,30 +206,63 @@ export default function Sgk() {
             if (filters.company_name) params.company_name = filters.company_name;
 
             const response = await api.get('/sgk/records', { params });
-            const fetched = response.data || [];
+            if (requestVersion !== requestVersionRef.current) return;
+            const responsePayload = response.data;
+            const fetched: SgkRecord[] = Array.isArray(responsePayload)
+                ? responsePayload
+                : (Array.isArray(responsePayload?.data) ? responsePayload.data : []);
+            const reportedTotal = Number(responsePayload?.total);
+            const hasReportedTotal = Number.isFinite(reportedTotal) && reportedTotal >= 0;
+            const nextOffset = offset + fetched.length;
 
-            if (append) {
-                setAllRecords(prev => [...prev, ...fetched]);
-            } else {
-                setAllRecords(fetched);
+            if (hasReportedTotal) {
+                setTotalRecords(reportedTotal);
+            } else if (!append) {
+                setTotalRecords(null);
             }
 
-            setHasMore(fetched.length === PAGE_SIZE);
+            if (append) {
+                setAllRecords((previous) => {
+                    const merged = new Map(previous.map((record) => [record.id, record]));
+                    fetched.forEach((record) => merged.set(record.id, record));
+                    return Array.from(merged.values());
+                });
+                nextOffsetRef.current = nextOffset;
+            } else {
+                setAllRecords(fetched);
+                nextOffsetRef.current = fetched.length;
+            }
+
+            setHasMore(hasReportedTotal ? nextOffset < reportedTotal : fetched.length === PAGE_SIZE);
         } catch (error) {
+            if (requestVersion !== requestVersionRef.current) return;
             console.error('SGK kayıtları yüklenemedi:', error);
             message.error('SGK kayıtları yüklenemedi');
         } finally {
-            setLoading(false);
-            setLoadingMore(false);
+            if (requestVersion === requestVersionRef.current) {
+                setLoading(false);
+                setLoadingMore(false);
+                loadMoreInFlightRef.current = false;
+            }
         }
     }, [filters.full_name, filters.company_name]);
 
-    // Fetch all records on mount and filter changes
+    // Fetch all records on mount and filter changes. A short debounce prevents
+    // stale responses and a request on every keystroke.
     useEffect(() => {
-        if (searchMode === 'all') {
-            setLoading(true);
-            void fetchData(0, false);
-        }
+        if (searchMode !== 'all') return;
+
+        const requestVersion = ++requestVersionRef.current;
+        setLoading(true);
+        setHasMore(true);
+        nextOffsetRef.current = 0;
+        loadMoreInFlightRef.current = false;
+
+        const timeoutId = window.setTimeout(() => {
+            void fetchData(0, false, requestVersion);
+        }, 300);
+
+        return () => window.clearTimeout(timeoutId);
     }, [fetchData, searchMode]);
 
     // Filtered records (now server-side filtered)
@@ -266,12 +308,16 @@ export default function Sgk() {
 
             setSearching(true);
             setSearchMode('tc');
+            ++requestVersionRef.current;
+            setHasMore(false);
             try {
                 const response = await api.post('/sgk/records/search', {
                     search_type: 'tc',
                     tc_no: cleanTC
                 });
-                setAllRecords(response.data.data || []);
+                const records = response.data.data || [];
+                setAllRecords(records);
+                setTotalRecords(records.length);
                 if (!response.data.data || response.data.data.length === 0) {
                     message.warning('Bu TC Kimlik No ile kayıt bulunamadı');
                 }
@@ -290,12 +336,16 @@ export default function Sgk() {
 
             setSearching(true);
             setSearchMode('passport');
+            ++requestVersionRef.current;
+            setHasMore(false);
             try {
                 const response = await api.post('/sgk/records/search', {
                     search_type: 'passport',
                     passport_no: cleanPassport
                 });
-                setAllRecords(response.data.data || []);
+                const records = response.data.data || [];
+                setAllRecords(records);
+                setTotalRecords(records.length);
                 if (!response.data.data || response.data.data.length === 0) {
                     message.warning('Bu Pasaport No ile kayıt bulunamadı');
                 }
@@ -308,18 +358,15 @@ export default function Sgk() {
         }
     }, [filters.tc_no, filters.passport_no]);
 
-    // Reset to show all records
-    const resetToAllRecords = useCallback(async () => {
-        setSearchMode('all');
-        setLoading(true);
-        await fetchData(0, false);
-    }, [fetchData]);
-
     useRealtimeRefetch({
         topics: ['sgk'],
         onMutation: async () => {
             if (searchMode !== 'all') return;
-            await fetchData(0, false);
+            const loadedItemCount = nextOffsetRef.current;
+            const requestVersion = ++requestVersionRef.current;
+            loadMoreInFlightRef.current = false;
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, requestVersion));
         },
         enabled: true,
     });
@@ -332,50 +379,24 @@ export default function Sgk() {
             full_name: '',
             company_name: ''
         });
-        if (searchMode !== 'all') {
-            resetToAllRecords();
-        }
-    }, [searchMode, resetToAllRecords]);
+        setSearchMode('all');
+    }, []);
 
-    // Infinite scroll: load more when near bottom
-    useEffect(() => {
-        if (searchMode !== 'all') return;
-
-        const node = containerRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(allRecords.length, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                setLoadingMore(true);
-                void fetchData(allRecords.length, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore, allRecords.length, searchMode]);
+    useReliableInfiniteScroll({
+        containerRef,
+        enabled: searchMode === 'all',
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: allRecords.length,
+        contentKey: JSON.stringify(filters),
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     // Reset upload form
     const resetUploadForm = useCallback(() => {
@@ -386,17 +407,28 @@ export default function Sgk() {
 
     const validateSelectedFiles = useCallback((selectedFiles: File[]): File[] | null => {
         const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
 
-        const hasInvalidType = selectedFiles.some((file) => !allowedTypes.includes(file.type));
+        const hasInvalidType = selectedFiles.some((file) => {
+            if (allowedTypes.includes(file.type)) return false;
+            const extension = file.name.includes('.')
+                ? `.${file.name.split('.').pop()?.toLowerCase()}`
+                : '';
+            return !allowedExtensions.includes(extension);
+        });
         if (hasInvalidType) {
             message.warning('Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir');
             return null;
         }
 
-        const maxTotalBytes = 50 * 1024 * 1024;
+        if (selectedFiles.length > MAX_DOCUMENT_COUNT) {
+            message.warning(`Tek seferde en fazla ${MAX_DOCUMENT_COUNT} belge yükleyebilirsiniz`);
+            return null;
+        }
+
         const totalBytes = selectedFiles.reduce((sum, file) => sum + (file.size || 0), 0);
 
-        if (totalBytes > maxTotalBytes) {
+        if (totalBytes > MAX_TOTAL_FILE_BYTES) {
             message.warning('Toplam dosya boyutu en fazla 50MB olabilir');
             return null;
         }
@@ -408,6 +440,7 @@ export default function Sgk() {
     const handleUploadFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
         if (!selectedFiles) {
+            e.target.value = '';
             return;
         }
 
@@ -418,6 +451,7 @@ export default function Sgk() {
     const handleEditAppendFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
         if (!selectedFiles) {
+            e.target.value = '';
             return;
         }
 
@@ -429,6 +463,7 @@ export default function Sgk() {
     const handleEditReplaceFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const selectedFiles = validateSelectedFiles(Array.from(e.target.files || []));
         if (!selectedFiles) {
+            e.target.value = '';
             return;
         }
 
@@ -439,6 +474,7 @@ export default function Sgk() {
     // Handle upload submission
     const handleUploadSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting) return;
 
         // Frontend validasyon
         // TC ve pasaport her ikisi de girilmiş mi?
@@ -475,6 +511,8 @@ export default function Sgk() {
             return;
         }
 
+        setSubmitting(true);
+
         try {
             // FormData oluştur
             const uploadData = new FormData();
@@ -495,7 +533,7 @@ export default function Sgk() {
                 uploadData.append('pdf_files', file);
             });
 
-            const response = await api.post('/sgk/records', uploadData, {
+            await api.post('/sgk/records', uploadData, {
                 headers: {
                     'Content-Type': 'multipart/form-data'
                 }
@@ -505,24 +543,31 @@ export default function Sgk() {
             setShowUploadModal(false);
             resetUploadForm();
 
-            // Listeyi yenile
-            const recordsResponse = await api.get('/sgk/records');
-            setAllRecords(recordsResponse.data || []);
+            setSearchMode('all');
+            const requestVersion = ++requestVersionRef.current;
+            nextOffsetRef.current = 0;
+            loadMoreInFlightRef.current = false;
+            void fetchData(0, false, requestVersion);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'Kayıt başarısız');
+        } finally {
+            setSubmitting(false);
         }
-    }, [formData, resetUploadForm]);
+    }, [fetchData, formData, resetUploadForm, submitting]);
 
     // Handle preview
-    const handlePreview = useCallback((record: SgkRecord) => {
+    const handlePreview = useCallback((record: SgkRecord, fileIndex = 0) => {
         setPreviewRecord(record);
-        setSelectedFileIndex(0);
+        const files = getRecordFiles(record);
+        setSelectedFileIndex(Math.min(Math.max(fileIndex, 0), Math.max(files.length - 1, 0)));
         setShowPreviewModal(true);
         setPreviewContentType('');
-    }, []);
+    }, [getRecordFiles]);
 
     useEffect(() => {
+        const controller = new AbortController();
+
         const fetchSelectedPreviewFile = async () => {
             if (!showPreviewModal || !previewRecord || !selectedPreviewFile) {
                 return;
@@ -535,7 +580,10 @@ export default function Sgk() {
                     ? `/sgk/records/${previewRecord.id}/files/${selectedPreviewFile.id}`
                     : `/sgk/records/${previewRecord.id}/file`;
 
-                const response = await api.get(endpoint, { responseType: 'blob' });
+                const response = await api.get(endpoint, {
+                    responseType: 'blob',
+                    signal: controller.signal
+                });
 
                 const responseContentType = response.headers['content-type'];
                 const contentType = typeof responseContentType === 'string'
@@ -555,6 +603,7 @@ export default function Sgk() {
                 });
                 setPreviewContentType(contentType);
             } catch (error) {
+                if (controller.signal.aborted) return;
                 message.error('Belge önizlenirken hata oluştu');
                 setShowPreviewModal(false);
                 setPreviewRecord(null);
@@ -565,7 +614,8 @@ export default function Sgk() {
             }
         };
 
-        fetchSelectedPreviewFile();
+        void fetchSelectedPreviewFile();
+        return () => controller.abort();
     }, [showPreviewModal, previewRecord, selectedPreviewFile]);
 
     // Unmount cleanup for pdfUrl to prevent memory leaks
@@ -607,14 +657,17 @@ export default function Sgk() {
                     message.success('Kayıt ve belge başarıyla silindi');
 
                     // Listeyi yenile
-                    void fetchData(0, false);
+                    const requestVersion = ++requestVersionRef.current;
+                    nextOffsetRef.current = 0;
+                    loadMoreInFlightRef.current = false;
+                    void fetchData(0, false, requestVersion);
                 } catch (error) {
                     const err = error as { response?: { data?: { message?: string } } };
                     message.error(err?.response?.data?.message || 'Silme işlemi sırasında hata oluştu');
                 }
             }
         });
-    }, []);
+    }, [fetchData]);
 
     // Handle edit submission
     const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
@@ -657,7 +710,8 @@ export default function Sgk() {
             return;
         }
 
-        setLoading(true);
+        if (submitting) return;
+        setSubmitting(true);
 
         try {
             const formDataToSend = new FormData();
@@ -703,14 +757,17 @@ export default function Sgk() {
             resetUploadForm();
 
             // Listeyi yenile
-            void fetchData(0, false);
+            const requestVersion = ++requestVersionRef.current;
+            nextOffsetRef.current = 0;
+            loadMoreInFlightRef.current = false;
+            void fetchData(0, false, requestVersion);
         } catch (error) {
             const err = error as { response?: { data?: { message?: string } } };
             message.error(err?.response?.data?.message || 'Güncelleme sırasında hata oluştu');
         } finally {
-            setLoading(false);
+            setSubmitting(false);
         }
-    }, [editAppendFiles, editReplaceFiles, editingRecord, formData, resetUploadForm]);
+    }, [editAppendFiles, editReplaceFiles, editingRecord, fetchData, formData, resetUploadForm, submitting]);
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -726,7 +783,7 @@ export default function Sgk() {
                             </button>
                             <div className="min-w-0">
                                 <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel SGK Belge Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-355 mt-0.5">Otel SGK belgelerini yönetin.</p>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel SGK belgelerini yönetin.</p>
                             </div>
                         </div>
                         <button
@@ -749,7 +806,7 @@ export default function Sgk() {
                         <h2 className="text-base font-bold text-gray-900">
                             SGK Belgeleri
                             <span className="block sm:inline sm:ml-2 text-xs font-normal text-gray-500">
-                                ({filteredRecords.length} kayıt{hasActiveFilters && ` - ${allRecords.length} toplam`})
+                                ({filteredRecords.length}{totalRecords !== null ? ` / ${totalRecords}` : ''} kayıt gösteriliyor{hasMore ? ', devamı aşağıda' : ''})
                             </span>
                         </h2>
                         {hasActiveFilters && (
@@ -774,7 +831,12 @@ export default function Sgk() {
                                 <input
                                     type="text"
                                     value={filters.tc_no}
-                                    onChange={(e) => setFilters({ ...filters, tc_no: e.target.value, passport_no: '' })}
+                                    onChange={(e) => setFilters({
+                                        tc_no: e.target.value,
+                                        passport_no: '',
+                                        full_name: '',
+                                        company_name: ''
+                                    })}
                                     placeholder="11 haneli TC No"
                                     maxLength={11}
                                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -800,7 +862,12 @@ export default function Sgk() {
                                 <input
                                     type="text"
                                     value={filters.passport_no}
-                                    onChange={(e) => setFilters({ ...filters, passport_no: e.target.value, tc_no: '' })}
+                                    onChange={(e) => setFilters({
+                                        tc_no: '',
+                                        passport_no: e.target.value,
+                                        full_name: '',
+                                        company_name: ''
+                                    })}
                                     placeholder="6-20 karakter"
                                     maxLength={20}
                                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -825,7 +892,15 @@ export default function Sgk() {
                             <input
                                 type="text"
                                 value={filters.full_name}
-                                onChange={(e) => setFilters({ ...filters, full_name: e.target.value })}
+                                onChange={(e) => {
+                                    setFilters({
+                                        tc_no: '',
+                                        passport_no: '',
+                                        full_name: e.target.value,
+                                        company_name: filters.company_name
+                                    });
+                                    setSearchMode('all');
+                                }}
                                 placeholder="İsim ile filtrele..."
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
@@ -838,7 +913,15 @@ export default function Sgk() {
                             <input
                                 type="text"
                                 value={filters.company_name}
-                                onChange={(e) => setFilters({ ...filters, company_name: e.target.value })}
+                                onChange={(e) => {
+                                    setFilters({
+                                        tc_no: '',
+                                        passport_no: '',
+                                        full_name: filters.full_name,
+                                        company_name: e.target.value
+                                    });
+                                    setSearchMode('all');
+                                }}
                                 placeholder="Firma adı ile filtrele..."
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
@@ -916,6 +999,34 @@ export default function Sgk() {
                                                 />
                                             </div>
                                         </div>
+                                        {getRecordFiles(record).length > 0 && (
+                                            <div className="mt-3 border-t border-gray-200 pt-2">
+                                                <div className="mb-1.5 flex items-center justify-between gap-3">
+                                                    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Belgeler</span>
+                                                    {getRecordFiles(record).length > 1 && (
+                                                        <span className="text-[11px] text-gray-500">Diğer belgeler için sağa-sola kaydırın</span>
+                                                    )}
+                                                </div>
+                                                <div
+                                                    className="w-full overflow-x-auto overscroll-x-contain pb-2"
+                                                    aria-label={`${record.full_name} belge listesi`}
+                                                >
+                                                    <div className="flex min-w-max items-center gap-2">
+                                                        {getRecordFiles(record).map((file, fileIndex) => (
+                                                            <button
+                                                                type="button"
+                                                                key={file.id || `${record.id}-${fileIndex}`}
+                                                                onClick={() => handlePreview(record, fileIndex)}
+                                                                className="max-w-[220px] shrink-0 truncate rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 shadow-sm hover:bg-blue-50"
+                                                                title={normalizeDisplayFileName(file.original_file_name || file.file_name)}
+                                                            >
+                                                                {fileIndex + 1}. {normalizeDisplayFileName(file.original_file_name || file.file_name)}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                         {record.notes && (
                                             <div className="mt-2 pt-2 border-t border-gray-200">
                                                 <span className="text-gray-500 font-semibold text-xs">Not: </span>
@@ -925,6 +1036,14 @@ export default function Sgk() {
                                     </div>
                                 ))}
                             </div>
+                            {loadingMore && (
+                                <div className="py-4 text-center text-xs font-medium text-gray-500">Daha fazla kayıt yükleniyor...</div>
+                            )}
+                            {!hasMore && filteredRecords.length > 0 && (
+                                <div className="py-3 text-center text-[11px] font-medium text-gray-500">
+                                    Tüm {totalRecords ?? filteredRecords.length} kayıt gösteriliyor
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -1029,9 +1148,16 @@ export default function Sgk() {
                                 required
                             />
                             {formData.pdf_files.length > 0 && (
-                                <p className="mt-1 text-xs text-gray-600">
-                                    Seçili dosyalar: {formData.pdf_files.length} adet
-                                </p>
+                                <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                                    <p className="mb-1 text-xs font-medium text-gray-700">Seçili dosyalar: {formData.pdf_files.length} adet</p>
+                                    <ul className="max-h-24 space-y-1 overflow-y-auto pr-1 text-xs text-gray-600">
+                                        {formData.pdf_files.map((file, index) => (
+                                            <li key={`${file.name}-${file.lastModified}-${index}`} className="truncate" title={file.name}>
+                                                {index + 1}. {file.name}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
                             )}
                         </div>
 
@@ -1048,8 +1174,8 @@ export default function Sgk() {
                     </div>
 
                     <div className="flex gap-3 pt-4 border-t border-gray-200">
-                        <ActionButton type="submit" variant="primary" className="flex-1 py-2.5 text-sm">
-                            Kaydet
+                        <ActionButton type="submit" variant="primary" disabled={submitting} className="flex-1 py-2.5 text-sm">
+                            {submitting ? 'Kaydediliyor...' : 'Kaydet'}
                         </ActionButton>
                         <ActionButton type="button" variant="neutral" onClick={() => { setShowUploadModal(false); resetUploadForm(); }} className="flex-1 py-2.5 text-sm">
                             İptal
@@ -1194,10 +1320,10 @@ export default function Sgk() {
                                 <ActionButton
                                     type="submit"
                                     variant="primary"
-                                    disabled={loading}
+                                    disabled={submitting}
                                     className="flex-1 py-2.5 text-sm"
                                 >
-                                    {loading ? 'Güncelleniyor...' : 'Güncelle'}
+                                    {submitting ? 'Güncelleniyor...' : 'Güncelle'}
                                 </ActionButton>
                                 <ActionButton
                                     type="button"
@@ -1239,7 +1365,7 @@ export default function Sgk() {
                                     </p>
                                 )}
                             </div>
-                            <div>
+                            <div className="flex shrink-0 flex-wrap justify-end gap-2">
                                 {(previewContentType.includes('pdf') || (selectedPreviewFile?.file_name || '').match(/\.pdf$/i)) && pdfUrl && (
                                     <a
                                         href={pdfUrl}
@@ -1253,16 +1379,44 @@ export default function Sgk() {
                             </div>
                         </div>
                         {previewFiles.length > 1 && (
-                            <div className="border-b border-gray-200 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                                {previewFiles.map((file, index) => (
-                                    <button
-                                        key={file.id || `${file.file_name}-${index}`}
-                                        onClick={() => setSelectedFileIndex(index)}
-                                        className={`px-3 py-1.5 text-xs rounded-md whitespace-nowrap ${selectedFileIndex === index ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                    >
-                                        {normalizeDisplayFileName(file.original_file_name || file.file_name)}
-                                    </button>
-                                ))}
+                            <div className="flex items-center gap-2 border-b border-gray-200 py-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedFileIndex((current) => Math.max(0, current - 1))}
+                                    disabled={selectedFileIndex === 0}
+                                    className="shrink-0 rounded-md border border-gray-200 bg-white p-1.5 text-gray-700 hover:bg-gray-100 disabled:opacity-35"
+                                    aria-label="Önceki belge"
+                                >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-1">
+                                    <div className="flex min-w-max items-center gap-2">
+                                        {previewFiles.map((file, index) => (
+                                            <button
+                                                type="button"
+                                                key={file.id || `${file.file_name}-${index}`}
+                                                onClick={() => setSelectedFileIndex(index)}
+                                                className={`max-w-[240px] truncate whitespace-nowrap rounded-md px-3 py-1.5 text-xs ${selectedFileIndex === index ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                title={normalizeDisplayFileName(file.original_file_name || file.file_name)}
+                                            >
+                                                {index + 1}. {normalizeDisplayFileName(file.original_file_name || file.file_name)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedFileIndex((current) => Math.min(previewFiles.length - 1, current + 1))}
+                                    disabled={selectedFileIndex >= previewFiles.length - 1}
+                                    className="shrink-0 rounded-md border border-gray-200 bg-white p-1.5 text-gray-700 hover:bg-gray-100 disabled:opacity-35"
+                                    aria-label="Sonraki belge"
+                                >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
                             </div>
                         )}
                         <div className="flex-1 min-h-0 overflow-auto bg-gray-100 flex items-center justify-center rounded-xl mt-3">

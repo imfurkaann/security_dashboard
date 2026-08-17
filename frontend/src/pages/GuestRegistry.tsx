@@ -7,6 +7,8 @@ import api from '../utils/api';
 import type { GuestRegistryColumn, GuestRegistryRecord, GuestRegistrySchema } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import CustomModal from '../components/Modal';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 interface ImportSummary {
     totalRows: number;
@@ -147,8 +149,12 @@ export default function GuestRegistry() {
                 loadingMoreRef.current = false;
                 setLoadingMore(false);
             } else if (generation === requestGenerationRef.current) {
-                if (silent) setFiltering(false);
-                else setLoading(false);
+                // Arama ya da canlı güncelleme, ilk yükleme tamamlanmadan başlayabilir.
+                // Bu durumda "silent" istek yükleme göstergesini başlatmaz; ancak önceki
+                // ilk isteğin göstergesini de kapatması gerekir. Aksi halde veriler gelse
+                // bile sayfa sonsuza kadar yükleniyor görünür.
+                setFiltering(false);
+                setLoading(false);
             }
         }
     }, []);
@@ -178,25 +184,25 @@ export default function GuestRegistry() {
         void fetchRecords(debouncedSearchText, 1, false, { silent: true });
     }, [debouncedSearchText, fetchRecords]);
 
-    // Tablo kendi içinde kaydığı için yalnızca tek bir scroll kaynağı dinlenir.
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading: loading || filtering,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        contentKey: debouncedSearchText,
+        onLoadMore: () => {
+            if (loadingMoreRef.current) return;
+            void fetchRecords(debouncedSearchText, loadedPageRef.current + 1, true);
+        },
+    });
 
-        const onScroll = () => {
-            if (loadingMoreRef.current || !hasMore) return;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < 300) {
-                void fetchRecords(debouncedSearchText, loadedPageRef.current + 1, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll, { passive: true });
-        return () => node.removeEventListener('scroll', onScroll);
-    }, [fetchRecords, hasMore, debouncedSearchText, records.length]);
-
-    const refreshGuestRegistryRealtime = useCallback(() => {
-        return fetchRecords(debouncedSearchText, 1, false, { silent: true });
+    const refreshGuestRegistryRealtime = useCallback(async () => {
+        const loadedPageCount = Math.max(1, loadedPageRef.current);
+        await fetchRecords(debouncedSearchText, 1, false, { silent: true });
+        for (let page = 2; page <= loadedPageCount; page += 1) {
+            await fetchRecords(debouncedSearchText, page, true, { silent: true });
+        }
     }, [fetchRecords, debouncedSearchText]);
 
     useRealtimeRefetch({
@@ -587,11 +593,7 @@ export default function GuestRegistry() {
                                         ))}
                                     </tbody>
                                 </table>
-                                {loadingMore && (
-                                    <div className="flex items-center justify-center py-4">
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                                    </div>
-                                )}
+                                <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={records.length} />
                             </div>
                         </div>
                     )}

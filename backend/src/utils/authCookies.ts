@@ -6,6 +6,7 @@ export const CSRF_COOKIE_NAME = 'security_csrf';
 export const CSRF_HEADER_NAME = 'x-csrf-token';
 
 const secureCookies = process.env.AUTH_COOKIE_SECURE === 'true';
+const allowBearerAuth = process.env.ALLOW_BEARER_AUTH === 'true';
 const configuredMaxAge = Number(process.env.AUTH_COOKIE_MAX_AGE_MS || 24 * 60 * 60 * 1000);
 const cookieMaxAge = Number.isFinite(configuredMaxAge) && configuredMaxAge > 0
     ? configuredMaxAge
@@ -50,9 +51,10 @@ export const getRequestToken = (req: Request): string | null => {
     const cookieToken = getCookie(req, AUTH_COOKIE_NAME);
     if (cookieToken) return cookieToken;
 
-    // Temporary backwards compatibility for clients holding a pre-migration token.
+    // Bearer auth is disabled by default so an XSS-accessible token cannot bypass
+    // the HttpOnly cookie + CSRF protection model.
     const authorization = req.headers.authorization;
-    if (authorization?.startsWith('Bearer ')) {
+    if (allowBearerAuth && authorization?.startsWith('Bearer ')) {
         return authorization.slice(7).trim() || null;
     }
 

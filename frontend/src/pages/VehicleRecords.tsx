@@ -8,6 +8,11 @@ import { formatDate, formatTime } from '../utils/dateUtils';
 import type { VehicleUsage, Vehicle } from '../types';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { exportRecordsToExcelAndZip } from '../utils/exportHelper';
+import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
+import { hasNextApiPage } from '../utils/pagination';
+import GateFilterInput from '../components/GateFilterInput';
+import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
 
@@ -84,7 +89,7 @@ export default function VehicleRecords() {
                 nextOffsetRef.current = fetchedRecords.length;
             }
 
-            setHasMore(fetchedRecords.length === PAGE_SIZE);
+            setHasMore(hasNextApiPage(recordsRes, offset + fetchedRecords.length, fetchedRecords.length, PAGE_SIZE));
             if (vehiclesRes) setVehicles(vehiclesRes.data || []);
         } catch (error) {
             if (requestVersion !== requestVersionRef.current) return;
@@ -113,53 +118,29 @@ export default function VehicleRecords() {
 
     useRealtimeRefetch({
         topics: ['vehicles'],
-        onMutation: () => {
+        onMutation: async () => {
+            const loadedItemCount = nextOffsetRef.current;
             const requestVersion = ++requestVersionRef.current;
             loadMoreInFlightRef.current = false;
-            nextOffsetRef.current = 0;
-            void fetchData(0, false, requestVersion);
+            await refreshLoadedPages(loadedItemCount, PAGE_SIZE, (offset, append) =>
+                fetchData(offset, append, requestVersion));
         },
         enabled: true,
     });
 
-    useEffect(() => {
-        const node = tableScrollRef.current;
-        if (!node) return;
-
-        const onScroll = () => {
-            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
-            const threshold = 300;
-            const remaining = node.scrollHeight - node.clientHeight - node.scrollTop;
-            if (remaining < threshold) {
-                loadMoreInFlightRef.current = true;
-                setLoadingMore(true);
-                void fetchData(nextOffsetRef.current, true);
-            }
-        };
-
-        node.addEventListener('scroll', onScroll);
-
-        const onWindowScroll = () => {
-            if (loadMoreInFlightRef.current || loadingMore || !hasMore) return;
-            const threshold = 400;
-            const scrollTop = window.scrollY || document.documentElement.scrollTop;
-            const windowHeight = window.innerHeight || document.documentElement.clientHeight;
-            const docHeight = document.documentElement.scrollHeight;
-            const remaining = docHeight - windowHeight - scrollTop;
-            if (remaining < threshold) {
-                loadMoreInFlightRef.current = true;
-                setLoadingMore(true);
-                void fetchData(nextOffsetRef.current, true);
-            }
-        };
-
-        window.addEventListener('scroll', onWindowScroll);
-
-        return () => {
-            node.removeEventListener('scroll', onScroll);
-            window.removeEventListener('scroll', onWindowScroll);
-        };
-    }, [fetchData, loadingMore, hasMore]);
+    useReliableInfiniteScroll({
+        containerRef: tableScrollRef,
+        loading,
+        loadingMore,
+        hasMore,
+        itemCount: records.length,
+        onLoadMore: () => {
+            if (loadMoreInFlightRef.current) return;
+            loadMoreInFlightRef.current = true;
+            setLoadingMore(true);
+            void fetchData(nextOffsetRef.current, true);
+        },
+    });
 
     // Filtered records are handled on backend now
     const filteredRecords = records;
@@ -242,8 +223,7 @@ export default function VehicleRecords() {
                     const start = dayjs(rangeStart).startOf('day');
                     const end = dayjs(rangeEnd).endOf('day');
                     return d.isBetween(start, end, 'millisecond', '[]');
-                })
-                .filter(record => !record.deleted_at);
+                });
 
             if (exportableRecords.length === 0) {
                 message.warning('Seçilen tarih aralığında indirilecek kayıt bulunamadı.');
@@ -313,7 +293,7 @@ export default function VehicleRecords() {
                     record.return_time ? formatTime(record.return_time) : '-',
                     record.given_by || '-',
                     record.returned_by || '-',
-                    record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
+                    record.deleted_at ? 'Silindi' : record.status === 'in_use' ? 'Kullanımda' : 'Teslim Alındı',
                     record.notes || '-'
                 ],
                 sheetName: 'Araç Kayıtları',
@@ -607,15 +587,7 @@ export default function VehicleRecords() {
 
                         <div className="xl:col-span-1">
                             <label className="block text-xs font-medium text-gray-700 mb-1">Kapı</label>
-                            <select
-                                value={filters.gate}
-                                onChange={(e) => setFilters({ ...filters, gate: e.target.value })}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            >
-                                <option value="all">Tümü</option>
-                                <option value="Ana Kapı">Ana Kapı</option>
-                                <option value="Sahil Kapı">Sahil Kapı</option>
-                            </select>
+                            <GateFilterInput value={filters.gate} onChange={(gate) => setFilters({ ...filters, gate })} />
                         </div>
 
                         <div className="xl:col-span-1">
@@ -819,6 +791,7 @@ export default function VehicleRecords() {
                                     </table>
                                 </div>
                             ))}
+                            <InfiniteScrollStatus loadingMore={loadingMore} hasMore={hasMore} itemCount={filteredRecords.length} />
                         </div>
                     )}
                 </div>

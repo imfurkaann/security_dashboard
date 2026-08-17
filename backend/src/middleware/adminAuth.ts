@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
-import pool from '../config/database';
 import { clearAuthCookies, getRequestToken } from '../utils/authCookies';
+import { getActiveSessionUser } from '../services/sessionService';
 
 // Extend Express Request type for admin authentication
 declare global {
@@ -73,20 +73,9 @@ export const adminAuthMiddleware = async (
             return;
         }
 
-        const adminResult = await pool.query<{
-            username: string;
-            role: string;
-        }>(
-            `SELECT username, role
-             FROM personnel
-             WHERE id = $1
-               AND deleted_at IS NULL
-               AND is_active = TRUE
-               AND role = 'admin'`,
-            [decoded.userId]
-        );
+        const activeSessionUser = await getActiveSessionUser(decoded);
 
-        if (adminResult.rows.length !== 1) {
+        if (!activeSessionUser || activeSessionUser.role !== 'admin') {
             clearAuthCookies(res);
             res.status(401).json({
                 success: false,
@@ -98,8 +87,8 @@ export const adminAuthMiddleware = async (
         // Attach admin info to request
         req.admin = {
             userId: decoded.userId,
-            username: adminResult.rows[0].username,
-            role: adminResult.rows[0].role,
+            username: activeSessionUser.username,
+            role: activeSessionUser.role,
             isAdmin: decoded.isAdmin || false,
             personnelRecordId: decoded.personnelRecordId,
         };

@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
-import bcrypt from 'bcryptjs';
-import { sanitizeInput } from '../utils/validation';
+import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { logDataChange } from '../utils/auditLog';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
+import { hashPassword, validateNewPassword } from '../utils/password';
+
+const PERSONNEL_ADMIN_LOCK_ID = 8172027;
 
 // Get all personnel
 export const getAllPersonnel = async (req: Request, res: Response): Promise<void> => {
@@ -38,8 +39,8 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
         const userId = (req as any).user?.userId;
         const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
-        // Validate required fields
-        if (!firstName || !lastName || !username || !password || !role) {
+        // Validate required fields and primitive types before sanitization.
+        if ([firstName, lastName, username, password, role].some((value) => typeof value !== 'string' || !value.trim())) {
             res.status(400).json({
                 success: false,
                 message: 'Tüm alanları doldurunuz'
@@ -52,6 +53,12 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
         const sanitizedLastName = sanitizeInput(lastName);
         const sanitizedUsername = sanitizeInput(username);
         const sanitizedRole = sanitizeInput(role);
+
+        const passwordValidation = validateNewPassword(password, sanitizedUsername);
+        if (!passwordValidation.valid) {
+            res.status(400).json({ success: false, message: passwordValidation.message });
+            return;
+        }
 
         // Validate role
         if (!sanitizedRole || !['admin', 'personnel'].includes(sanitizedRole)) {
@@ -75,7 +82,7 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
         }
 
         // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hashPassword(password);
 
         await client.query('BEGIN');
 
@@ -112,15 +119,6 @@ export const createPersonnel = async (req: Request, res: Response): Promise<void
         );
 
         await client.query('COMMIT');
-
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/personnel',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/personnel'),
-        });
 
         res.status(201).json({
             success: true,
@@ -161,8 +159,15 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
         const userId = (req as any).user?.userId;
         const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz personel kimliği' });
+            return;
+        }
+
         // Validate required fields
-        if (!firstName || !lastName || !username || !role) {
+        if ([firstName, lastName, username, role].some((value) => typeof value !== 'string' || !value.trim())
+            || (password !== undefined && password !== null && typeof password !== 'string')
+            || (isActive !== undefined && typeof isActive !== 'boolean')) {
             res.status(400).json({
                 success: false,
                 message: 'Tüm alanları doldurunuz'
@@ -175,6 +180,14 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
         const sanitizedLastName = sanitizeInput(lastName);
         const sanitizedUsername = sanitizeInput(username);
         const sanitizedRole = sanitizeInput(role);
+
+        if (password) {
+            const passwordValidation = validateNewPassword(password, sanitizedUsername);
+            if (!passwordValidation.valid) {
+                res.status(400).json({ success: false, message: passwordValidation.message });
+                return;
+            }
+        }
 
         // Validate role
         if (!sanitizedRole || !['admin', 'personnel'].includes(sanitizedRole)) {
@@ -199,8 +212,12 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
 
         await client.query('BEGIN');
 
+        // Yönetici rol değişikliklerini sıralayarak iki eşzamanlı isteğin son
+        // aktif yöneticiyi birlikte devre dışı bırakmasını engelle.
+        await client.query('SELECT pg_advisory_xact_lock($1)', [PERSONNEL_ADMIN_LOCK_ID]);
+
         // Get old values
-        const oldDataQuery = 'SELECT first_name, last_name, username, role, is_active FROM personnel WHERE id = $1';
+        const oldDataQuery = 'SELECT first_name, last_name, username, role, is_active FROM personnel WHERE id = $1 FOR UPDATE';
         const oldData = await client.query(oldDataQuery, [id]);
 
         if (oldData.rows.length === 0) {
@@ -212,13 +229,36 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
             return;
         }
 
+        if (id === userId && (sanitizedRole !== 'admin' || isActive === false)) {
+            await client.query('ROLLBACK');
+            res.status(409).json({ success: false, message: 'Kendi aktif yönetici hesabınızı devre dışı bırakamaz veya rolünü düşüremezsiniz' });
+            return;
+        }
+
+        const removesActiveAdmin = oldData.rows[0].role === 'admin'
+            && oldData.rows[0].is_active === true
+            && (sanitizedRole !== 'admin' || isActive === false);
+        if (removesActiveAdmin) {
+            const otherAdmins = await client.query(
+                `SELECT 1 FROM personnel
+                 WHERE id <> $1 AND role = 'admin' AND is_active = TRUE AND deleted_at IS NULL
+                 LIMIT 1`,
+                [id]
+            );
+            if (otherAdmins.rows.length === 0) {
+                await client.query('ROLLBACK');
+                res.status(409).json({ success: false, message: 'Sistemde en az bir aktif yönetici kalmalıdır' });
+                return;
+            }
+        }
+
         // Update query
         let updateQuery: string;
         let queryParams: any[];
 
         if (password) {
             // If password is provided, hash and update it
-            const hashedPassword = await bcrypt.hash(password, 10);
+            const hashedPassword = await hashPassword(password);
             updateQuery = `
                 UPDATE personnel
                 SET first_name = $1, last_name = $2, username = $3, password = $4, 
@@ -282,15 +322,6 @@ export const updatePersonnel = async (req: Request, res: Response): Promise<void
 
         await client.query('COMMIT');
 
-        emitApiMutation({
-            method: 'PUT',
-            path: `/api/personnel/${id}`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/personnel/${id}`),
-        });
-
         res.json({
             success: true,
             message: 'Personel başarıyla güncellendi',
@@ -329,10 +360,21 @@ export const deletePersonnel = async (req: Request, res: Response): Promise<void
         const userId = (req as any).user?.userId;
         const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
+        if (!isValidUUID(id)) {
+            res.status(400).json({ success: false, message: 'Geçersiz personel kimliği' });
+            return;
+        }
+
+        if (id === userId) {
+            res.status(409).json({ success: false, message: 'Kendi oturum açtığınız yönetici hesabını silemezsiniz' });
+            return;
+        }
+
         await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [PERSONNEL_ADMIN_LOCK_ID]);
 
         // Get old values
-        const oldDataQuery = 'SELECT first_name, last_name, username, role FROM personnel WHERE id = $1 AND deleted_at IS NULL';
+        const oldDataQuery = 'SELECT first_name, last_name, username, role, is_active FROM personnel WHERE id = $1 AND deleted_at IS NULL FOR UPDATE';
         const oldData = await client.query(oldDataQuery, [id]);
 
         if (oldData.rows.length === 0) {
@@ -342,6 +384,20 @@ export const deletePersonnel = async (req: Request, res: Response): Promise<void
                 message: 'Personel bulunamadı'
             });
             return;
+        }
+
+        if (oldData.rows[0].role === 'admin' && oldData.rows[0].is_active === true) {
+            const otherAdmins = await client.query(
+                `SELECT 1 FROM personnel
+                 WHERE id <> $1 AND role = 'admin' AND is_active = TRUE AND deleted_at IS NULL
+                 LIMIT 1`,
+                [id]
+            );
+            if (otherAdmins.rows.length === 0) {
+                await client.query('ROLLBACK');
+                res.status(409).json({ success: false, message: 'Son aktif yönetici hesabı silinemez' });
+                return;
+            }
         }
 
         // Soft delete
@@ -366,15 +422,6 @@ export const deletePersonnel = async (req: Request, res: Response): Promise<void
         );
 
         await client.query('COMMIT');
-
-        emitApiMutation({
-            method: 'DELETE',
-            path: `/api/personnel/${id}`,
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics(`/api/personnel/${id}`),
-        });
 
         res.json({
             success: true,

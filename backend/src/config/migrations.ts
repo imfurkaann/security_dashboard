@@ -146,7 +146,13 @@ const executeMigration = async (filePath: string, fileName: string): Promise<boo
 export const runMigrations = async (): Promise<void> => {
     console.log('🔄 Migration kontrolü başlıyor...');
 
+    // Birden fazla backend aynı anda başlatıldığında aynı migration listesini
+    // birlikte çalıştırmamaları için tüm süreç boyunca PostgreSQL advisory lock
+    // tutulur. Kilit bağlantıya bağlıdır ve process düşerse otomatik bırakılır.
+    const migrationLockClient = await pool.connect();
+
     try {
+        await migrationLockClient.query('SELECT pg_advisory_lock($1)', [8172026]);
         // Migration history tablosunu oluştur
         await createMigrationTable();
 
@@ -212,6 +218,12 @@ export const runMigrations = async (): Promise<void> => {
         const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
         console.error('❌ Migration hatası:', errorMessage);
         throw error;
+    } finally {
+        try {
+            await migrationLockClient.query('SELECT pg_advisory_unlock($1)', [8172026]);
+        } finally {
+            migrationLockClient.release();
+        }
     }
 };
 

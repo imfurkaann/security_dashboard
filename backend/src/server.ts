@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { MulterError } from 'multer';
 import type { Server as HttpServer } from 'http';
 import pool from './config/database';
@@ -22,18 +22,25 @@ import guestRegistryRoutes from './routes/guestRegistry';
 import predefinedVisitorRoutes from './routes/predefinedVisitors';
 import { generalRateLimiter, writeRateLimiter } from './middleware/rateLimiter';
 import { csrfProtection } from './middleware/csrf';
-import { SGK_MAX_FILE_SIZE_MB } from './utils/fileUpload';
+import {
+    SGK_MAX_FILE_COUNT,
+    SGK_MAX_FILE_SIZE_MB,
+    collectUploadedFiles,
+    deleteFile
+} from './utils/fileUpload';
 import { setWhatsAppTargetJid, warmupWhatsAppConnection, shutdownWhatsAppConnection } from './services/whatsappBaileys';
 import { loadPersistedWhatsAppTargetJid } from './services/whatsappSettingsStore';
 import { initRealtime, emitApiMutation, resolveMutationTopics } from './realtime/socket';
 import { initTempCleanupService } from './services/tempCleanupService';
-
-dotenv.config();
+import { assertSecureHttpConfiguration, isAllowedOrigin } from './config/httpSecurity';
+import { adminAuthMiddleware } from './middleware/adminAuth';
 
 // Türkiye saat dilimi ayarı (Node.js için)
 process.env.TZ = 'Europe/Istanbul';
 
 const app: Application = express();
+app.disable('x-powered-by');
+assertSecureHttpConfiguration();
 
 const configuredProxyHops = Number(process.env.TRUST_PROXY_HOPS || '0');
 if (Number.isInteger(configuredProxyHops) && configuredProxyHops >= 0 && configuredProxyHops <= 5) {
@@ -62,9 +69,10 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     // XSS koruması
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    // Clickjacking koruması
-    res.setHeader('Content-Security-Policy', "default-src 'self'");
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
     // HSTS (HTTPS zorunluluğu - production'da)
     if (process.env.NODE_ENV === 'production') {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -74,64 +82,30 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     next();
 });
 
-// GÜVENLİK: CORS yapılandırması
-// CORS_ORIGIN="*" ayarlandığında tüm originlere izin verir (yerel ağ paylaşımı için)
-const corsOriginSetting = process.env.CORS_ORIGIN;
-const publicHostIp = process.env.PUBLIC_HOST_IP?.trim();
-const frontendPort = process.env.FRONTEND_PORT || '33334';
-
-const allowedOrigins = [
-    process.env.FRONTEND_URL,
-    publicHostIp ? `http://${publicHostIp}:${frontendPort}` : null,
-    publicHostIp ? `http://${publicHostIp}` : null,
-    publicHostIp ? `https://${publicHostIp}:${frontendPort}` : null,
-    publicHostIp ? `https://${publicHostIp}` : null,
-    'http://localhost:5174',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost',       // Docker frontend (port 80)
-    'http://localhost:80'     // Docker frontend (explicit port)
-].filter(Boolean) as string[];
-
-const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
-
 app.use(cors({
     origin: (origin, callback) => {
-        // Eğer CORS_ORIGIN="*" ise tüm originlere izin ver (yerel ağ / sunucu ortamı için)
-        if (corsOriginSetting === '*') {
-            callback(null, true);
-            return;
-        }
-        // API istekleri (origin olmadan) veya izin verilen originler
-        if (!origin || allowedOrigins.includes(origin) || localhostPattern.test(origin)) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
         } else {
-            // IPv4 IP adresleri (192.168.x.x, 10.x.x.x, 172.x.x.x veya kamuya açık sunucu IP'leri)
-            const ipv4Pattern = /^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/;
-            if (origin && ipv4Pattern.test(origin)) {
-                callback(null, true);
-            } else {
-                console.warn(`Reddedilen CORS isteği: ${origin}`);
-                callback(new Error('CORS policy violation'));
-            }
+            console.warn(`Reddedilen CORS isteği: ${origin}`);
+            callback(new Error('CORS policy violation'));
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Selected-Gate', 'X-Realtime-Client-Id', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'X-Selected-Gate', 'X-Realtime-Client-Id', 'X-CSRF-Token'],
+    exposedHeaders: ['X-Total-Count'],
     maxAge: 86400 // 24 saat önbellekleme
 }));
 
 // Cookie-authenticated write requests require CSRF validation.
 app.use(csrfProtection);
 
-// GÜVENLİK: Request logging (audit trail) - include originalUrl to capture query string for debugging
+// Query stringleri filtrelerde kişisel veri içerebilir; uygulama loguna yazılmaz.
 app.use((req: Request, _res: Response, next: NextFunction) => {
     const timestamp = new Date().toISOString();
     const ip = req.ip || req.socket.remoteAddress;
-    // Use originalUrl to include query string (useful for debugging pagination requests)
-    const fullUrl = (req as any).originalUrl || req.path;
-    console.log(`[${timestamp}] ${req.method} ${fullUrl} - IP: ${ip}`);
+    console.log(`[${timestamp}] ${req.method} ${req.path} - IP: ${ip}`);
     next();
 });
 
@@ -139,7 +113,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.use((req: Request, res: Response, next: NextFunction) => {
     const isMutationMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     const clientIdHeader = req.header('x-realtime-client-id');
-    const clientId = clientIdHeader && clientIdHeader.trim().length > 0 ? clientIdHeader.trim() : null;
+    const normalizedClientId = clientIdHeader?.trim() || '';
+    const clientId = /^[a-zA-Z0-9_-]{1,64}$/.test(normalizedClientId) ? normalizedClientId : null;
 
     res.on('finish', () => {
         if (!isMutationMethod) return;
@@ -214,20 +189,22 @@ app.get('/api/health', (_req: Request, res: Response) => {
     });
 });
 
-// Test database connection
-app.get('/api/db-test', async (_req: Request, res: Response) => {
+// Ayrıntılı DB tanısı yalnızca açıkça etkinleştirildiğinde ve admin oturumuyla kullanılabilir.
+app.get('/api/db-test', adminAuthMiddleware, async (_req: Request, res: Response) => {
+    if (process.env.ENABLE_DB_DIAGNOSTICS !== 'true') {
+        res.status(404).json({ success: false, message: 'İstenen kaynak bulunamadı' });
+        return;
+    }
     try {
-        const result = await pool.query('SELECT NOW()');
+        await pool.query('SELECT 1');
         res.json({
             status: 'OK',
-            message: 'Database connected',
-            timestamp: result.rows[0].now
+            message: 'Database connected'
         });
-    } catch (error) {
+    } catch {
         res.status(500).json({
             status: 'ERROR',
-            message: 'Database connection failed',
-            error: error instanceof Error ? error.message : 'Unknown error'
+            message: 'Database connection failed'
         });
     }
 });
@@ -270,10 +247,34 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     }
 
     // Multipart dosya limit hataları
-    if (err instanceof MulterError && err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({
+    const isSgkUpload = req.path.startsWith('/api/sgk/') || req.path === '/api/visitor-public/sgk-records';
+    if (isSgkUpload && (err instanceof MulterError || err.message.includes('PDF, JPG, JPEG ve PNG'))) {
+        collectUploadedFiles(req).forEach((file) => {
+            if (!file.filename) return;
+            try {
+                deleteFile(file.filename);
+            } catch (cleanupError) {
+                console.error('Rejected SGK multipart cleanup error:', cleanupError);
+            }
+        });
+
+        if (err instanceof MulterError && err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({
+                success: false,
+                message: `Dosya boyutu çok büyük. Her bir dosya en fazla ${SGK_MAX_FILE_SIZE_MB}MB olabilir.`
+            });
+        }
+
+        if (err instanceof MulterError && err.code === 'LIMIT_FILE_COUNT') {
+            return res.status(413).json({
+                success: false,
+                message: `Tek seferde en fazla ${SGK_MAX_FILE_COUNT} belge yüklenebilir.`
+            });
+        }
+
+        return res.status(400).json({
             success: false,
-            message: `Dosya boyutu çok büyük. Her bir dosya en fazla ${SGK_MAX_FILE_SIZE_MB}MB olabilir.`
+            message: 'Sadece PDF, JPG, JPEG ve PNG dosyaları yüklenebilir.'
         });
     }
 

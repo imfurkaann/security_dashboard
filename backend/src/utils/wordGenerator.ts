@@ -1,6 +1,7 @@
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 /**
  * HTML içeriğini Word dosyasına çevirir ve hiyerarşik klasör yapısına kaydeder.
@@ -33,7 +34,9 @@ export async function createWordFromHtml(htmlContent: string, shiftLabel: string
 
         // 4. Güvenli dosya adı oluştur (Saatlerdeki ":" karakterini "-" ile değiştirir)
         const safeShiftLabel = shiftLabel.replace(/:/g, '-');
-        const fileName = `rapor_${safeShiftLabel}.docx`;
+        // Her yazım için benzersiz dosya oluştur. Böylece eş zamanlı kayıt/güncelleme
+        // istekleri birbirinin kanıt niteliğindeki rapor dosyasını ezemez.
+        const fileName = `rapor_${safeShiftLabel}_${randomUUID()}.docx`;
         const filePath = path.join(targetDir, fileName);
 
         // 5. Word Belgesi Tasarımı

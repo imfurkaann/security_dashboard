@@ -21,6 +21,10 @@ if (missingVars.length > 0) {
 const isCloudSQL = process.env.DB_HOST?.startsWith('/cloudsql/');
 // Docker içinde SSL kullanma (postgres container)
 const isDocker = process.env.DB_HOST === 'postgres';
+const parsedPoolMax = Number.parseInt(process.env.DB_POOL_MAX || '20', 10);
+const poolMax = Number.isSafeInteger(parsedPoolMax) && parsedPoolMax >= 2 && parsedPoolMax <= 100
+    ? parsedPoolMax
+    : 20;
 
 const poolConfig: PoolConfig = {
     // Cloud SQL için Unix socket, diğerleri için TCP
@@ -34,16 +38,19 @@ const poolConfig: PoolConfig = {
     user: process.env.DB_USER,
     password: databasePassword,
     // Bağlantı havuzu ayarları
-    max: 20,                        // Maksimum bağlantı sayısı
+    max: poolMax,                   // Maksimum bağlantı sayısı
     min: 2,                         // Minimum bağlantı sayısı
     idleTimeoutMillis: 30000,       // Boşta bekleme süresi (30sn)
     connectionTimeoutMillis: 5000,  // Bağlantı zaman aşımı (5sn)
+    statement_timeout: 30000,
+    query_timeout: 35000,
+    application_name: 'security-management-api',
     // Karakter kodlaması
     client_encoding: 'UTF8',
     // SSL (production için, Cloud SQL ve Docker hariç)
     ...(process.env.NODE_ENV === 'production' && !isCloudSQL && !isDocker && {
         ssl: {
-            rejectUnauthorized: false
+            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false'
         }
     })
 };
@@ -54,8 +61,8 @@ const pool = new Pool(poolConfig);
 pool.on('connect', (client) => {
     console.log('✅ Yeni veritabanı bağlantısı oluşturuldu');
     // Türkçe karakter desteği ve timezone ayarı
-    client.query("SET client_encoding = 'UTF8'");
-    client.query("SET timezone = 'Europe/Istanbul'");
+    void client.query("SET client_encoding = 'UTF8'; SET timezone = 'Europe/Istanbul'; SET lock_timeout = '5s'; SET idle_in_transaction_session_timeout = '30s'")
+        .catch((error) => console.error('Veritabanı oturum güvenlik ayarları uygulanamadı:', error.message));
 });
 
 pool.on('error', (err) => {

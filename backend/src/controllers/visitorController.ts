@@ -244,6 +244,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
 
         const query = `
             SELECT 
+                COUNT(*) OVER()::int AS total_count,
                 vr.id,
                 vr.vehicle_plate,
                 vr.full_name,
@@ -270,6 +271,12 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
                 vr.exit_date,
                 vr.exit_time,
                 vr.status,
+                CASE
+                    WHEN vr.exit_date IS NOT NULL AND vr.exit_time IS NOT NULL
+                         AND (vr.exit_date + vr.exit_time) < (vr.entry_date + vr.entry_time)
+                    THEN 'Çıkış zamanı girişten önce; geçmiş kayıt doğrulanmalı'
+                    ELSE NULL
+                END AS data_quality_warning,
                 vr.created_at,
                 vr.deleted_at,
                 vr.entry_by_name,
@@ -292,6 +299,9 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             res.status(413).json({ success: false, message: 'Dışa aktarım sonucu çok büyük; lütfen tarih aralığını daraltın' });
             return;
         }
+
+
+        res.setHeader('X-Total-Count', String(result.rows[0]?.total_count ?? 0));
 
         const formattedData = result.rows.map((row: any) => ({
             id: row.id,
@@ -320,6 +330,7 @@ export const getVisitorRecords = async (req: Request, res: Response): Promise<vo
             exit_date: row.exit_date,
             exit_time: row.exit_time,
             status: row.status,
+            data_quality_warning: row.data_quality_warning,
             deleted_at: row.deleted_at || null,
             entry_by: (row.entry_by_first_name || row.entry_by_last_name)
                 ? `${row.entry_by_first_name || ''} ${row.entry_by_last_name || ''}${row.is_qr ? ' (QR)' : ''}`.trim()
@@ -447,6 +458,16 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
         }
 
         const normalizedHighlightColor = normalizeVisitorHighlightColor(highlight_color);
+
+        const chronologyCheck = await pool.query(
+            `SELECT (COALESCE($1::date, CURRENT_DATE) + COALESCE($2::time, CURRENT_TIME))
+                    <= (CURRENT_TIMESTAMP + INTERVAL '5 minutes') AS valid`,
+            [validEntryDate, entry_time || null]
+        );
+        if (!chronologyCheck.rows[0]?.valid) {
+            res.status(400).json({ success: false, message: 'Giriş tarihi ve saati gelecekte olamaz' });
+            return;
+        }
 
         const id = uuidv4();
 
@@ -640,6 +661,21 @@ export const updateVisitorRecord = async (req: Request, res: Response): Promise<
             return;
         }
 
+        if (currentStatus === 'exited') {
+            const existing = recordCheck.rows[0];
+            const nextEntryDate = entry_date !== undefined ? entry_date : existing.entry_date;
+            const nextEntryTime = entry_time !== undefined ? entry_time : existing.entry_time;
+            const nextExitTime = exit_time !== undefined ? exit_time : existing.exit_time;
+            const chronology = await pool.query(
+                `SELECT ($1::date + $2::time) <= ($3::date + $4::time) AS valid`,
+                [nextEntryDate, nextEntryTime, existing.exit_date, nextExitTime]
+            );
+            if (!chronology.rows[0]?.valid) {
+                res.status(400).json({ success: false, message: 'Çıkış zamanı giriş zamanından önce olamaz' });
+                return;
+            }
+        }
+
         if (person_count !== undefined && person_count !== null && person_count !== '' && !isValidCountInput(person_count, 1)) {
             res.status(400).json({ success: false, message: 'Kişi sayısı geçerli bir sayı olmalı ve en az 1 olmalıdır' });
             return;
@@ -759,7 +795,13 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        const recordCheck = await pool.query('SELECT id, status FROM visitor_records WHERE id = $1 AND deleted_at IS NULL', [id]);
+        const recordCheck = await pool.query(
+            `SELECT id, status, entry_date, entry_time,
+                    (CURRENT_DATE + COALESCE($2::time, CURRENT_TIME)) >= (entry_date + entry_time) AS chronology_valid
+             FROM visitor_records
+             WHERE id = $1 AND deleted_at IS NULL`,
+            [id, exit_time || null]
+        );
         if (recordCheck.rows.length === 0) {
             res.status(404).json({ success: false, message: 'Kayıt bulunamadı' });
             return;
@@ -768,6 +810,10 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
         const currentStatus = recordCheck.rows[0].status;
         if (currentStatus !== 'inside') {
             res.status(400).json({ success: false, message: 'Ziyaretçi zaten çıkış yapmış' });
+            return;
+        }
+        if (!recordCheck.rows[0].chronology_valid) {
+            res.status(400).json({ success: false, message: 'Çıkış zamanı giriş zamanından önce olamaz' });
             return;
         }
 

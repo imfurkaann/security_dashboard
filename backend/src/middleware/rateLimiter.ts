@@ -4,6 +4,7 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import net from 'net';
+import crypto from 'crypto';
 
 interface RateLimitRecord {
     count: number;
@@ -25,8 +26,14 @@ const RATE_LIMIT_CONFIG = {
     // Login endpoint limitleri
     login: {
         windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // Test: 1sn, Prod: 15 dakika
-        maxRequests: isTestEnv ? 10000 : 50,         // Test: 10000, Prod: 50
+        maxRequests: isTestEnv ? 10000 : 10,         // IP + kullanıcı adı başına
         blockDurationMs: isTestEnv ? 1000 : 30 * 60 * 1000  // Test: 1sn, Prod: 30 dakika
+    },
+    // Aynı IP'nin çok sayıda farklı kullanıcı adı denemesini de sınırlar.
+    loginIp: {
+        windowMs: isTestEnv ? 1000 : 15 * 60 * 1000,
+        maxRequests: isTestEnv ? 10000 : 100,
+        blockDurationMs: isTestEnv ? 1000 : 30 * 60 * 1000
     },
     // Yazma işlemleri (POST/PUT/DELETE)
     write: {
@@ -59,8 +66,16 @@ setInterval(() => {
 /**
  * Rate limit anahtarı oluştur
  */
-const getRateLimitKey = (ip: string, type: string): string => {
-    return `${type}:${ip}`;
+const getRateLimitKey = (identifier: string, type: string): string => {
+    return `${type}:${identifier}`;
+};
+
+const getLoginCredentialIdentifier = (req: Request, ip: string): string => {
+    const username = typeof req.body?.username === 'string'
+        ? req.body.username.trim().toLocaleLowerCase('tr-TR').slice(0, 100)
+        : 'invalid';
+    const usernameHash = crypto.createHash('sha256').update(username).digest('hex').slice(0, 24);
+    return `${ip}:${usernameHash}`;
 };
 
 /**
@@ -82,11 +97,11 @@ export const getClientIp = (req: Request): string => {
  * Rate limit kontrolü
  */
 const checkRateLimit = (
-    ip: string,
+    identifier: string,
     type: keyof typeof RATE_LIMIT_CONFIG
 ): { allowed: boolean; retryAfter?: number; remaining?: number } => {
     const config = RATE_LIMIT_CONFIG[type];
-    const key = getRateLimitKey(ip, type);
+    const key = getRateLimitKey(identifier, type);
     const now = Date.now();
 
     let record = rateLimitStore.get(key);
@@ -162,7 +177,10 @@ export const loginRateLimiter = (
     next: NextFunction
 ): void => {
     const ip = getClientIp(req);
-    const result = checkRateLimit(ip, 'login');
+    const credentialIdentifier = getLoginCredentialIdentifier(req, ip);
+    const ipResult = checkRateLimit(ip, 'loginIp');
+    const credentialResult = checkRateLimit(credentialIdentifier, 'login');
+    const result = !ipResult.allowed ? ipResult : credentialResult;
 
     res.setHeader('X-RateLimit-Limit', RATE_LIMIT_CONFIG.login.maxRequests);
     if (result.remaining !== undefined) {
@@ -182,6 +200,14 @@ export const loginRateLimiter = (
         });
         return;
     }
+
+    // Başarılı girişler aynı kullanıcı için kaba kuvvet sayacını temizler;
+    // IP toplam sayacı farklı hesaplara yönelik taramayı engellemek için korunur.
+    res.once('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+            rateLimitStore.delete(getRateLimitKey(credentialIdentifier, 'login'));
+        }
+    });
 
     next();
 };
@@ -253,8 +279,10 @@ export const qrPublicRateLimiter = (
 /**
  * Başarısız giriş denemesi kaydet (login controller'dan çağrılır)
  */
-export const recordFailedLogin = (ip: string): void => {
-    const key = getRateLimitKey(ip, 'login');
+export const recordFailedLogin = (ip: string, username = 'invalid'): void => {
+    const normalized = username.trim().toLocaleLowerCase('tr-TR').slice(0, 100);
+    const usernameHash = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24);
+    const key = getRateLimitKey(`${ip}:${usernameHash}`, 'login');
     const now = Date.now();
 
     let record = rateLimitStore.get(key);
@@ -275,8 +303,10 @@ export const recordFailedLogin = (ip: string): void => {
 /**
  * Başarılı giriş sonrası rate limit sıfırla
  */
-export const clearLoginAttempts = (ip: string): void => {
-    const key = getRateLimitKey(ip, 'login');
+export const clearLoginAttempts = (ip: string, username = 'invalid'): void => {
+    const normalized = username.trim().toLocaleLowerCase('tr-TR').slice(0, 100);
+    const usernameHash = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 24);
+    const key = getRateLimitKey(`${ip}:${usernameHash}`, 'login');
     rateLimitStore.delete(key);
 };
 

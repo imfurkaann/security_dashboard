@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import pool from '../config/database';
 import { getClientIp } from '../middleware/rateLimiter';
 import { logDataChange } from '../utils/auditLog';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
 
 interface ParsedRow {
     sheetName: string;
@@ -201,9 +200,9 @@ const parseDateValue = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-        const parsed = XLSX.SSF.parse_date_code(value);
-        if (!parsed) return null;
-        return normalizeDateParts(parsed.y, parsed.m, parsed.d);
+        const wholeDays = Math.floor(value);
+        const parsed = new Date(Date.UTC(1899, 11, 30) + wholeDays * 86_400_000);
+        return normalizeDateParts(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
     }
 
     if (value instanceof Date) {
@@ -274,10 +273,13 @@ const parseTimeValue = (value: unknown): string | null => {
     if (value === null || value === undefined) return null;
 
     if (typeof value === 'number' && Number.isFinite(value)) {
-        const serial = value >= 1 ? value % 1 : value;
-        const parsed = XLSX.SSF.parse_date_code(serial);
-        if (!parsed) return null;
-        return normalizeTimeParts(parsed.H || 0, parsed.M || 0, Math.floor(parsed.S || 0));
+        const serial = ((value % 1) + 1) % 1;
+        const totalSeconds = Math.floor(serial * 86_400);
+        return normalizeTimeParts(
+            Math.floor(totalSeconds / 3600),
+            Math.floor((totalSeconds % 3600) / 60),
+            totalSeconds % 60
+        );
     }
 
     if (value instanceof Date) {
@@ -339,48 +341,66 @@ const detectHeaderRowIndex = (rows: unknown[][]): number => {
     return bestIndex;
 };
 
-const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
-    const workbook = XLSX.read(fileBuffer, {
-        type: 'buffer',
-        cellDates: true,
-        raw: false
-    });
+const normalizeWorkbookCellValue = (value: ExcelJS.CellValue): unknown => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value instanceof Date) {
+        return value;
+    }
 
-    if (workbook.SheetNames.length > MAX_IMPORT_SHEETS) {
+    const objectValue = value as unknown as Record<string, unknown>;
+    if ('result' in objectValue) return normalizeCellValue(objectValue.result);
+    if (Array.isArray(objectValue.richText)) {
+        return objectValue.richText
+            .map((part) => (part && typeof part === 'object' && 'text' in part ? String(part.text) : ''))
+            .join('');
+    }
+    if (typeof objectValue.text === 'string') return objectValue.text;
+    if (typeof objectValue.hyperlink === 'string') return objectValue.hyperlink;
+    return null;
+};
+
+const parseExcelRows = async (fileBuffer: Buffer): Promise<ParsedRow[]> => {
+    const workbook = new ExcelJS.Workbook();
+    // ExcelJS currently publishes its own Buffer type against an older Node
+    // declaration. Multer's buffer is the same runtime object; keep the cast at
+    // this narrow library boundary instead of weakening upload types globally.
+    await workbook.xlsx.load(fileBuffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+
+    if (workbook.worksheets.length > MAX_IMPORT_SHEETS) {
         throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_SHEETS} sayfa içerebilir`);
     }
 
     const parsedRows: ParsedRow[] = [];
     let estimatedCellCount = 0;
 
-    workbook.SheetNames.forEach((sheetName) => {
-        const worksheet = workbook.Sheets[sheetName];
-        if (!worksheet) return;
-
-        if (worksheet['!ref']) {
-            const range = XLSX.utils.decode_range(worksheet['!ref']);
-            const rowCount = range.e.r - range.s.r + 1;
-            const columnCount = range.e.c - range.s.c + 1;
-            if (columnCount > MAX_IMPORT_COLUMNS) {
-                throw new GuestImportValidationError(`Bir Excel sayfasinda en fazla ${MAX_IMPORT_COLUMNS} kolon olabilir`);
-            }
-            estimatedCellCount += rowCount * columnCount;
-            if (estimatedCellCount > MAX_IMPORT_CELLS) {
-                throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_CELLS.toLocaleString('tr-TR')} hücre içerebilir`);
-            }
+    workbook.worksheets.forEach((worksheet) => {
+        const rowCount = worksheet.rowCount;
+        const columnCount = worksheet.columnCount;
+        if (columnCount > MAX_IMPORT_COLUMNS) {
+            throw new GuestImportValidationError(`Bir Excel sayfasinda en fazla ${MAX_IMPORT_COLUMNS} kolon olabilir`);
+        }
+        estimatedCellCount += rowCount * columnCount;
+        if (estimatedCellCount > MAX_IMPORT_CELLS) {
+            throw new GuestImportValidationError(`Excel dosyasi en fazla ${MAX_IMPORT_CELLS.toLocaleString('tr-TR')} hücre içerebilir`);
         }
 
-        const rawRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-            header: 1,
-            defval: null,
-            raw: false,
-            blankrows: false
+        const rowNumbers: number[] = [];
+        const rawRows: unknown[][] = [];
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            const values: unknown[] = [];
+            const boundedCellCount = Math.min(Math.max(row.cellCount, columnCount), MAX_IMPORT_COLUMNS);
+            for (let columnIndex = 1; columnIndex <= boundedCellCount; columnIndex += 1) {
+                values.push(normalizeWorkbookCellValue(row.getCell(columnIndex).value));
+            }
+            rowNumbers.push(rowNumber);
+            rawRows.push(values);
         });
 
         if (rawRows.length === 0) return;
 
         const headerRowIndex = detectHeaderRowIndex(rawRows);
         const headerRow = rawRows[headerRowIndex] || [];
+        const safeSheetName = sanitizeHeader(worksheet.name, 0);
         const usedRowKeys = new Set<string>();
         const headerKeys = headerRow.map((rawHeader, colIndex) => {
             return makeUniqueHeaderKey(sanitizeHeader(rawHeader, colIndex), usedRowKeys, colIndex);
@@ -398,8 +418,8 @@ const parseExcelRows = (fileBuffer: Buffer): ParsedRow[] => {
             }
 
             parsedRows.push({
-                sheetName,
-                rowNumber: rowIndex + 1,
+                sheetName: safeSheetName,
+                rowNumber: rowNumbers[rowIndex] || rowIndex + 1,
                 rowData
             });
 
@@ -426,7 +446,7 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        const parsedRows = parseExcelRows(uploadedFile.buffer);
+        const parsedRows = await parseExcelRows(uploadedFile.buffer);
         const safeFileName = sanitizeFileName(uploadedFile.originalname);
 
         if (parsedRows.length === 0) {
@@ -554,14 +574,6 @@ export const uploadGuestExcel = async (req: Request, res: Response): Promise<voi
             }
         });
 
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/guest-registry/upload',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/guest-registry/upload'),
-        });
     } catch (error) {
         console.error('Misafir Excel import error:', error);
         if (error instanceof GuestImportValidationError) {

@@ -4,8 +4,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizeInput } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
-import { hashTC, deleteFile, getFilePath, hashPassport } from '../utils/fileUpload';
-import { emitApiMutation, resolveMutationTopics } from '../realtime/socket';
+import {
+    hashTC,
+    deleteFile,
+    getFilePath,
+    hashPassport,
+    getTCHashCandidates,
+    getPassportHashCandidates
+} from '../utils/fileUpload';
+import path from 'path';
 
 interface SgkFileMeta {
     id: string;
@@ -17,6 +24,8 @@ interface SgkFileMeta {
     sort_order: number;
     created_at: string;
 }
+
+const escapeLikePattern = (value: string): string => value.replace(/[\\%_]/g, '\\$&');
 
 const extractUploadedFiles = (req: Request): Express.Multer.File[] => {
     const filesFromSingle = req.file ? [req.file] : [];
@@ -37,7 +46,8 @@ const extractUploadedFiles = (req: Request): Express.Multer.File[] => {
 const mapFileRow = (row: any): SgkFileMeta => ({
     id: row.id,
     record_id: row.sgk_record_id,
-    file_name: row.stored_file_name,
+    // Stored names may contain identifier fragments and are never exposed.
+    file_name: row.original_file_name || `belge-${Number(row.sort_order || 0) + 1}`,
     original_file_name: row.original_file_name,
     mime_type: row.mime_type,
     size_bytes: row.size_bytes,
@@ -88,12 +98,14 @@ const withFallbackFile = (record: any, files: SgkFileMeta[]): SgkFileMeta[] => {
         return [];
     }
 
+    const legacyExtension = String(record.file_path).match(/\.(pdf|jpe?g|png)$/i)?.[0]?.toLowerCase() || '';
+
     return [
         {
             id: '',
             record_id: record.id,
-            file_name: record.file_path,
-            original_file_name: record.file_path,
+            file_name: `SGK-belgesi${legacyExtension}`,
+            original_file_name: `SGK-belgesi${legacyExtension}`,
             mime_type: null,
             size_bytes: null,
             sort_order: 0,
@@ -106,11 +118,9 @@ const mapRecordResponse = (record: any, fileMap: Map<string, SgkFileMeta[]>) => 
     const files = withFallbackFile(record, fileMap.get(record.id) || []);
     return {
         id: record.id,
-        hashed_tc: record.hashed_tc,
-        hashed_passport: record.hashed_passport,
         full_name: record.full_name,
         company_name: record.company_name,
-        file_path: files[0]?.file_name || record.file_path || null,
+        file_path: files[0]?.file_name || null,
         files,
         file_count: files.length,
         upload_date: record.upload_date,
@@ -138,7 +148,7 @@ const resolveContentType = (fileName: string): string => {
     }
 };
 
-const sendStoredFile = (res: Response, fileName: string): void => {
+const sendStoredFile = (res: Response, fileName: string, originalFileName?: string | null): void => {
     const filePath = getFilePath(fileName);
     const fs = require('fs');
 
@@ -149,10 +159,12 @@ const sendStoredFile = (res: Response, fileName: string): void => {
 
     const contentType = resolveContentType(fileName);
     res.setHeader('Content-Type', contentType);
-    const encodedFileName = encodeURIComponent(fileName).replace(/['()]/g, escape);
+    const safeOriginalName = path.basename(originalFileName || `SGK-belgesi.${fileName.split('.').pop() || 'bin'}`)
+        .replace(/[\r\n"]/g, '_');
+    const encodedFileName = encodeURIComponent(safeOriginalName);
     res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
-    res.removeHeader('X-Frame-Options');
-    res.removeHeader('Content-Security-Policy');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
 
     res.sendFile(filePath, (err) => {
         if (err && !res.headersSent) {
@@ -169,10 +181,10 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
     try {
         const limitQuery = req.query.limit;
         const offsetQuery = req.query.offset;
-        const unlimited = req.query.unlimited === 'true';
+        const unlimited = req.query.unlimited === 'true' && req.user?.role === 'admin';
 
-        const full_name = typeof req.query.full_name === 'string' ? req.query.full_name.trim() : '';
-        const company_name = typeof req.query.company_name === 'string' ? req.query.company_name.trim() : '';
+        const full_name = typeof req.query.full_name === 'string' ? sanitizeInput(req.query.full_name.trim(), 100) : '';
+        const company_name = typeof req.query.company_name === 'string' ? sanitizeInput(req.query.company_name.trim(), 100) : '';
 
         const whereClauses: string[] = [];
         const queryParams: any[] = [];
@@ -181,21 +193,23 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
         whereClauses.push(`sr.deleted_at IS NULL`);
 
         if (full_name) {
-            whereClauses.push(`LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
-            queryParams.push(`%${full_name}%`);
+            whereClauses.push(`LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) ESCAPE '\\'`);
+            queryParams.push(`%${escapeLikePattern(full_name)}%`);
         }
 
         if (company_name) {
-            whereClauses.push(`LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`);
-            queryParams.push(`%${company_name}%`);
+            whereClauses.push(`LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${paramCounter++}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) ESCAPE '\\'`);
+            queryParams.push(`%${escapeLikePattern(company_name)}%`);
         }
 
         const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         let paginationString = '';
         if (!unlimited) {
-            const limit = Math.max(Number(limitQuery) || 200, 1);
-            const offset = Math.max(Number(offsetQuery) || 0, 0);
+            const parsedLimit = Number.parseInt(String(limitQuery || '200'), 10);
+            const parsedOffset = Number.parseInt(String(offsetQuery || '0'), 10);
+            const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 200, 1), 200);
+            const offset = Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
             paginationString = `LIMIT $${paramCounter++} OFFSET $${paramCounter++}`;
             queryParams.push(limit, offset);
         }
@@ -203,8 +217,6 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
         const query = `
             SELECT 
                 sr.id,
-                sr.hashed_tc,
-                sr.hashed_passport,
                 sr.full_name,
                 sr.company_name,
                 sr.file_path,
@@ -212,12 +224,13 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
                 sr.notes,
                 sr.created_at,
                 sr.is_qr,
+                COUNT(*) OVER()::int AS total_count,
                 p.first_name as personnel_first_name,
                 p.last_name as personnel_last_name
             FROM sgk_records sr
             LEFT JOIN personnel p ON sr.personnel_id = p.id
             ${whereString}
-            ORDER BY sr.upload_date DESC
+            ORDER BY sr.upload_date DESC, sr.id DESC
             ${paginationString}
         `;
         const result = await pool.query(query, queryParams);
@@ -225,8 +238,13 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
         const recordIds = result.rows.map((row: any) => row.id);
         const fileMap = await getRecordFilesByIds(recordIds);
         const formattedData = result.rows.map((row: any) => mapRecordResponse(row, fileMap));
+        const total = result.rows.length > 0 ? Number(result.rows[0].total_count) : 0;
 
-        res.status(200).json(formattedData);
+        res.status(200).json({
+            success: true,
+            data: formattedData,
+            total
+        });
     } catch (error) {
         console.error('Get SGK records error:', error);
         res.status(500).json({ success: false, message: 'SGK kayıtları listelenirken hata oluştu' });
@@ -239,6 +257,7 @@ export const getSgkRecords = async (req: Request, res: Response): Promise<void> 
  * Supports optional TC or Passport number (cannot be provided together)
  */
 export const createSgkRecord = async (req: Request, res: Response): Promise<void> => {
+    let committed = false;
     try {
         const { tc_no, passport_no, full_name, company_name, notes } = req.body;
         const personnel_id = req.user?.userId || null;
@@ -246,9 +265,15 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const uploadedFiles = extractUploadedFiles(req);
 
         // Validasyonlar
-        if (!full_name || uploadedFiles.length === 0) {
+        if (typeof full_name !== 'string' || !full_name.trim() || uploadedFiles.length === 0) {
             uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'Ad Soyad ve en az bir belge dosyası zorunludur' });
+            return;
+        }
+
+        if ((company_name != null && typeof company_name !== 'string') || (notes != null && typeof notes !== 'string')) {
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+            res.status(400).json({ success: false, message: 'Metin alanlarının biçimi geçersiz' });
             return;
         }
 
@@ -264,6 +289,7 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
 
         let hashedTC: string | null = null;
         let hashedPassport: string | null = null;
+        let identifierHashCandidates: string[] = [];
 
         // TC kontrolü
         if (hasTCInput) {
@@ -274,10 +300,11 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
                 return;
             }
             hashedTC = hashTC(cleanTC);
+            identifierHashCandidates = getTCHashCandidates(cleanTC);
 
             // Aynı TC ile kayıt var mı kontrol et
-            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL';
-            const existingResult = await pool.query(existingQuery, [hashedTC]);
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND deleted_at IS NULL';
+            const existingResult = await pool.query(existingQuery, [identifierHashCandidates]);
 
             if (existingResult.rows.length > 0) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -295,10 +322,11 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
                 return;
             }
             hashedPassport = hashPassport(cleanPassport);
+            identifierHashCandidates = getPassportHashCandidates(cleanPassport);
 
             // Aynı pasaport ile kayıt var mı kontrol et
-            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL';
-            const existingResult = await pool.query(existingQuery, [hashedPassport]);
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND deleted_at IS NULL';
+            const existingResult = await pool.query(existingQuery, [identifierHashCandidates]);
 
             if (existingResult.rows.length > 0) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -323,10 +351,28 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
 
         const client = await pool.connect();
         let createdRecord: any;
-        let committed = false;
 
         try {
             await client.query('BEGIN');
+
+            const identifierHash = hashedTC || hashedPassport;
+            if (identifierHash) {
+                await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [identifierHash]);
+                const duplicateResult = hashedTC
+                    ? await client.query(
+                        'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND deleted_at IS NULL',
+                        [identifierHashCandidates]
+                    )
+                    : await client.query(
+                        'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND deleted_at IS NULL',
+                        [identifierHashCandidates]
+                    );
+                if (duplicateResult.rows.length > 0) {
+                    const duplicateError = new Error('SGK identifier already exists') as Error & { code?: string };
+                    duplicateError.code = '23505';
+                    throw duplicateError;
+                }
+            }
 
             const insertQuery = `
                 INSERT INTO sgk_records (
@@ -387,15 +433,19 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         const responseData = mapRecordResponse(createdRecord, fileMap);
 
         // Audit log
-        await logDataChange(
-            'sgk_records',
-            id,
-            'INSERT',
-            null,
-            responseData,
-            personnel_id,
-            clientIp
-        );
+        try {
+            await logDataChange(
+                'sgk_records',
+                id,
+                'INSERT',
+                null,
+                responseData,
+                personnel_id,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Create SGK audit log error:', auditError);
+        }
 
         res.status(201).json({
             success: true,
@@ -404,8 +454,14 @@ export const createSgkRecord = async (req: Request, res: Response): Promise<void
         });
     } catch (error) {
         console.error('Create SGK record error:', error);
-        const uploadedFiles = extractUploadedFiles(req);
-        uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        if (!committed) {
+            const uploadedFiles = extractUploadedFiles(req);
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        }
+        if ((error as { code?: string }).code === '23505') {
+            res.status(409).json({ success: false, message: 'Bu kimlik bilgisine ait SGK kaydı zaten mevcut' });
+            return;
+        }
         res.status(500).json({ success: false, message: 'SGK kaydı oluşturulurken hata oluştu' });
     }
 };
@@ -426,8 +482,6 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
         let query = `
             SELECT 
                 sr.id,
-                sr.hashed_tc,
-                sr.hashed_passport,
                 sr.full_name,
                 sr.company_name,
                 sr.file_path,
@@ -444,7 +498,7 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
 
         // Arama türüne göre filtrele
         if (search_type === 'tc') {
-            if (!tc_no) {
+            if (typeof tc_no !== 'string' || !tc_no.trim()) {
                 res.status(400).json({ success: false, message: 'TC Kimlik No zorunludur' });
                 return;
             }
@@ -457,12 +511,11 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             }
 
             // TC'yi hash'le
-            const hashedTC = hashTC(cleanTC);
-            query += ' AND sr.hashed_tc = $1';
-            params.push(hashedTC);
+            query += ' AND sr.hashed_tc = ANY($1::text[])';
+            params.push(getTCHashCandidates(cleanTC));
 
         } else if (search_type === 'passport') {
-            if (!passport_no) {
+            if (typeof passport_no !== 'string' || !passport_no.trim()) {
                 res.status(400).json({ success: false, message: 'Pasaport Numarası zorunludur' });
                 return;
             }
@@ -475,32 +528,31 @@ export const searchSgkRecords = async (req: Request, res: Response): Promise<voi
             }
 
             // Pasaportu hash'le
-            const hashedPassport = hashPassport(cleanPassport);
-            query += ' AND sr.hashed_passport = $1';
-            params.push(hashedPassport);
+            query += ' AND sr.hashed_passport = ANY($1::text[])';
+            params.push(getPassportHashCandidates(cleanPassport));
 
         } else if (search_type === 'name') {
-            if (!full_name || full_name.trim().length === 0) {
+            if (typeof full_name !== 'string' || full_name.trim().length === 0) {
                 res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
                 return;
             }
 
             const sanitizedName = sanitizeInput(full_name, 100);
-            query += ` AND LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`;
-            params.push(`%${sanitizedName}%`);
+            query += ` AND LOWER(translate(sr.full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) ESCAPE '\\'`;
+            params.push(`%${escapeLikePattern(sanitizedName || '')}%`);
 
         } else if (search_type === 'company') {
-            if (!company_name || company_name.trim().length === 0) {
+            if (typeof company_name !== 'string' || company_name.trim().length === 0) {
                 res.status(400).json({ success: false, message: 'Firma adı zorunludur' });
                 return;
             }
 
             const sanitizedCompany = sanitizeInput(company_name, 100);
-            query += ` AND LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç'))`;
-            params.push(`%${sanitizedCompany}%`);
+            query += ` AND LOWER(translate(sr.company_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) LIKE LOWER(translate($${params.length + 1}, 'IİĞÜŞÖÇ', 'ıiğüşöç')) ESCAPE '\\'`;
+            params.push(`%${escapeLikePattern(sanitizedCompany || '')}%`);
         }
 
-        query += ' ORDER BY sr.upload_date DESC';
+        query += ' ORDER BY sr.upload_date DESC, sr.id DESC LIMIT 200';
 
         const result = await pool.query(query, params);
 
@@ -558,10 +610,11 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
         }
 
         let fileName = result.rows[0].file_path;
+        let originalFileName: string | null = null;
 
         if (fileIdFromQuery) {
             const fileQuery = `
-                SELECT stored_file_name
+                SELECT stored_file_name, original_file_name
                 FROM sgk_record_files
                 WHERE id = $1 AND sgk_record_id = $2 AND deleted_at IS NULL
             `;
@@ -573,9 +626,10 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
             }
 
             fileName = fileResult.rows[0].stored_file_name;
+            originalFileName = fileResult.rows[0].original_file_name;
         } else {
             const fileQuery = `
-                SELECT stored_file_name
+                SELECT stored_file_name, original_file_name
                 FROM sgk_record_files
                 WHERE sgk_record_id = $1 AND deleted_at IS NULL
                 ORDER BY sort_order, created_at
@@ -585,6 +639,7 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
 
             if (fileResult.rows.length > 0) {
                 fileName = fileResult.rows[0].stored_file_name;
+                originalFileName = fileResult.rows[0].original_file_name;
             }
         }
 
@@ -594,7 +649,7 @@ export const getSgkFile = async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        sendStoredFile(res, fileName);
+        sendStoredFile(res, fileName, originalFileName);
     } catch (error) {
         console.error('[SGK File] Beklenmeyen hata:', error);
         res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
@@ -628,7 +683,7 @@ export const getSgkFileById = async (req: Request, res: Response): Promise<void>
         }
 
         const fileQuery = `
-            SELECT stored_file_name
+            SELECT stored_file_name, original_file_name
             FROM sgk_record_files
             WHERE id = $1 AND sgk_record_id = $2 AND deleted_at IS NULL
         `;
@@ -639,7 +694,7 @@ export const getSgkFileById = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        sendStoredFile(res, fileResult.rows[0].stored_file_name);
+        sendStoredFile(res, fileResult.rows[0].stored_file_name, fileResult.rows[0].original_file_name);
     } catch (error) {
         console.error('Get SGK file by ID error:', error);
         res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
@@ -690,8 +745,19 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             ? (rawFileAction === 'replace' ? 'replace' : 'append')
             : null;
 
+        const hasTCInput = typeof tc_no === 'string' && tc_no.trim().length > 0;
+        const hasPassportInput = typeof passport_no === 'string' && passport_no.trim().length > 0;
+
+        if (typeof full_name !== 'string' ||
+            (company_name != null && typeof company_name !== 'string') ||
+            (notes != null && typeof notes !== 'string')) {
+            uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+            res.status(400).json({ success: false, message: 'Metin alanlarının biçimi geçersiz' });
+            return;
+        }
+
         // TC ve pasaport her ikisi de girilmiş mi kontrol et
-        if (tc_no && passport_no) {
+        if (hasTCInput && hasPassportInput) {
             uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
             res.status(400).json({ success: false, message: 'TC Kimlik No ve Pasaport Numarası aynı anda girilemez' });
             return;
@@ -699,9 +765,10 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         let hashedTC: string | null = null;
         let hashedPassport: string | null = null;
+        let updateIdentifierHashCandidates: string[] = [];
 
         // TC kontrolü
-        if (tc_no) {
+        if (hasTCInput) {
             const cleanTC = tc_no.replace(/\D/g, '');
             if (cleanTC.length !== 11) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -709,10 +776,11 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
                 return;
             }
             hashedTC = hashTC(cleanTC);
+            updateIdentifierHashCandidates = getTCHashCandidates(cleanTC);
 
             // Aynı TC ile başka kayıt var mı kontrol et (kendi ID'si hariç)
-            const tcCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND id != $2 AND deleted_at IS NULL';
-            const tcCheckResult = await pool.query(tcCheckQuery, [hashedTC, id]);
+            const tcCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND id != $2 AND deleted_at IS NULL';
+            const tcCheckResult = await pool.query(tcCheckQuery, [updateIdentifierHashCandidates, id]);
 
             if (tcCheckResult.rows.length > 0) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -722,7 +790,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         // Pasaport kontrolü
-        if (passport_no) {
+        if (hasPassportInput) {
             const cleanPassport = passport_no.trim().toUpperCase();
             if (cleanPassport.length < 6 || cleanPassport.length > 20) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -730,10 +798,11 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
                 return;
             }
             hashedPassport = hashPassport(cleanPassport);
+            updateIdentifierHashCandidates = getPassportHashCandidates(cleanPassport);
 
             // Aynı pasaport ile başka kayıt var mı kontrol et (kendi ID'si hariç)
-            const passportCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND id != $2 AND deleted_at IS NULL';
-            const passportCheckResult = await pool.query(passportCheckQuery, [hashedPassport, id]);
+            const passportCheckQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND id != $2 AND deleted_at IS NULL';
+            const passportCheckResult = await pool.query(passportCheckQuery, [updateIdentifierHashCandidates, id]);
 
             if (passportCheckResult.rows.length > 0) {
                 uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -743,9 +812,9 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         // Sanitization
-        const sanitizedFullName = sanitizeInput(full_name?.trim() || '');
-        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '');
-        const sanitizedNotes = sanitizeInput(notes?.trim() || '');
+        const sanitizedFullName = sanitizeInput(full_name.trim(), 100);
+        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '', 100);
+        const sanitizedNotes = sanitizeInput(notes?.trim() || '', 1000);
 
         if (!sanitizedFullName) {
             uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
@@ -757,12 +826,12 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         const updateValues: any[] = [];
         let paramCounter = 1;
 
-        if (tc_no) {
+        if (hasTCInput) {
             updateFields.push(`hashed_tc = $${paramCounter++}`);
             updateValues.push(hashedTC);
             updateFields.push(`hashed_passport = $${paramCounter++}`);
             updateValues.push(null);
-        } else if (passport_no) {
+        } else if (hasPassportInput) {
             updateFields.push(`hashed_passport = $${paramCounter++}`);
             updateValues.push(hashedPassport);
             updateFields.push(`hashed_tc = $${paramCounter++}`);
@@ -790,10 +859,30 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
 
         const client = await pool.connect();
         let updatedRow: any;
+        const oldFilesToDelete: string[] = [];
         committed = false;
 
         try {
             await client.query('BEGIN');
+
+            const identifierHash = hashedTC || hashedPassport;
+            if (identifierHash) {
+                await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [identifierHash]);
+                const duplicateResult = hashedTC
+                    ? await client.query(
+                        'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND id != $2 AND deleted_at IS NULL',
+                        [updateIdentifierHashCandidates, id]
+                    )
+                    : await client.query(
+                        'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND id != $2 AND deleted_at IS NULL',
+                        [updateIdentifierHashCandidates, id]
+                    );
+                if (duplicateResult.rows.length > 0) {
+                    const duplicateError = new Error('SGK identifier already exists') as Error & { code?: string };
+                    duplicateError.code = '23505';
+                    throw duplicateError;
+                }
+            }
 
             if (uploadedFiles.length > 0 && fileAction) {
                 const existingFilesQuery = `
@@ -836,13 +925,7 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
                         [id]
                     );
 
-                    for (const oldFile of existingFilesResult.rows) {
-                        try {
-                            deleteFile(oldFile.stored_file_name);
-                        } catch (fileError) {
-                            console.error('Old file deletion error:', fileError);
-                        }
-                    }
+                    oldFilesToDelete.push(...existingFilesResult.rows.map((oldFile: any) => oldFile.stored_file_name));
                 }
 
                 const maxSortOrder = existingFilesResult.rows.reduce((max: number, row: any) => {
@@ -895,19 +978,33 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
             client.release();
         }
 
+        // Physical deletion happens only after the database commit. If the
+        // transaction rolls back, existing records never point to missing files.
+        for (const oldFileName of oldFilesToDelete) {
+            try {
+                deleteFile(oldFileName);
+            } catch (fileError) {
+                console.error('Old SGK file deletion error:', fileError);
+            }
+        }
+
         const fileMap = await getRecordFilesByIds([id]);
         const responseData = mapRecordResponse(updatedRow, fileMap);
 
         // Audit log
-        await logDataChange(
-            'sgk_records',
-            id,
-            'UPDATE',
-            oldData,
-            responseData,
-            personnel_id,
-            clientIp
-        );
+        try {
+            await logDataChange(
+                'sgk_records',
+                id,
+                'UPDATE',
+                oldData,
+                responseData,
+                personnel_id,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Update SGK audit log error:', auditError);
+        }
 
         res.status(200).json({
             success: true,
@@ -919,6 +1016,10 @@ export const updateSgkRecord = async (req: Request, res: Response): Promise<void
         if (!committed) {
             const uploadedFiles = extractUploadedFiles(req);
             uploadedFiles.forEach((uploadedFile) => deleteFile(uploadedFile.filename));
+        }
+        if ((error as { code?: string }).code === '23505') {
+            res.status(409).json({ success: false, message: 'Bu kimlik bilgisine ait başka bir SGK kaydı zaten mevcut' });
+            return;
         }
         res.status(500).json({ success: false, message: 'SGK kaydı güncellenirken hata oluştu' });
     }
@@ -1002,15 +1103,19 @@ export const deleteSgkRecord = async (req: Request, res: Response): Promise<void
         }
 
         // Audit log
-        await logDataChange(
-            'sgk_records',
-            id,
-            'DELETE',
-            oldData,
-            result.rows[0],
-            personnel_id,
-            clientIp
-        );
+        try {
+            await logDataChange(
+                'sgk_records',
+                id,
+                'DELETE',
+                oldData,
+                result.rows[0],
+                personnel_id,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Delete SGK audit log error:', auditError);
+        }
 
         res.status(200).json({
             success: true,
@@ -1029,7 +1134,7 @@ export const deleteSgkRecord = async (req: Request, res: Response): Promise<void
 export const getPendingQrSgk = async (req: Request, res: Response): Promise<void> => {
     try {
         const query = `
-            SELECT id, hashed_tc, hashed_passport, full_name, company_name, notes, status, created_at, gate
+            SELECT id, full_name, company_name, notes, status, created_at, gate
             FROM pending_qr_sgk
             WHERE status = 'pending'
             ORDER BY created_at ASC
@@ -1068,8 +1173,6 @@ export const getPendingQrSgk = async (req: Request, res: Response): Promise<void
             const recordFiles = filesMap.get(row.id) || [];
             return {
                 id: row.id,
-                hashed_tc: row.hashed_tc,
-                hashed_passport: row.hashed_passport,
                 full_name: row.full_name,
                 company_name: row.company_name,
                 notes: row.notes,
@@ -1103,7 +1206,7 @@ export const getPendingQrSgkFile = async (req: Request, res: Response): Promise<
         }
 
         const query = `
-            SELECT stored_file_name
+            SELECT stored_file_name, original_file_name
             FROM pending_qr_sgk_files
             WHERE id = $1 AND pending_sgk_id = $2
         `;
@@ -1114,7 +1217,7 @@ export const getPendingQrSgkFile = async (req: Request, res: Response): Promise<
             return;
         }
 
-        sendStoredFile(res, result.rows[0].stored_file_name);
+        sendStoredFile(res, result.rows[0].stored_file_name, result.rows[0].original_file_name);
     } catch (error) {
         console.error('Get pending QR SGK file error:', error);
         res.status(500).json({ success: false, message: 'Dosya getirilirken hata oluştu' });
@@ -1148,7 +1251,17 @@ export const rejectPendingQrSgk = async (req: Request, res: Response): Promise<v
         const filesResult = await pool.query(filesQuery, [id]);
         const fileNames = filesResult.rows.map((row: any) => row.stored_file_name);
 
-        await pool.query(`UPDATE pending_qr_sgk SET status = 'rejected', updated_at = NOW() WHERE id = $1`, [id]);
+        const rejectedResult = await pool.query(
+            `UPDATE pending_qr_sgk
+             SET status = 'rejected', updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'
+             RETURNING id`,
+            [id]
+        );
+        if (rejectedResult.rows.length === 0) {
+            res.status(409).json({ success: false, message: 'Kayıt başka bir kullanıcı tarafından işlenmiş' });
+            return;
+        }
 
         // Delete physical files
         for (const fileName of fileNames) {
@@ -1159,25 +1272,19 @@ export const rejectPendingQrSgk = async (req: Request, res: Response): Promise<v
             }
         }
 
-        await logDataChange(
-            'pending_qr_sgk',
-            id,
-            'UPDATE',
-            { status: 'pending' },
-            { status: 'rejected' },
-            personnel_id,
-            clientIp
-        );
-
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/sgk/pending-qr',
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/sgk/records'),
-            payload: { id, status: 'rejected' }
-        });
+        try {
+            await logDataChange(
+                'pending_qr_sgk',
+                id,
+                'UPDATE',
+                { status: 'pending' },
+                { status: 'rejected' },
+                personnel_id,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Reject pending SGK audit log error:', auditError);
+        }
 
         res.status(200).json({ success: true, message: 'Kayıt başvurusu reddedildi' });
     } catch (error) {
@@ -1224,6 +1331,7 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
 
         let hashedTC: string | null = null;
         let hashedPassport: string | null = null;
+        let approvalIdentifierHashCandidates: string[] = [];
 
         if (hasTCInput) {
             const cleanTC = tc_no.replace(/\D/g, '');
@@ -1232,9 +1340,10 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
                 return;
             }
             hashedTC = hashTC(cleanTC);
+            approvalIdentifierHashCandidates = getTCHashCandidates(cleanTC);
 
-            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = $1 AND deleted_at IS NULL';
-            const existingResult = await client.query(existingQuery, [hashedTC]);
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND deleted_at IS NULL';
+            const existingResult = await client.query(existingQuery, [approvalIdentifierHashCandidates]);
             if (existingResult.rows.length > 0) {
                 res.status(400).json({ success: false, message: 'Bu TC kimlik numarasına ait kayıt zaten mevcut' });
                 return;
@@ -1248,18 +1357,26 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
                 return;
             }
             hashedPassport = hashPassport(cleanPassport);
+            approvalIdentifierHashCandidates = getPassportHashCandidates(cleanPassport);
 
-            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = $1 AND deleted_at IS NULL';
-            const existingResult = await client.query(existingQuery, [hashedPassport]);
+            const existingQuery = 'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND deleted_at IS NULL';
+            const existingResult = await client.query(existingQuery, [approvalIdentifierHashCandidates]);
             if (existingResult.rows.length > 0) {
                 res.status(400).json({ success: false, message: 'Bu pasaport numarasına ait kayıt zaten mevcut' });
                 return;
             }
         }
 
-        const sanitizedFullName = sanitizeInput(full_name?.trim() || '');
-        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '');
-        const sanitizedNotes = sanitizeInput(notes?.trim() || '');
+        if (typeof full_name !== 'string' ||
+            (company_name != null && typeof company_name !== 'string') ||
+            (notes != null && typeof notes !== 'string')) {
+            res.status(400).json({ success: false, message: 'Metin alanlarının biçimi geçersiz' });
+            return;
+        }
+
+        const sanitizedFullName = sanitizeInput(full_name.trim(), 100);
+        const sanitizedCompanyName = sanitizeInput(company_name?.trim() || '', 100);
+        const sanitizedNotes = sanitizeInput(notes?.trim() || '', 1000);
 
         if (!sanitizedFullName) {
             res.status(400).json({ success: false, message: 'Ad Soyad zorunludur' });
@@ -1286,6 +1403,25 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
         const currentDate = new Date();
 
         await client.query('BEGIN');
+
+        const identifierHash = hashedTC || hashedPassport;
+        if (identifierHash) {
+            await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [identifierHash]);
+            const duplicateResult = hashedTC
+                ? await client.query(
+                    'SELECT id FROM sgk_records WHERE hashed_tc = ANY($1::text[]) AND deleted_at IS NULL',
+                    [approvalIdentifierHashCandidates]
+                )
+                : await client.query(
+                    'SELECT id FROM sgk_records WHERE hashed_passport = ANY($1::text[]) AND deleted_at IS NULL',
+                    [approvalIdentifierHashCandidates]
+                );
+            if (duplicateResult.rows.length > 0) {
+                const duplicateError = new Error('SGK identifier already exists') as Error & { code?: string };
+                duplicateError.code = '23505';
+                throw duplicateError;
+            }
+        }
 
         // Insert into sgk_records
         const insertQuery = `
@@ -1329,42 +1465,37 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
             ]);
         }
 
-        // Update pending status
-        await client.query(`UPDATE pending_qr_sgk SET status = 'approved', updated_at = NOW() WHERE id = $1`, [id]);
+        // Claim the pending row atomically. If another user processed it while
+        // this transaction was running, rollback the new SGK record as well.
+        const pendingUpdateResult = await client.query(
+            `UPDATE pending_qr_sgk
+             SET status = 'approved', updated_at = NOW()
+             WHERE id = $1 AND status = 'pending'
+             RETURNING id`,
+            [id]
+        );
+        if (pendingUpdateResult.rows.length === 0) {
+            const alreadyProcessedError = new Error('Kayıt başka bir kullanıcı tarafından işlenmiş') as Error & { code?: string };
+            alreadyProcessedError.code = 'SGK_ALREADY_PROCESSED';
+            throw alreadyProcessedError;
+        }
 
         await client.query('COMMIT');
 
         // Audit log
-        await logDataChange(
-            'sgk_records',
-            newRecordId,
-            'INSERT',
-            null,
-            { id: newRecordId, full_name: sanitizedFullName, company_name: sanitizedCompanyName, is_qr: true },
-            personnel_id,
-            clientIp
-        );
-
-        // Emit mutation event for records table
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/sgk/records',
-            statusCode: 201,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/sgk/records'),
-        });
-
-        // Emit mutation event to remove from pending queue
-        emitApiMutation({
-            method: 'POST',
-            path: '/api/sgk/pending-qr',
-            statusCode: 200,
-            timestamp: new Date().toISOString(),
-            clientId: req.header('x-realtime-client-id')?.trim() || null,
-            topics: resolveMutationTopics('/api/sgk/records'),
-            payload: { id, status: 'approved' }
-        });
+        try {
+            await logDataChange(
+                'sgk_records',
+                newRecordId,
+                'INSERT',
+                null,
+                { id: newRecordId, full_name: sanitizedFullName, company_name: sanitizedCompanyName, is_qr: true },
+                personnel_id,
+                clientIp
+            );
+        } catch (auditError) {
+            console.error('Approve pending SGK audit log error:', auditError);
+        }
 
         res.status(201).json({
             success: true,
@@ -1374,6 +1505,14 @@ export const approvePendingQrSgk = async (req: Request, res: Response): Promise<
     } catch (error) {
         await client.query('ROLLBACK');
         console.error('Approve pending QR SGK error:', error);
+        if ((error as { code?: string }).code === 'SGK_ALREADY_PROCESSED') {
+            res.status(409).json({ success: false, message: 'Kayıt başka bir kullanıcı tarafından işlenmiş' });
+            return;
+        }
+        if ((error as { code?: string }).code === '23505') {
+            res.status(409).json({ success: false, message: 'Bu kimlik bilgisine ait SGK kaydı zaten mevcut' });
+            return;
+        }
         res.status(500).json({ success: false, message: 'Kayıt onaylanırken hata oluştu' });
     } finally {
         client.release();
