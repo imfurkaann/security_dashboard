@@ -38,6 +38,10 @@ const getSocket = (): Socket => {
         withCredentials: true,
         autoConnect: true,
         reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 5_000,
+        timeout: 15_000,
     });
 
     return socket;
@@ -45,20 +49,26 @@ const getSocket = (): Socket => {
 
 export const initializeRealtimeClient = (): Socket => {
     const client = getSocket();
+    if (!client.connected && !client.active) {
+        client.connect();
+    }
     return client;
 };
 
 export const refreshRealtimeAuthentication = (): Socket => {
     const client = getSocket();
-    if (client.connected) {
-        client.disconnect();
-    }
+
+    // Uygulama giriş ekranındayken anonim handshake hâlâ devam ediyor olabilir.
+    // Yalnızca `connected` durumunda kapatmak bu yarışı kaçırır ve Socket.IO,
+    // middleware kaynaklı auth hatasından sonra kendiliğinden yeniden denemez.
+    // Yeni oturum çerezi yazıldıktan sonra her durumu iptal edip temiz handshake başlat.
+    client.disconnect();
     client.connect();
     return client;
 };
 
 export const disconnectRealtimeClient = (): void => {
-    if (socket?.connected) {
+    if (socket) {
         socket.disconnect();
     }
 };
@@ -71,6 +81,12 @@ export const subscribeToApiMutations = (listener: MutationListener): (() => void
     };
 
     client.on('api:mutation', wrapper);
+
+    // Sayfa değişiminden sonra yeni bir canlı veri tüketicisi açıldığında,
+    // daha önceki auth/network hatası bağlantıyı pasif bırakmışsa toparla.
+    if (!client.connected && !client.active) {
+        client.connect();
+    }
 
     return () => {
         client.off('api:mutation', wrapper);

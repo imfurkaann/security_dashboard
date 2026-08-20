@@ -46,6 +46,19 @@ const RATE_LIMIT_CONFIG = {
         windowMs: isTestEnv ? 1000 : 15 * 60 * 1000, // Test: 1sn, Prod: 15 dakika
         maxRequests: isTestEnv ? 10000 : 15,          // Test: 10000, Prod: 15 istek (IP başına)
         blockDurationMs: isTestEnv ? 1000 : 15 * 60 * 1000 // Test: 1sn, Prod: 15 dakika
+    },
+    // WhatsApp gönderimleri dış servise çıktığı için kullanıcı başına ayrıca sınırlandırılır.
+    whatsappSend: {
+        windowMs: isTestEnv ? 1000 : 60 * 1000,
+        maxRequests: isTestEnv ? 10000 : 30,
+        blockDurationMs: isTestEnv ? 1000 : 60 * 1000
+    },
+    // Oturum sıfırlama/yeniden bağlanma gibi yönetim işlemlerinde bağlantı
+    // yarışlarını ve kötüye kullanımı sınırla.
+    whatsappAdmin: {
+        windowMs: isTestEnv ? 1000 : 5 * 60 * 1000,
+        maxRequests: isTestEnv ? 10000 : 10,
+        blockDurationMs: isTestEnv ? 1000 : 5 * 60 * 1000
     }
 };
 
@@ -276,6 +289,39 @@ export const qrPublicRateLimiter = (
     next();
 };
 
+const getAuthenticatedIdentifier = (req: Request): string => {
+    return req.admin?.userId || req.user?.userId || getClientIp(req);
+};
+
+export const whatsappSendRateLimiter = (req: Request, res: Response, next: NextFunction): void => {
+    const result = checkRateLimit(getAuthenticatedIdentifier(req), 'whatsappSend');
+    if (!result.allowed) {
+        res.setHeader('Retry-After', result.retryAfter || 60);
+        res.status(429).json({
+            success: false,
+            errorCode: 'WHATSAPP_RATE_LIMITED',
+            message: 'Çok fazla WhatsApp gönderme isteği yapıldı. Lütfen kısa süre sonra tekrar deneyin.',
+            retryAfter: result.retryAfter
+        });
+        return;
+    }
+    next();
+};
+
+export const whatsappAdminActionRateLimiter = (req: Request, res: Response, next: NextFunction): void => {
+    const result = checkRateLimit(getAuthenticatedIdentifier(req), 'whatsappAdmin');
+    if (!result.allowed) {
+        res.setHeader('Retry-After', result.retryAfter || 300);
+        res.status(429).json({
+            success: false,
+            message: 'Çok fazla WhatsApp yönetim işlemi yapıldı. Lütfen daha sonra tekrar deneyin.',
+            retryAfter: result.retryAfter
+        });
+        return;
+    }
+    next();
+};
+
 /**
  * Başarısız giriş denemesi kaydet (login controller'dan çağrılır)
  */
@@ -327,6 +373,8 @@ export default {
     loginRateLimiter,
     writeRateLimiter,
     qrPublicRateLimiter,
+    whatsappSendRateLimiter,
+    whatsappAdminActionRateLimiter,
     recordFailedLogin,
     clearLoginAttempts,
     isIpBlocked,

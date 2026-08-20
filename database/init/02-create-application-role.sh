@@ -8,6 +8,12 @@ APP_PASSWORD="$(cat /run/secrets/db_password)"
 # psql değişkenleri değerleri SQL literal/identifier olarak güvenle quote eder.
 psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   --set=app_role="$APP_ROLE" --set=audit_owner_role="$AUDIT_OWNER_ROLE" --set=app_password="$APP_PASSWORD" <<'SQL'
+-- Eklentiler yalnızca PostgreSQL yönetici rolüyle kurulabilir. Bu betik hem
+-- ilk veritabanı oluşturulurken hem de her yerel kurulum tekrarında postgres
+-- hesabıyla çalışır; uygulamanın kısıtlı rolüne SUPERUSER verilmez.
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+
 SELECT format(
   CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'app_role')
        THEN 'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %L'

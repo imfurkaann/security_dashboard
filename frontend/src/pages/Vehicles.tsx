@@ -12,6 +12,7 @@ import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
 import { hasNextApiPage } from '../utils/pagination';
 import { refreshLoadedPages } from '../utils/refreshLoadedPages';
 import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
+import { BRANDING } from '../config/branding';
 
 const PAGE_SIZE = 200;
 
@@ -71,7 +72,7 @@ function CompactActionButton({
 }
 
 export default function Vehicles() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 35000;
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [usages, setUsages] = useState<VehicleUsage[]>([]);
     const [managers, setManagers] = useState<Manager[]>([]);
@@ -80,6 +81,7 @@ export default function Vehicles() {
     const [hasMore, setHasMore] = useState(true);
     const [showModal, setShowModal] = useState(false); const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState(''); const [showCustomManager, setShowCustomManager] = useState(false);
+    const [whatsappSendToken, setWhatsappSendToken] = useState<string | null>(null);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const [filter, setFilter] = useState<VehicleFilterType>('all');
@@ -183,6 +185,7 @@ export default function Vehicles() {
             // WhatsApp mesajı varsa modal göster
             if (response.data?.whatsappMessage) {
                 setWhatsappMessage(response.data.whatsappMessage);
+                setWhatsappSendToken(response.data.whatsappSendToken || null);
                 setAutoSendFailed(false);
                 setShowWhatsAppModal(true);
             } else {
@@ -209,6 +212,7 @@ export default function Vehicles() {
                     // WhatsApp mesajı varsa modal göster
                     if (response.data?.whatsappMessage) {
                         setWhatsappMessage(response.data.whatsappMessage);
+                        setWhatsappSendToken(response.data.whatsappSendToken || null);
                         setAutoSendFailed(false);
                         setShowWhatsAppModal(true);
                     } else {
@@ -276,13 +280,14 @@ export default function Vehicles() {
         setSendingWhatsApp(true);
         try {
             const response = await api.post('/vehicles/send-whatsapp-message', {
-                message: whatsappMessage,
+                token: whatsappSendToken,
             }, {
                 timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
+                setWhatsappSendToken(null);
                 setAutoSendFailed(false);
                 message.success('WhatsApp mesajı gönderildi');
             } else {
@@ -302,13 +307,14 @@ export default function Vehicles() {
         } finally {
             setSendingWhatsApp(false);
         }
-    }, [whatsappMessage]);
+    }, [whatsappSendToken]);
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
         setAutoSendFailed(false);
         setShowWhatsAppModal(false);
+        setWhatsappSendToken(null);
     }, [whatsappMessage]);
 
     // Reset form to initial state
@@ -550,8 +556,8 @@ export default function Vehicles() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Araç Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel araçlarının kullanım kayıtlarını yönetin</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — Araç Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Araç kullanım kayıtlarını yönetin.</p>
                             </div>
                         </div>
 
@@ -1103,7 +1109,7 @@ export default function Vehicles() {
             {/* WhatsApp Modal */}
             <Modal
                 isOpen={showWhatsAppModal}
-                onClose={() => { setAutoSendFailed(false); setShowWhatsAppModal(false); }}
+                onClose={() => { setAutoSendFailed(false); setWhatsappSendToken(null); setShowWhatsAppModal(false); }}
                 size="sm"
                 closeOnBackdropClick={true}
             >
@@ -1113,7 +1119,7 @@ export default function Vehicles() {
                     </div>
 
                     <div className="flex flex-col gap-2.5 pt-2">
-                        {!autoSendFailed && (
+                        {!autoSendFailed && whatsappSendToken && (
                             <button
                                 type="button"
                                 onClick={handleSendWhatsAppAutomatic}
@@ -1135,6 +1141,7 @@ export default function Vehicles() {
                             type="button"
                             onClick={() => {
                                 setAutoSendFailed(false);
+                                setWhatsappSendToken(null);
                                 setShowWhatsAppModal(false);
                             }}
                             disabled={sendingWhatsApp}

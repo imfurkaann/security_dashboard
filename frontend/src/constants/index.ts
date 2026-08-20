@@ -16,8 +16,10 @@ const getApiUrl = () => {
         const hostname = window.location.hostname;
         const port = window.location.port;
 
-        // Vite dev modunda backend portu dogrudan 5000
-        if (port === '5173' || port === '5174' || port === '5175') {
+        // Yalnızca gerçek Vite geliştirme derlemesinde backend portuna doğrudan bağlan.
+        // Üretim paketi farklı bir host portundan yayınlanabilir; port numarasına
+        // bakarak geliştirme ortamı varsaymak API bağlantısını koparır.
+        if (import.meta.env.DEV) {
             return `${protocol}//${hostname}:5000/api`;
         }
 

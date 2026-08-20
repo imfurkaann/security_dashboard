@@ -112,19 +112,23 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // HTTP mutasyonlarını merkezi olarak websocket üzerinden yayınla
 app.use((req: Request, res: Response, next: NextFunction) => {
     const isMutationMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    // Express iç içe router'larda req.url/req.path değerlerini yönlendirme
+    // süresince değiştirir. `finish` çalıştığında yeniden okumak, /api önekini
+    // kaybettirip başarılı mutasyon olayının hiç yayınlanmamasına yol açabilir.
+    const mutationPath = req.path;
     const clientIdHeader = req.header('x-realtime-client-id');
     const normalizedClientId = clientIdHeader?.trim() || '';
     const clientId = /^[a-zA-Z0-9_-]{1,64}$/.test(normalizedClientId) ? normalizedClientId : null;
 
-    res.on('finish', () => {
+    res.once('finish', () => {
         if (!isMutationMethod) return;
         if (res.statusCode >= 400) return;
-        if (!req.path.startsWith('/api/')) return;
+        if (!mutationPath.startsWith('/api/')) return;
 
-        const topics = resolveMutationTopics(req.path);
+        const topics = resolveMutationTopics(mutationPath);
         console.log('[realtime] HTTP mutation finished', {
             method: req.method,
-            path: req.path,
+            path: mutationPath,
             statusCode: res.statusCode,
             topics,
             clientId,
@@ -132,7 +136,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
         emitApiMutation({
             method: req.method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-            path: req.path,
+            path: mutationPath,
             statusCode: res.statusCode,
             timestamp: new Date().toISOString(),
             clientId,

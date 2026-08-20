@@ -13,6 +13,7 @@ import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 import { message, Modal } from 'antd';
 import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
+import { BRANDING } from '../config/branding';
 
 const PAGE_SIZE = 200;
 
@@ -529,8 +530,8 @@ export default function Managers() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Müdür Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel müdür kayıtlarını yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — Müdür Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Müdür kayıtlarını yönetin.</p>
                             </div>
                         </div>
 

@@ -28,6 +28,9 @@ Dockerfile
 logs
 *.log
 
+# Pilot/müşteri logosu runtime branding volume üzerinden sunulur
+public/logo.jpg
+
 # OS files
 .DS_Store
 Thumbs.db

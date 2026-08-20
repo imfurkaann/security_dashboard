@@ -7,6 +7,7 @@ import { AlertCircle, Car, Users, UserCheck, Flame } from 'lucide-react';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { useToastNotification } from '../hooks/useToastNotification';
 import { ToastContainer } from '../components/Toast';
+import { BRANDING } from '../config/branding';
 
 const PARKING_CAPACITY_STORAGE_KEY = 'adminParkingCapacity';
 const PARKING_RESERVED_STORAGE_KEY = 'adminParkingReserved';
@@ -271,7 +272,7 @@ export default function Dashboard() {
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <header className="bg-slate-900 text-white shadow-md border-b border-slate-700">
                 <div className="w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 leading-tight">Dosinia Luxury Resort Hotel</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold mb-1 leading-tight">{BRANDING.siteName}</h1>
                     <p className="text-sm sm:text-base text-slate-200">GUVENLIK VERI KAYIT VE YONETIM SISTEMI</p>
                 </div>
             </header>

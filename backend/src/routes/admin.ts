@@ -24,7 +24,7 @@ import {
     updateAdminWhatsAppTargetGroup,
 } from '../controllers/adminWhatsAppController';
 import { adminAuthMiddleware } from '../middleware/adminAuth';
-import { loginRateLimiter } from '../middleware/rateLimiter';
+import { loginRateLimiter, whatsappAdminActionRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -131,20 +131,20 @@ router.get('/whatsapp/qr', adminAuthMiddleware, getAdminWhatsAppQr);
  * @desc    Save WhatsApp target group JID
  * @access  Private (Admin only)
  */
-router.post('/whatsapp/target-group', adminAuthMiddleware, updateAdminWhatsAppTargetGroup);
+router.post('/whatsapp/target-group', adminAuthMiddleware, whatsappAdminActionRateLimiter, updateAdminWhatsAppTargetGroup);
 
 /**
  * @route   POST /api/admin/whatsapp/reconnect
  * @desc    Restart WhatsApp connection and regenerate QR if needed
  * @access  Private (Admin only)
  */
-router.post('/whatsapp/reconnect', adminAuthMiddleware, reconnectAdminWhatsApp);
+router.post('/whatsapp/reconnect', adminAuthMiddleware, whatsappAdminActionRateLimiter, reconnectAdminWhatsApp);
 
 /**
  * @route   POST /api/admin/whatsapp/reset-session
  * @desc    Clear Baileys auth state and force new QR login
  * @access  Private (Admin only)
  */
-router.post('/whatsapp/reset-session', adminAuthMiddleware, resetAdminWhatsAppSession);
+router.post('/whatsapp/reset-session', adminAuthMiddleware, whatsappAdminActionRateLimiter, resetAdminWhatsAppSession);
 
 export default router;

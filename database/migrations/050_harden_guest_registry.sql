@@ -1,8 +1,6 @@
 -- Misafir kayıtlarında hızlı arama ve kararlı satır kimliği desteği.
 -- Mevcut kayıtlar korunur; yalnızca türetilmiş arama metni geriye dönük doldurulur.
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
 ALTER TABLE misafir_kayitlari
     ADD COLUMN IF NOT EXISTS search_text TEXT;
 

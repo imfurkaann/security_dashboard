@@ -518,7 +518,7 @@ export default function Incidents() {
                                         onChange={(e) => setCategories({ ...categories, theft_hotel_property: e.target.checked })}
                                         className="text-xs font-normal"
                                     >
-                                        Otel Mülkiyeti Çalınması
+                                        İşletme Mülkiyeti Çalınması
                                     </Checkbox>
                                     <Checkbox
                                         checked={categories.theft_personnel}

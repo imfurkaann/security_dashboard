@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import QRCode from 'qrcode';
 import api from '../utils/api';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 
 interface WhatsAppStatus {
     enabled: boolean;
     connected: boolean;
+    connectionState: 'disabled' | 'connecting' | 'qr_required' | 'connected' | 'disconnected';
+    qrAvailable: boolean;
     lastQrAt: string | null;
+    lastConnectedAt: string | null;
     targetJid: string | null;
     lastDisconnectReason: string | null;
 }
@@ -23,21 +27,37 @@ const formatDateTime = (value: string | null) => {
     return date.toLocaleString('tr-TR');
 };
 
+const CONNECTION_STATE_LABELS: Record<WhatsAppStatus['connectionState'], string> = {
+    disabled: 'Devre Dışı',
+    connecting: 'Bağlanıyor',
+    qr_required: 'QR Kod Bekleniyor',
+    connected: 'Bağlantı Kuruldu',
+    disconnected: 'Bağlantı Yok',
+};
+
+const DISCONNECT_REASON_LABELS: Record<string, string> = {
+    connectionReplaced: 'Hesap başka bir bağlantıda açıldı',
+    restartRequired: 'WhatsApp bağlantısının yenilenmesi gerekiyor',
+    loggedOut: 'WhatsApp bağlı cihaz oturumu kapatıldı',
+    unavailableService: 'WhatsApp servisine geçici olarak ulaşılamıyor',
+    connectionClosed: 'Bağlantı kesildi',
+};
+
 export default function AdminWhatsAppSettings() {
     const navigate = useNavigate();
     const [status, setStatus] = useState<WhatsAppStatus | null>(null);
     const [groups, setGroups] = useState<WhatsAppGroup[]>([]);
     const [selectedGroup, setSelectedGroup] = useState('');
-    const [manualGroup, setManualGroup] = useState('');
     const [loadingStatus, setLoadingStatus] = useState(true);
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [qrPayload, setQrPayload] = useState<string | null>(null);
+    const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
     const [connectionStarted, setConnectionStarted] = useState(false);
 
-    const effectiveGroup = useMemo(() => selectedGroup || manualGroup.trim(), [selectedGroup, manualGroup]);
+    const effectiveGroup = useMemo(() => selectedGroup.trim(), [selectedGroup]);
     const hasHistoricalConnection = useMemo(
         () => Boolean(status?.lastQrAt || status?.targetJid),
         [status?.lastQrAt, status?.targetJid]
@@ -45,21 +65,24 @@ export default function AdminWhatsAppSettings() {
     const canShowAdvancedActions = Boolean(status?.connected || connectionStarted || hasHistoricalConnection || qrPayload);
     const isIntegrationEnabled = Boolean(status?.enabled);
 
-    const fetchStatus = useCallback(async () => {
-        setLoadingStatus(true);
-        setError('');
+    const fetchStatus = useCallback(async (showLoading = true): Promise<WhatsAppStatus | null> => {
+        if (showLoading) {
+            setLoadingStatus(true);
+            setError('');
+        }
         try {
             const response = await api.get('/admin/whatsapp/status');
             const nextStatus: WhatsAppStatus = response.data?.data;
             setStatus(nextStatus);
             if (nextStatus?.targetJid) {
                 setSelectedGroup(nextStatus.targetJid);
-                setManualGroup(nextStatus.targetJid);
             }
+            return nextStatus;
         } catch (err: any) {
-            setError(err.response?.data?.message || 'WhatsApp durumu alınamadı.');
+            if (showLoading) setError(err.response?.data?.message || 'WhatsApp durumu alınamadı.');
+            return null;
         } finally {
-            setLoadingStatus(false);
+            if (showLoading) setLoadingStatus(false);
         }
     }, []);
 
@@ -185,24 +208,49 @@ export default function AdminWhatsAppSettings() {
     }, [status?.connected, fetchQr]);
 
     useEffect(() => {
+        let cancelled = false;
+
+        if (!qrPayload) {
+            setQrImageUrl(null);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        QRCode.toDataURL(qrPayload, {
+            width: 320,
+            margin: 1,
+            errorCorrectionLevel: 'M',
+        })
+            .then((dataUrl) => {
+                if (!cancelled) setQrImageUrl(dataUrl);
+            })
+            .catch(() => {
+                if (!cancelled) setQrImageUrl(null);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [qrPayload]);
+
+    useEffect(() => {
         if (status?.connected) {
             return;
         }
 
-        const interval = window.setInterval(() => {
-            fetchQr();
-            fetchStatus();
+        const interval = window.setInterval(async () => {
+            const nextStatus = await fetchStatus(false);
+            if (!nextStatus?.connected) await fetchQr();
         }, 4000);
 
         return () => window.clearInterval(interval);
     }, [status?.connected, fetchQr, fetchStatus]);
 
     const refreshWhatsAppRealtime = useCallback(async () => {
-        await fetchStatus();
-        if (!status?.connected) {
-            await fetchQr();
-        }
-    }, [fetchQr, fetchStatus, status?.connected]);
+        const nextStatus = await fetchStatus(false);
+        if (!nextStatus?.connected) await fetchQr();
+    }, [fetchQr, fetchStatus]);
 
     useRealtimeRefetch({
         topics: ['whatsapp'],
@@ -315,7 +363,7 @@ export default function AdminWhatsAppSettings() {
                                     <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between min-h-[86px]">
                                         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Durum</span>
                                         <span className={`text-lg font-bold mt-1 ${status?.connected ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                            {status?.connected ? 'Bağlantı Kuruldu' : 'Bağlantı Yok'}
+                                            {status ? CONNECTION_STATE_LABELS[status.connectionState] : 'Bilinmiyor'}
                                         </span>
                                     </div>
 
@@ -323,6 +371,13 @@ export default function AdminWhatsAppSettings() {
                                         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Son QR Oluşturma</span>
                                         <span className="text-sm font-bold mt-1 text-slate-800">
                                             {formatDateTime(status?.lastQrAt || null)}
+                                        </span>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between min-h-[86px]">
+                                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Son Başarılı Bağlantı</span>
+                                        <span className="text-sm font-bold mt-1 text-slate-800">
+                                            {formatDateTime(status?.lastConnectedAt || null)}
                                         </span>
                                     </div>
 
@@ -337,7 +392,7 @@ export default function AdminWhatsAppSettings() {
                                         <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-100/50 flex flex-col justify-between md:col-span-2">
                                             <span className="text-[11px] font-semibold text-rose-500 uppercase tracking-wider">Son Bağlantı Kesilme Nedeni</span>
                                             <span className="text-xs font-semibold mt-1 text-rose-700">
-                                                {status.lastDisconnectReason}
+                                                {DISCONNECT_REASON_LABELS[status.lastDisconnectReason] || 'Bağlantı kesildi'}
                                             </span>
                                         </div>
                                     )}
@@ -415,12 +470,12 @@ export default function AdminWhatsAppSettings() {
                                     WhatsApp - Bağlı Cihazlar ekranından taratın. Sayfa her 4 saniyede bir otomatik yenilenir.
                                 </p>
 
-                                {qrPayload ? (
+                                {qrPayload && qrImageUrl ? (
                                     <div className="p-3 border border-slate-100 rounded-2xl bg-white shadow-inner flex justify-center items-center">
                                         <img
                                             alt="WhatsApp QR"
                                             className="w-64 h-64 border border-slate-200 rounded-xl"
-                                            src={`https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(qrPayload)}`}
+                                            src={qrImageUrl}
                                         />
                                     </div>
                                 ) : (
@@ -439,7 +494,7 @@ export default function AdminWhatsAppSettings() {
                             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
                                 <h2 className="text-lg font-bold text-slate-800">Hedef Bildirim Grubu</h2>
                                 <p className="text-xs text-slate-500">
-                                    Sistemdeki alarmların ve olay raporlarının otomatik gönderileceği WhatsApp grubunu belirleyin.
+                                    Yetkili personelin onayladığı sistem bildirimlerinin gönderileceği WhatsApp grubunu belirleyin.
                                 </p>
 
                                 <button
@@ -466,7 +521,6 @@ export default function AdminWhatsAppSettings() {
                                             value={selectedGroup}
                                             onChange={(e) => {
                                                 setSelectedGroup(e.target.value);
-                                                setManualGroup(e.target.value);
                                             }}
                                             className="w-full px-3 py-2 rounded-lg border border-slate-350 bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm text-slate-800 transition"
                                         >
@@ -479,24 +533,11 @@ export default function AdminWhatsAppSettings() {
                                         </select>
                                     </div>
 
-                                    <div className="relative flex py-1 items-center">
-                                        <div className="flex-grow border-t border-slate-200"></div>
-                                        <span className="flex-shrink mx-4 text-slate-400 text-xs">veya</span>
-                                        <div className="flex-grow border-t border-slate-200"></div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Grup Kodunu (JID) Elle Girin</label>
-                                        <input
-                                            value={manualGroup}
-                                            onChange={(e) => {
-                                                setManualGroup(e.target.value);
-                                                setSelectedGroup('');
-                                            }}
-                                            placeholder="Örn: 1203630283084839@g.us"
-                                            className="w-full px-3 py-2 rounded-lg border border-slate-350 bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm text-slate-800 transition"
-                                        />
-                                    </div>
+                                    {groups.length === 0 && (
+                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                                            Önce “Grup Listesini Getir” düğmesine basın. Güvenlik için elle grup kodu girişi kapalıdır.
+                                        </p>
+                                    )}
                                 </div>
 
                                 <button

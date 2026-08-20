@@ -15,8 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/bootstrap_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/init/02-create-application-role.sh:/docker-entrypoint-initdb.d/02-create-application-role.sh:ro
-    ports:
-      - "127.0.0.1:5432:5432"
+      - ./database/init/03-baseline-migrations.sql:/docker-entrypoint-initdb.d/03-baseline-migrations.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_ADMIN_USER:-postgres} -d ${DB_NAME:-security_management}"]
       interval: 10s
@@ -27,9 +26,12 @@ services:
       - db_password
     networks:
       - security_network
+    security_opt:
+      - no-new-privileges:true
 
   # Backend API
   backend:
+    image: security-backend:1.0.0
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -38,9 +40,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      FRONTEND_PORT: ${FRONTEND_PORT:-33334}
-      PUBLIC_HOST_IP: ${PUBLIC_HOST_IP:-169.58.124.2}
-      FRONTEND_URL: ${FRONTEND_URL:-http://169.58.124.2:33334}
+      FRONTEND_PORT: ${FRONTEND_PORT:-443}
+      PUBLIC_HOST_IP: ${PUBLIC_HOST_IP:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://localhost}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       DB_HOST: postgres
       DB_PORT: 5432
@@ -49,8 +51,8 @@ services:
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
-      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
-      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-2}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       AUTH_COOKIE_MAX_AGE_MS: ${AUTH_COOKIE_MAX_AGE_MS:-28800000}
       ALLOW_BEARER_AUTH: "false"
       BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
@@ -67,6 +69,10 @@ services:
       WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
       WHATSAPP_SESSION_PATH: ${WHATSAPP_SESSION_PATH:-.baileys_auth}
       WHATSAPP_CONNECT_TIMEOUT_MS: ${WHATSAPP_CONNECT_TIMEOUT_MS:-30000}
+      WHATSAPP_SEND_CONNECT_TIMEOUT_MS: ${WHATSAPP_SEND_CONNECT_TIMEOUT_MS:-8000}
+      WHATSAPP_SEND_MESSAGE_TIMEOUT_MS: ${WHATSAPP_SEND_MESSAGE_TIMEOUT_MS:-8000}
+      WHATSAPP_GROUP_LIST_TIMEOUT_MS: ${WHATSAPP_GROUP_LIST_TIMEOUT_MS:-15000}
+      WHATSAPP_QR_TTL_MS: ${WHATSAPP_QR_TTL_MS:-60000}
       WHATSAPP_LOG_LEVEL: ${WHATSAPP_LOG_LEVEL:-silent}
     volumes:
       - ./backend/reports:/app/reports # Raporların silinmemesi için local klasöre bağladık
@@ -74,7 +80,6 @@ services:
       - whatsapp_auth:/app/.baileys_auth # WhatsApp oturum dosyalarının update/restart sonrası korunması
       # Migration dosyaları - backend başlarken otomatik çalıştırılır
       - ./database/migrations:/app/migrations:ro
-      - ./ERISIM_BILGILERI.txt:/app/ERISIM_BILGILERI.txt:ro
     secrets:
       - db_password
       - jwt_secret
@@ -83,6 +88,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      whatsapp_permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "runtime-healthcheck.js"]
       interval: 30s
@@ -91,9 +98,12 @@ services:
       start_period: 40s
     networks:
       - security_network
+    security_opt:
+      - no-new-privileges:true
 
   # Frontend
   frontend:
+    image: security-frontend:1.0.0
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -103,8 +113,10 @@ services:
     restart: unless-stopped
     environment:
       TZ: Europe/Istanbul
-    ports:
-      - "${FRONTEND_PORT:-33334}:80"
+    volumes:
+      - ./branding:/usr/share/nginx/html/branding:ro
+    expose:
+      - "80"
     depends_on:
       - backend
     healthcheck:
@@ -114,6 +126,61 @@ services:
       retries: 3
     networks:
       - security_network
+    security_opt:
+      - no-new-privileges:true
+
+  # Backend non-root (UID 1001) çalışır. Named volume ilk oluşturulduğunda
+  # root:root geldiği için WhatsApp kimlik dosyalarını güvenli izinlerle hazırla.
+  whatsapp_permissions:
+    image: alpine:3.23.5
+    container_name: security_whatsapp_permissions
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        chown -R 1001:1001 /whatsapp-auth
+        find /whatsapp-auth -type d -exec chmod 700 {} \;
+        find /whatsapp-auth -type f -exec chmod 600 {} \;
+    volumes:
+      - whatsapp_auth:/whatsapp-auth
+    security_opt:
+      - no-new-privileges:true
+
+  # Yerel HTTPS ağ geçidi. İnternetten sertifika almaz; her kurulum kendi
+  # kurum içi kök sertifikasını üretir.
+  gateway:
+    image: caddy:2.11.4-alpine
+    container_name: security_gateway
+    restart: unless-stopped
+    environment:
+      SITE_HOSTNAME: ${SITE_HOSTNAME:-localhost}
+      SITE_IP: ${SITE_IP:-127.0.0.1}
+    ports:
+      - "${HOST_BIND_ADDRESS:-0.0.0.0}:80:80"
+      - "${HOST_BIND_ADDRESS:-0.0.0.0}:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      # Host LAN IP'sine container içinden geri dönmek bazı Windows/Docker ağlarında
+      # hairpin NAT nedeniyle takılır. Frontend ayrıca kendi healthcheck'ine sahip;
+      # burada Caddy'nin yerel HTTP/HTTPS dinleyicilerini doğrudan doğrula.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 80 && nc -z 127.0.0.1 443"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - security_network
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   postgres_data:
@@ -132,10 +199,20 @@ volumes:
     labels:
       - "com.security.backup=recommended"
       - "com.security.description=Baileys WhatsApp auth session - SİLMEYİN!"
+  caddy_data:
+    driver: local
+    name: security_caddy_data
+    labels:
+      - "com.security.backup=required"
+      - "com.security.description=Tesise özel HTTPS kök sertifikası ve anahtarları"
+  caddy_config:
+    driver: local
+    name: security_caddy_config
 
 networks:
   security_network:
     driver: bridge
+    name: security_internal_network
 
 secrets:
   db_password:

@@ -7,12 +7,13 @@ import {
     undoVisitorExit,
     deleteVisitorRecord,
     restoreVisitorRecord,
-    sendVisitorWhatsAppMessage,
     getPendingQrVisitors,
     approvePendingQrVisitor,
     rejectPendingQrVisitor
 } from '../controllers/visitorController';
 import { authMiddleware } from '../middleware/auth';
+import { sendWhatsAppNotification } from '../controllers/whatsappNotificationController';
+import { whatsappSendRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -50,6 +51,6 @@ router.delete('/records/:id', deleteVisitorRecord);
 router.post('/records/:id/restore', restoreVisitorRecord);
 
 // Send WhatsApp message from modal (automatic send)
-router.post('/send-whatsapp-message', sendVisitorWhatsAppMessage);
+router.post('/send-whatsapp-message', whatsappSendRateLimiter, sendWhatsAppNotification);
 
 export default router;

@@ -1,6 +1,6 @@
 export const INCIDENT_CATEGORY_OPTIONS = [
     { value: 'theft_guest_property', label: 'Misafir Eşyası Hırsızlığı' },
-    { value: 'theft_hotel_property', label: 'Otel Mülkiyeti Hırsızlığı' },
+    { value: 'theft_hotel_property', label: 'İşletme Mülkiyeti Hırsızlığı' },
     { value: 'theft_personnel', label: 'Personel Hırsızlığı' },
     { value: 'assault_physical', label: 'Fiziksel Saldırı' },
     { value: 'assault_verbal', label: 'Sözlü/Davranışsal Taciz' },

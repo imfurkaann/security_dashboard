@@ -1,5 +1,11 @@
-# Guvenlik Yonetim Sistemi - Veritabani Otomatik Yedekleme Scripti
+﻿# Guvenlik Yonetim Sistemi - Veritabani Otomatik Yedekleme Scripti
 $ErrorActionPreference = 'Stop'
+$utf8Encoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $utf8Encoding
+try {
+    [Console]::InputEncoding = $utf8Encoding
+    [Console]::OutputEncoding = $utf8Encoding
+} catch { }
 
 # Klasör yolları
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path | Split-Path -Parent
@@ -85,7 +91,8 @@ try {
 
     if (Test-Path $localBackupPath) {
         $fileSize = (Get-Item $localBackupPath).Length / 1KB
-        Write-Log "Yedek basariyla alindi: $backupFileName ({0:N2} KB)" "SUCCESS"
+        $displayFileSize = '{0:N2}' -f $fileSize
+        Write-Log "Yedek basariyla alindi: $backupFileName ($displayFileSize KB)" "SUCCESS"
     } else {
         throw "Yedek dosyası kopyalandıktan sonra yerel diskte bulunamadı!"
     }

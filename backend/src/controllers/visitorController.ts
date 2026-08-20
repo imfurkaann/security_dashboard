@@ -6,7 +6,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizePlainText, normalizePlate, isValidNumber } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createVisitorRecordMessage, createVisitorExitMessage } from '../services/whatsapp';
-import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
+import { issueWhatsAppSendTicket } from '../services/whatsappSendTicketStore';
 import { getResolvedGateFromRequest } from '../utils/gate';
 
 const VISITOR_HIGHLIGHT_COLORS = ['none', 'rose', 'amber', 'emerald', 'sky', 'violet', 'orange', 'pink', 'brown'] as const;
@@ -580,7 +580,13 @@ export const createVisitorRecord = async (req: Request, res: Response): Promise<
             }
         }
 
-        res.status(201).json({ success: true, message: 'Ziyaretçi girişi kaydedildi', data: { id }, whatsappMessage });
+        res.status(201).json({
+            success: true,
+            message: 'Ziyaretçi girişi kaydedildi',
+            data: { id },
+            whatsappMessage,
+            whatsappSendToken: issueWhatsAppSendTicket(whatsappMessage, req.user?.userId),
+        });
     } catch (error) {
         console.error('Create visitor record error:', error instanceof Error ? error.message : error);
         res.status(500).json({ success: false, message: 'Ziyaretçi girişi kaydedilirken hata oluştu' });
@@ -831,7 +837,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                AND status = 'inside'
              RETURNING full_name, company_name, visiting_person, vehicle_plate, 
                        person_count, children_count, gate, phone, subcontractor_worker, 
-                       for_electric_station, daily_guest, meeting, delivery, notes, exit_time, send_whatsapp`,
+                       for_electric_station, daily_guest, meeting, delivery, notes, exit_date, exit_time, send_whatsapp`,
             [id, personnel_id, exit_time || null]
         );
 
@@ -874,6 +880,7 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
                     meeting: Boolean(record.meeting),
                     delivery: Boolean(record.delivery),
                     notes: record.notes || undefined,
+                    exitDate: record.exit_date,
                     exitTime
                 });
             }
@@ -881,7 +888,12 @@ export const exitVisitor = async (req: Request, res: Response): Promise<void> =>
             console.error('WhatsApp mesaj oluşturma hatası:', error);
         }
 
-        res.status(200).json({ success: true, message: 'Çıkış kaydedildi', whatsappMessage });
+        res.status(200).json({
+            success: true,
+            message: 'Çıkış kaydedildi',
+            whatsappMessage,
+            whatsappSendToken: issueWhatsAppSendTicket(whatsappMessage, req.user?.userId),
+        });
     } catch (error) {
         console.error('Exit visitor error:', error);
         res.status(500).json({ success: false, message: 'Çıkış kaydedilirken hata oluştu' });
@@ -1064,37 +1076,6 @@ export const undoVisitorExit = async (req: Request, res: Response): Promise<void
     } catch (error) {
         console.error('Undo visitor exit error:', error);
         res.status(500).json({ success: false, message: 'Çıkış geri alınırken hata oluştu' });
-    }
-};
-
-/**
- * POST /api/visitors/send-whatsapp-message
- */
-export const sendVisitorWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
-    try {
-        if (!isRequestBodyObject(req.body)) {
-            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
-            return;
-        }
-
-        const { message } = req.body;
-
-        if (!message || typeof message !== 'string' || !message.trim()) {
-            res.status(400).json({
-                success: false,
-                message: 'Mesaj içeriği gereklidir.',
-            });
-            return;
-        }
-
-        const result = await sendWhatsAppTextMessage(message.trim());
-        res.status(200).json(result);
-    } catch (error) {
-        console.error('Send visitor WhatsApp message error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'WhatsApp mesajı gönderilirken hata oluştu.',
-        });
     }
 };
 
@@ -1410,7 +1391,13 @@ export const approvePendingQrVisitor = async (req: Request, res: Response): Prom
             }
         }
 
-        res.status(201).json({ success: true, message: 'Ziyaretçi girişi onaylandı', data: { id: newRecordId }, whatsappMessage });
+        res.status(201).json({
+            success: true,
+            message: 'Ziyaretçi girişi onaylandı',
+            data: { id: newRecordId },
+            whatsappMessage,
+            whatsappSendToken: issueWhatsAppSendTicket(whatsappMessage, req.user?.userId),
+        });
     } catch (error) {
         if (client) {
             await client.query('ROLLBACK').catch(() => undefined);

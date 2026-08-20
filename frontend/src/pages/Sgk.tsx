@@ -9,6 +9,7 @@ import ActionButton from '../components/ActionButton';
 import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
 import { refreshLoadedPages } from '../utils/refreshLoadedPages';
+import { BRANDING } from '../config/branding';
 
 interface CompactActionButtonProps {
     onClick: () => void;
@@ -782,8 +783,8 @@ export default function Sgk() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel SGK Belge Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel SGK belgelerini yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — SGK Belge Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">SGK belgelerini yönetin.</p>
                             </div>
                         </div>
                         <button

@@ -7,9 +7,10 @@ import {
     undoResolveFireAlarm,
     deleteFireAlarm,
     restoreFireAlarm,
-    sendFireAlarmWhatsAppMessage,
 } from '../controllers/fireAlarmController';
 import { authMiddleware } from '../middleware/auth';
+import { sendWhatsAppNotification } from '../controllers/whatsappNotificationController';
+import { whatsappSendRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -38,6 +39,6 @@ router.delete('/records/:id', deleteFireAlarm);
 router.post('/records/:id/restore', restoreFireAlarm);
 
 // WhatsApp mesajını otomatik gönder
-router.post('/send-whatsapp-message', sendFireAlarmWhatsAppMessage);
+router.post('/send-whatsapp-message', whatsappSendRateLimiter, sendWhatsAppNotification);
 
 export default router;

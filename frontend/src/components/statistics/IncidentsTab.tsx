@@ -158,7 +158,7 @@ export default function IncidentsTab({ startDate, endDate, refetchKey }: Inciden
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={[
                                         { name: 'Misafir Eşyası', count: parseInt(stats.theft_guest_property) || 0 },
-                                        { name: 'Otel Mülkiyeti', count: parseInt(stats.theft_hotel_property) || 0 },
+                                        { name: 'İşletme Mülkiyeti', count: parseInt(stats.theft_hotel_property) || 0 },
                                         { name: 'Personel Hırsızlığı', count: parseInt(stats.theft_personnel) || 0 }
                                     ]}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />

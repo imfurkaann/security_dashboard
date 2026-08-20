@@ -24,10 +24,10 @@ const TRANSLATIONS: Record<string, { title: string; sgkBtn: string; visitorBtn: 
 };
 
 const LANGUAGES = [
-    { code: 'tr', name: 'Türkçe', flagUrl: 'https://flagcdn.com/w40/tr.png' },
-    { code: 'en', name: 'English', flagUrl: 'https://flagcdn.com/w40/us.png' },
-    { code: 'de', name: 'Deutsch', flagUrl: 'https://flagcdn.com/w40/de.png' },
-    { code: 'ru', name: 'Русский', flagUrl: 'https://flagcdn.com/w40/ru.png' }
+    { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+    { code: 'ru', name: 'Русский', flag: '🇷🇺' }
 ];
 
 export default function QrLanding() {
@@ -83,11 +83,7 @@ export default function QrLanding() {
                         className="inline-flex items-center justify-center w-12 h-10 rounded-lg border border-slate-300 shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/20 hover:bg-slate-50"
                         title={selectedLanguageObj.name}
                     >
-                        <img
-                            src={selectedLanguageObj.flagUrl}
-                            alt={selectedLanguageObj.name}
-                            className="w-6 h-auto object-cover rounded-sm border border-slate-200"
-                        />
+                        <span className="text-xl leading-none" aria-hidden="true">{selectedLanguageObj.flag}</span>
                     </button>
                 </div>
 
@@ -104,11 +100,7 @@ export default function QrLanding() {
                                     }`}
                                     title={lang.name}
                                 >
-                                    <img
-                                        src={lang.flagUrl}
-                                        alt={lang.name}
-                                        className="w-6 h-auto object-cover rounded-sm border border-slate-200"
-                                    />
+                                    <span className="text-xl leading-none" aria-hidden="true">{lang.flag}</span>
                                 </button>
                             ))}
                         </div>

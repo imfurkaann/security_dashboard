@@ -9,6 +9,7 @@ import { useRealtimeRefetch } from '../realtime/useRealtimeRefetch';
 import CustomModal from '../components/Modal';
 import { useReliableInfiniteScroll } from '../hooks/useReliableInfiniteScroll';
 import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
+import { BRANDING } from '../config/branding';
 
 interface ImportSummary {
     totalRows: number;
@@ -403,8 +404,8 @@ export default function GuestRegistry() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Misafir Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel misafir kayıtlarını yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — Misafir Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Misafir kayıtlarını yönetin.</p>
                             </div>
                         </div>
 

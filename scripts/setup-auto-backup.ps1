@@ -1,6 +1,12 @@
-# Guvenlik Yonetim Sistemi - Gunluk Otomatik Yedekleme Gorevi Olusturucu
+﻿# Guvenlik Yonetim Sistemi - Gunluk Otomatik Yedekleme Gorevi Olusturucu
 # Yonetici yetkisi kontrolu
 $ErrorActionPreference = 'Stop'
+$utf8Encoding = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $utf8Encoding
+try {
+    [Console]::InputEncoding = $utf8Encoding
+    [Console]::OutputEncoding = $utf8Encoding
+} catch { }
 
 function Test-IsAdmin {
     $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -15,10 +21,10 @@ if (-not (Test-IsAdmin)) {
 }
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path | Split-Path -Parent
-$batPath = Join-Path $projectRoot "YEDEKLE.bat"
+$backupScriptPath = Join-Path $projectRoot "scripts\backup-db.ps1"
 
-if (-not (Test-Path $batPath)) {
-    Write-Host "HATA: YEDEKLE.bat bulunamadı! Yol: $batPath" -ForegroundColor Red
+if (-not (Test-Path $backupScriptPath)) {
+    Write-Host "HATA: Yedekleme betiği bulunamadı! Yol: $backupScriptPath" -ForegroundColor Red
     exit 1
 }
 
@@ -28,14 +34,17 @@ $triggerTime = "03:00"
 
 Write-Host "Görev ayarlanıyor..."
 Write-Host "Görev Adı: $taskName"
-Write-Host "Çalıştırılacak Dosya: $batPath"
+Write-Host "Çalıştırılacak Dosya: $backupScriptPath"
 Write-Host "Zaman: Her gün $triggerTime"
 
 # Task Scheduler (Görev Zamanlayıcı) görevi oluştur/güncelle
 # -Force parametresi eski görev varsa üzerine yazar
 try {
     # Windows Task Scheduler eylemi
-    $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$batPath`"" -WorkingDirectory $projectRoot
+    $action = New-ScheduledTaskAction `
+        -Execute "powershell.exe" `
+        -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$backupScriptPath`"" `
+        -WorkingDirectory $projectRoot
     
     # Her gün saat 03:00 tetikleyicisi
     $trigger = New-ScheduledTaskTrigger -Daily -At $triggerTime
@@ -61,5 +70,3 @@ try {
 } catch {
     Write-Host "HATA: Görev oluşturulurken bir hata oluştu: $_" -ForegroundColor Red
 }
-
-Read-Host "Kapatmak icin Enter'a basin"

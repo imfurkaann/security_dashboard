@@ -23,18 +23,24 @@ const configuredOrigins = (): Set<string> => {
     }
 
     const publicHost = process.env.PUBLIC_HOST_IP?.trim();
-    const frontendPort = process.env.FRONTEND_PORT?.trim() || '33334';
+    const frontendPort = process.env.FRONTEND_PORT?.trim() || '443';
     if (publicHost) {
-        add(`http://${publicHost}:${frontendPort}`);
         add(`https://${publicHost}:${frontendPort}`);
-        add(`http://${publicHost}`);
         add(`https://${publicHost}`);
+
+        // Canlı yerel kurulum yalnızca HTTPS üzerinden kimlik doğrular.
+        // HTTP adresi Caddy tarafından HTTPS'e yönlendirilir ve CORS güven
+        // listesine dahil edilmez.
+        if (process.env.NODE_ENV !== 'production') {
+            add(`http://${publicHost}:${frontendPort}`);
+            add(`http://${publicHost}`);
+        }
     }
 
     const allowLocalhost = process.env.NODE_ENV !== 'production'
         || process.env.ALLOW_LOCALHOST_ORIGIN === 'true';
     if (allowLocalhost) {
-        ['5173', '5174', '3000', '33334'].forEach((port) => {
+        ['5173', '5174', '3000', '33334', '80'].forEach((port) => {
             add(`http://localhost:${port}`);
             add(`http://127.0.0.1:${port}`);
         });
@@ -63,6 +69,11 @@ export const assertSecureHttpConfiguration = (): void => {
 
     if (getAllowedOrigins().length === 0) {
         throw new Error('Production ortamında en az bir FRONTEND_URL, PUBLIC_HOST_IP veya CORS_ORIGINS tanımlanmalıdır');
+    }
+
+    const insecureOrigins = getAllowedOrigins().filter((origin) => origin.startsWith('http://'));
+    if (insecureOrigins.length > 0) {
+        throw new Error('Production ortamında HTTP origin kullanılamaz; tüm erişim adresleri HTTPS olmalıdır');
     }
 };
 

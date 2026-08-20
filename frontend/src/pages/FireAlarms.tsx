@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { message, Modal } from 'antd';
 import CustomModal from '../components/Modal';
 import 'antd/dist/reset.css';
+import { BRANDING } from '../config/branding';
 
 interface CompactActionButtonProps {
     onClick: () => void;
@@ -75,7 +76,7 @@ type FilterType = 'today' | 'active' | 'resolved' | 'deleted';
 const PAGE_SIZE = 200;
 
 export default function FireAlarms() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 35000;
     const [records, setRecords] = useState<FireAlarm[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -84,6 +85,7 @@ export default function FireAlarms() {
     const [showModal, setShowModal] = useState(false);
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [whatsappSendToken, setWhatsappSendToken] = useState<string | null>(null);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const [showResolveModal, setShowResolveModal] = useState(false);
@@ -267,6 +269,7 @@ export default function FireAlarms() {
                 // WhatsApp mesajı varsa modal göster
                 if (response.data?.whatsappMessage) {
                     setWhatsappMessage(response.data.whatsappMessage);
+                    setWhatsappSendToken(response.data.whatsappSendToken || null);
                     setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
                 }
@@ -310,6 +313,7 @@ export default function FireAlarms() {
             // WhatsApp modal göster
             if (response.data?.whatsappMessage) {
                 setWhatsappMessage(response.data.whatsappMessage);
+                setWhatsappSendToken(response.data.whatsappSendToken || null);
                 setAutoSendFailed(false);
                 setShowWhatsAppModal(true);
             }
@@ -375,13 +379,14 @@ export default function FireAlarms() {
         setSendingWhatsApp(true);
         try {
             const response = await api.post('/fire-alarms/send-whatsapp-message', {
-                message: whatsappMessage,
+                token: whatsappSendToken,
             }, {
                 timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
+                setWhatsappSendToken(null);
                 setAutoSendFailed(false);
                 message.success('WhatsApp mesajı otomatik olarak gönderildi');
             } else {
@@ -401,13 +406,14 @@ export default function FireAlarms() {
         } finally {
             setSendingWhatsApp(false);
         }
-    }, [whatsappMessage]);
+    }, [whatsappSendToken]);
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
         setAutoSendFailed(false);
         setShowWhatsAppModal(false);
+        setWhatsappSendToken(null);
     }, [whatsappMessage]);
 
     const nonDeletedRecords = useMemo(() => records.filter(r => !r.deleted_at), [records]);
@@ -562,8 +568,8 @@ export default function FireAlarms() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Yangın Alarmları Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel yangın alarm kayıtlarını yönetin.</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — Yangın Alarm Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Yangın alarm kayıtlarını yönetin.</p>
                             </div>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2.5 w-full lg:w-auto">
@@ -931,6 +937,7 @@ export default function FireAlarms() {
                 isOpen={showWhatsAppModal}
                 onClose={() => {
                     setAutoSendFailed(false);
+                    setWhatsappSendToken(null);
                     setShowWhatsAppModal(false);
                 }}
                 size="sm"
@@ -942,7 +949,7 @@ export default function FireAlarms() {
                     </div>
 
                     <div className="flex flex-col gap-2 pt-2">
-                        {!autoSendFailed && (
+                        {!autoSendFailed && whatsappSendToken && (
                             <button
                                 type="button"
                                 onClick={handleSendWhatsAppAutomatic}
@@ -964,6 +971,7 @@ export default function FireAlarms() {
                             type="button"
                             onClick={() => {
                                 setAutoSendFailed(false);
+                                setWhatsappSendToken(null);
                                 setShowWhatsAppModal(false);
                             }}
                             disabled={sendingWhatsApp}

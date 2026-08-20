@@ -36,7 +36,7 @@ interface WeeklyRankingCelebration {
 }
 
 export default function EquipmentCheck() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 35000;
     const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
     const [gates, setGates] = useState<GateInfo[]>([]);
     const [selectedGate, setSelectedGate] = useState('');
@@ -45,6 +45,7 @@ export default function EquipmentCheck() {
     const [error, setError] = useState('');
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [whatsappSendToken, setWhatsappSendToken] = useState<string | null>(null);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [weeklyCelebration, setWeeklyCelebration] = useState<WeeklyRankingCelebration | null>(null);
     const [showCelebrationModal, setShowCelebrationModal] = useState(false);
@@ -169,6 +170,7 @@ export default function EquipmentCheck() {
 
                 if (response.data?.data?.whatsappMessage) {
                     setWhatsappMessage(response.data.data.whatsappMessage);
+                    setWhatsappSendToken(response.data.data.whatsappSendToken || null);
                     setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
                 } else {
@@ -197,6 +199,7 @@ export default function EquipmentCheck() {
 
     const handleWhatsAppClose = useCallback(() => {
         setShowWhatsAppModal(false);
+        setWhatsappSendToken(null);
         setAutoSendFailed(false);
         completeFlowWithCelebrationCheck();
     }, [completeFlowWithCelebrationCheck]);
@@ -205,7 +208,7 @@ export default function EquipmentCheck() {
         setSendingWhatsApp(true);
         try {
             const response = await api.post('/equipment-check/send-whatsapp-message', {
-                message: whatsappMessage,
+                token: whatsappSendToken,
             }, {
                 timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
@@ -213,6 +216,7 @@ export default function EquipmentCheck() {
             if (response.data?.success) {
                 // Mesaj başarıyla gönderildi, modalı kapat
                 setShowWhatsAppModal(false);
+                setWhatsappSendToken(null);
                 setAutoSendFailed(false);
                 completeFlowWithCelebrationCheck();
             } else {
@@ -232,7 +236,7 @@ export default function EquipmentCheck() {
         } finally {
             setSendingWhatsApp(false);
         }
-    }, [whatsappMessage, completeFlowWithCelebrationCheck]);
+    }, [whatsappSendToken, completeFlowWithCelebrationCheck]);
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
@@ -420,7 +424,7 @@ export default function EquipmentCheck() {
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            {!autoSendFailed && (
+                            {!autoSendFailed && whatsappSendToken && (
                                 <button
                                     type="button"
                                     onClick={handleSendWhatsAppAutomatic}

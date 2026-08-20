@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { STORAGE_KEYS } from '../constants';
 import type { AxiosError } from 'axios';
 import { refreshRealtimeAuthentication } from '../realtime/socket';
+import { BRANDING } from '../config/branding';
 
 // Error messages
 const ERROR_MESSAGES = {
@@ -140,8 +141,8 @@ export default function Login() {
         <div className="min-h-screen bg-slate-50 flex flex-col">
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-4 sm:py-6 px-4 shadow-md">
                 <div className="max-w-5xl mx-auto text-center">
-                    <h1 className="text-2xl sm:text-3xl font-bold">Otel Guvenlik Sistemi</h1>
-                    <p className="text-slate-200 mt-1">Personel Giris Ekrani</p>
+                    <h1 className="text-2xl sm:text-3xl font-bold">{BRANDING.siteName}</h1>
+                    <p className="text-slate-200 mt-1">Personel Giriş Ekranı</p>
                 </div>
             </div>
 
@@ -150,13 +151,15 @@ export default function Login() {
                     <div className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
                         {/* Card Header */}
                         <div className="p-5 sm:p-6 text-center space-y-3">
-                            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 border border-blue-200 mb-1">
-                                <svg className="w-10 h-10 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
+                            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white border border-slate-200 shadow-sm p-2 mb-1">
+                                <img
+                                    src="/branding/logo.png"
+                                    alt={`${BRANDING.siteName} logosu`}
+                                    className="w-full h-full object-contain"
+                                />
                             </div>
-                            <h2 className="text-2xl font-bold text-slate-900">Giris</h2>
-                            <p className="text-sm text-slate-500">Kullanici bilgileriniz ile devam edin</p>
+                            <h2 className="text-2xl font-bold text-slate-900">Giriş</h2>
+                            <p className="text-sm text-slate-500">Kullanıcı bilgileriniz ile devam edin</p>
                         </div>
 
                         {/* Card Body */}

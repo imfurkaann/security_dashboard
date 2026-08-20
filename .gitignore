@@ -7,34 +7,46 @@ pnpm-debug.log*
 
 # Environment variables
 .env
+.env.*
+!.env.example
 backend/.env
+backend/.env.*
+!backend/.env.example
 frontend/.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+frontend/.env.*
+!frontend/.env.example
 
-# Build outputs
+# Build & Test outputs
 dist/
 build/
 *.log
+coverage/
+backend/coverage/
+*.tsbuildinfo
 
-# IDE
+# IDE & OS
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
+*.lnk
 
-# Database
+# Database & Backups
 *.sql.backup
 *.dump
+*.sqlite
+*.sqlite3
+*.db
 /db_yedek.dump
+/database/data.sqlite
 /database/local_backup.sql
+database/local_backup.sql
+database/data.sqlite
+test_login.json
+.git_backup*/
 
 # Local Docker secret material
 secrets/
@@ -44,6 +56,7 @@ secrets/
 backups/*.sql
 backups/*.sql.zip
 backups/*.sql.gz
+backups/backup_log.txt
 !backups/.gitkeep
 
 # Docker (auto-generated)
@@ -52,10 +65,15 @@ ERISIM_BILGILERI.txt
 backend/reports/
 backend/sgk_kayitlari/
 
-
-# TypeScript
-*.tsbuildinfo
-
 # WhatsApp Baileys auth/session files (sensitive)
 backend/.baileys_auth/
 backend/.baileys_auth/**
+
+# Her tesiste kurulum sırasında üretilen istemci sertifikası ve bağlantı paketi
+client-setup/
+
+# Her müşteride kurulum sırasında üretilen ad/logo/PWA dosyaları
+branding/
+
+# İmzalı/çevrimdışı satış paketi çıktıları
+distribution/

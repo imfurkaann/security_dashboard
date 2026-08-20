@@ -5,7 +5,7 @@ import { logDataChange } from '../utils/auditLog';
 import { isValidUUID, sanitizePlainText } from '../utils/validation';
 import { getClientIp } from '../middleware/rateLimiter';
 import { createFireAlarmMessage, createFireAlarmResolveMessage } from '../services/whatsapp';
-import { sendWhatsAppTextMessage } from '../services/whatsappBaileys';
+import { issueWhatsAppSendTicket } from '../services/whatsappSendTicketStore';
 import { getResolvedGateFromRequest } from '../utils/gate';
 
 const MAX_PAGE_SIZE = 500;
@@ -269,6 +269,7 @@ export const createFireAlarm = async (req: Request, res: Response) => {
             whatsappMessage = createFireAlarmMessage({
                 alarmNumber: sanitizedAlarmNumber || 'Belirtilmemiş',
                 location: sanitizedLocation,
+                alarmDate: new Date(alarmDateTime).toISOString(),
                 alarmTime: timeString,
                 notes: sanitizedNotes || undefined
             });
@@ -276,7 +277,12 @@ export const createFireAlarm = async (req: Request, res: Response) => {
             console.error('WhatsApp mesaj oluşturma hatası:', error);
         }
 
-        res.status(201).json({ success: true, data: result.rows[0], whatsappMessage });
+        res.status(201).json({
+            success: true,
+            data: result.rows[0],
+            whatsappMessage,
+            whatsappSendToken: issueWhatsAppSendTicket(whatsappMessage, req.user?.userId),
+        });
 
     } catch (error) {
         console.error('Create fire alarm error:', error);
@@ -474,6 +480,7 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
                 alarmNumber: result.rows[0].alarm_number || 'Belirtilmemiş',
                 location: result.rows[0].location,
                 alarmTime: alarmTimeString,
+                resolutionDate: resolutionDate.toISOString(),
                 resolutionTime: resolutionTimeString,
                 resolutionNotes: sanitizedNotes || undefined,
                 falseAlarm: !!false_alarm
@@ -482,7 +489,12 @@ export const resolveFireAlarm = async (req: Request, res: Response) => {
             console.error('WhatsApp mesaj oluşturma hatası:', error);
         }
 
-        res.json({ success: true, data: result.rows[0], whatsappMessage });
+        res.json({
+            success: true,
+            data: result.rows[0],
+            whatsappMessage,
+            whatsappSendToken: issueWhatsAppSendTicket(whatsappMessage, req.user?.userId),
+        });
 
     } catch (error) {
         console.error('Resolve fire alarm error:', error);
@@ -664,29 +676,3 @@ export const restoreFireAlarm = async (req: Request, res: Response) => {
 };
 
 // WhatsApp mesajını otomatik gönder (modal tetiklemeli)
-export const sendFireAlarmWhatsAppMessage = async (req: Request, res: Response): Promise<void> => {
-    try {
-        if (!isRequestBodyObject(req.body)) {
-            res.status(400).json({ success: false, message: 'Geçersiz istek gövdesi' });
-            return;
-        }
-        const { message } = req.body;
-
-        if (!message || typeof message !== 'string' || !message.trim() || message.length > 4_000) {
-            res.status(400).json({
-                success: false,
-                message: 'Mesaj içeriği gereklidir.',
-            });
-            return;
-        }
-
-        const result = await sendWhatsAppTextMessage(message.trim());
-        res.status(200).json(result);
-    } catch (error) {
-        console.error('Send fire alarm WhatsApp message error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'WhatsApp mesajı gönderilirken hata oluştu.',
-        });
-    }
-};

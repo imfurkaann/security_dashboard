@@ -224,7 +224,7 @@ export default function AdminPersonnelStatistics() {
             {
                 title: 'Ziyaretçi Girişleri',
                 value: totals.visitorCount,
-                subtitle: 'Otel ziyaretçi kayıtları',
+                subtitle: 'Ziyaretçi kayıtları',
                 gradient: 'from-emerald-500 to-teal-700',
                 icon: (
                     <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -17,7 +17,7 @@ import { refreshLoadedPages } from '../utils/refreshLoadedPages';
 import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 
 const { RangePicker } = DatePicker;
-const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 10000;
+const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 35000;
 
 const getVisitorTags = (record: VisitorRecord): string[] => {
     const tags: string[] = [];
@@ -265,6 +265,7 @@ export default function AdminVisitorRecords() {
     // WhatsApp modal state
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [whatsappSendToken, setWhatsappSendToken] = useState<string | null>(null);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
 
@@ -544,6 +545,7 @@ export default function AdminVisitorRecords() {
 
             if (response.data?.whatsappMessage) {
                 setWhatsappMessage(response.data.whatsappMessage);
+                setWhatsappSendToken(response.data.whatsappSendToken || null);
                 setAutoSendFailed(false);
                 setShowWhatsAppModal(true);
             } else {
@@ -565,13 +567,14 @@ export default function AdminVisitorRecords() {
         setSendingWhatsApp(true);
         try {
             const response = await api.post('/visitors/send-whatsapp-message', {
-                message: whatsappMessage,
+                token: whatsappSendToken,
             }, {
                 timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
+                setWhatsappSendToken(null);
                 setAutoSendFailed(false);
                 message.success('WhatsApp mesajı gönderildi');
             } else {
@@ -591,8 +594,9 @@ export default function AdminVisitorRecords() {
 
     const handleSendWhatsAppManual = () => {
         const encodedMessage = encodeURIComponent(whatsappMessage);
-        window.open(`https://wa.me/?text=${encodedMessage}`, '_blank');
+        window.open(`https://wa.me/?text=${encodedMessage}`, '_blank', 'noopener,noreferrer');
         setShowWhatsAppModal(false);
+        setWhatsappSendToken(null);
         setAutoSendFailed(false);
     };
 
@@ -1816,7 +1820,7 @@ export default function AdminVisitorRecords() {
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            {!autoSendFailed && (
+                            {!autoSendFailed && whatsappSendToken && (
                                 <button
                                     type="button"
                                     onClick={handleSendWhatsAppAutomatic}
@@ -1838,6 +1842,7 @@ export default function AdminVisitorRecords() {
                                 type="button"
                                 onClick={() => {
                                     setAutoSendFailed(false);
+                                    setWhatsappSendToken(null);
                                     setShowWhatsAppModal(false);
                                 }}
                                 disabled={sendingWhatsApp}

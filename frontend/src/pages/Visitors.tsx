@@ -13,6 +13,7 @@ import { refreshLoadedPages } from '../utils/refreshLoadedPages';
 import InfiniteScrollStatus from '../components/InfiniteScrollStatus';
 import { message, Modal } from 'antd';
 import 'antd/dist/reset.css';
+import { BRANDING } from '../config/branding';
 
 // Tag options for dropdowns
 const VISITOR_TAGS_OPTIONS = [
@@ -165,7 +166,7 @@ const INITIAL_FORM_DATA: VisitorFormData = {
 type VisitorSuggestionField = 'full_name' | 'company_name' | 'vehicle_plate';
 
 export default function Visitors() {
-    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 20000;
+    const WHATSAPP_AUTO_SEND_TIMEOUT_MS = 35000;
     const [records, setRecords] = useState<VisitorRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -173,6 +174,7 @@ export default function Visitors() {
     const [showModal, setShowModal] = useState(false);
     const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [whatsappMessage, setWhatsappMessage] = useState('');
+    const [whatsappSendToken, setWhatsappSendToken] = useState<string | null>(null);
     const [autoSendFailed, setAutoSendFailed] = useState(false);
     const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -567,6 +569,7 @@ export default function Visitors() {
                 // WhatsApp mesajı varsa modal göster
                 if (response.data?.whatsappMessage) {
                     setWhatsappMessage(response.data.whatsappMessage);
+                    setWhatsappSendToken(response.data.whatsappSendToken || null);
                     setAutoSendFailed(false);
                     setShowWhatsAppModal(true);
                 } else {
@@ -600,6 +603,7 @@ export default function Visitors() {
                     // WhatsApp mesajı varsa modal göster
                     if (response.data?.whatsappMessage) {
                         setWhatsappMessage(response.data.whatsappMessage);
+                        setWhatsappSendToken(response.data.whatsappSendToken || null);
                         setAutoSendFailed(false);
                         setShowWhatsAppModal(true);
                     } else {
@@ -670,13 +674,14 @@ export default function Visitors() {
         setSendingWhatsApp(true);
         try {
             const response = await api.post('/visitors/send-whatsapp-message', {
-                message: whatsappMessage,
+                token: whatsappSendToken,
             }, {
                 timeout: WHATSAPP_AUTO_SEND_TIMEOUT_MS,
             });
 
             if (response.data?.success) {
                 setShowWhatsAppModal(false);
+                setWhatsappSendToken(null);
                 setAutoSendFailed(false);
                 message.success('WhatsApp mesajı gönderildi');
             } else {
@@ -696,13 +701,14 @@ export default function Visitors() {
         } finally {
             setSendingWhatsApp(false);
         }
-    }, [whatsappMessage]);
+    }, [whatsappSendToken]);
 
     const handleSendWhatsAppManual = useCallback(() => {
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
         setAutoSendFailed(false);
         setShowWhatsAppModal(false);
+        setWhatsappSendToken(null);
     }, [whatsappMessage]);
 
     const nonDeletedRecords = useMemo(() => records.filter(record => !record.deleted_at), [records]);
@@ -903,8 +909,8 @@ export default function Visitors() {
                                 </svg>
                             </button>
                             <div className="min-w-0">
-                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">Otel Ziyaretçi Kayıt Sayfası</h1>
-                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Otel ziyaretçi kayıtlarını yönetin</p>
+                                <h1 className="text-lg sm:text-xl font-bold text-white leading-tight break-words">{BRANDING.siteName} — Ziyaretçi Kayıtları</h1>
+                                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5">Ziyaretçi kayıtlarını yönetin.</p>
                             </div>
                         </div>
 
@@ -1568,7 +1574,7 @@ export default function Visitors() {
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            {!autoSendFailed && (
+                            {!autoSendFailed && whatsappSendToken && (
                                 <button
                                     type="button"
                                     onClick={handleSendWhatsAppAutomatic}
@@ -1591,6 +1597,7 @@ export default function Visitors() {
                                 onClick={() => {
                                     setAutoSendFailed(false);
                                     setShowWhatsAppModal(false);
+                                    setWhatsappSendToken(null);
                                 }}
                                 disabled={sendingWhatsApp}
                                 className="w-full bg-gray-200 hover:bg-gray-300 disabled:bg-gray-300 disabled:cursor-not-allowed text-gray-800 py-3 rounded-lg font-medium transition"

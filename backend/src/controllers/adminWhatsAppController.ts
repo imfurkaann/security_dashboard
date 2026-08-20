@@ -1,74 +1,63 @@
-import fs from 'fs';
-import path from 'path';
 import { Request, Response } from 'express';
 import {
     getWhatsAppConnectionStatus,
-    listWhatsAppGroups,
     getWhatsAppQrPayload,
+    listWhatsAppGroups,
+    normalizeWhatsAppGroupJid,
     resetWhatsAppSession,
     restartWhatsAppConnection,
     setWhatsAppTargetJid,
 } from '../services/whatsappBaileys';
 import { persistWhatsAppTargetJid } from '../services/whatsappSettingsStore';
+import { createAuditLog } from '../utils/auditLog';
+import { getClientIp } from '../middleware/rateLimiter';
 
-const ENV_FILE_NAME = '.env';
-const TARGET_KEY = 'WHATSAPP_TARGET_GROUP_JID';
-
-const getEnvFilePath = (): string => path.resolve(process.cwd(), ENV_FILE_NAME);
-
-const isValidGroupJid = (jid: string): boolean => {
-    return /^\d+-\d+@g\.us$/.test(jid.trim()) || /^\d+@g\.us$/.test(jid.trim());
+const preventSensitiveResponseCaching = (res: Response): void => {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 };
 
-const upsertEnvVariable = (key: string, value: string): void => {
-    const envPath = getEnvFilePath();
-    const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-    const lines = existing.length > 0 ? existing.split(/\r?\n/) : [];
-
-    let found = false;
-    const updated = lines.map((line) => {
-        if (line.startsWith(`${key}=`)) {
-            found = true;
-            return `${key}=${value}`;
-        }
-        return line;
+const auditWhatsAppAdminAction = async (
+    req: Request,
+    action: string,
+    oldValues: Record<string, unknown> | null,
+    newValues: Record<string, unknown> | null
+): Promise<void> => {
+    await createAuditLog({
+        tableName: 'whatsapp_admin',
+        recordId: action,
+        action: 'UPDATE',
+        oldValues,
+        newValues,
+        performedBy: req.admin?.userId || null,
+        ipAddress: getClientIp(req),
+        userAgent: req.get('user-agent') || null,
     });
-
-    if (!found) {
-        updated.push(`${key}=${value}`);
-    }
-
-    const normalized = `${updated.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
-    fs.writeFileSync(envPath, normalized, 'utf8');
 };
 
 export const getAdminWhatsAppStatus = async (_req: Request, res: Response): Promise<void> => {
-    try {
-        const status = getWhatsAppConnectionStatus();
-        res.status(200).json({ success: true, data: status });
-    } catch (error) {
-        console.error('Get admin WhatsApp status error:', error);
-        res.status(500).json({ success: false, message: 'WhatsApp durumu alınamadı.' });
-    }
+    preventSensitiveResponseCaching(res);
+    res.status(200).json({ success: true, data: getWhatsAppConnectionStatus() });
 };
 
 export const getAdminWhatsAppGroups = async (_req: Request, res: Response): Promise<void> => {
+    preventSensitiveResponseCaching(res);
     try {
         const status = getWhatsAppConnectionStatus();
         if (!status.enabled) {
             res.status(400).json({
                 success: false,
-                message: 'WhatsApp entegrasyonu kapalı. Önce WHATSAPP_ENABLED=true yapın.',
+                message: 'WhatsApp entegrasyonu kapalı.',
             });
             return;
         }
-
         if (!status.connected) {
             res.status(409).json({
                 success: false,
-                message: 'WhatsApp henüz bağlı değil. Lütfen backend terminalindeki QR kodunu okutun ve tekrar deneyin.',
+                message: 'WhatsApp henüz bağlı değil. QR kodunu okutun ve tekrar deneyin.',
                 data: {
-                    connected: status.connected,
+                    connectionState: status.connectionState,
                     lastQrAt: status.lastQrAt,
                     lastDisconnectReason: status.lastDisconnectReason,
                 },
@@ -79,137 +68,142 @@ export const getAdminWhatsAppGroups = async (_req: Request, res: Response): Prom
         const groups = await listWhatsAppGroups();
         res.status(200).json({ success: true, data: groups });
     } catch (error) {
-        console.error('Get admin WhatsApp groups error:', error);
-        const message = error instanceof Error ? error.message : 'Bilinmeyen hata';
-        if (message.toLowerCase().includes('timeout')) {
-            res.status(409).json({
-                success: false,
-                message: 'WhatsApp bağlantısı zaman aşımına uğradı. QR kodunu okutun ve tekrar deneyin.',
-            });
-            return;
-        }
-
-        res.status(500).json({ success: false, message: 'WhatsApp grup listesi alınamadı. Bağlantıyı yenileyip tekrar deneyin.' });
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        console.warn('WhatsApp grup listesi alınamadı.', {
+            timeout: message.includes('timeout') || message.includes('zaman aşım'),
+        });
+        res.status(message.includes('timeout') || message.includes('zaman aşım') ? 409 : 500).json({
+            success: false,
+            message: message.includes('timeout') || message.includes('zaman aşım')
+                ? 'WhatsApp grup listesi zaman aşımına uğradı. Bağlantıyı kontrol edip tekrar deneyin.'
+                : 'WhatsApp grup listesi alınamadı. Bağlantıyı yenileyip tekrar deneyin.',
+        });
     }
 };
 
 export const updateAdminWhatsAppTargetGroup = async (req: Request, res: Response): Promise<void> => {
+    preventSensitiveResponseCaching(res);
     try {
-        const rawJid = String(req.body?.targetJid || '').trim();
-
-        if (!rawJid) {
-            res.status(400).json({ success: false, message: 'Grup kimliği zorunludur.' });
+        const targetJid = normalizeWhatsAppGroupJid(req.body?.targetJid);
+        if (!targetJid) {
+            res.status(400).json({ success: false, message: 'Geçerli bir WhatsApp grubu seçin.' });
             return;
         }
 
-        if (!isValidGroupJid(rawJid)) {
-            res.status(400).json({ success: false, message: 'Geçerli bir grup JID giriniz. Örnek: 1203...@g.us' });
+        const status = getWhatsAppConnectionStatus();
+        if (!status.connected) {
+            res.status(409).json({ success: false, message: 'Hedef grup seçmeden önce WhatsApp bağlantısını kurun.' });
             return;
         }
 
-        await persistWhatsAppTargetJid(rawJid);
-        setWhatsAppTargetJid(rawJid);
-
-        // Docker ortamında .env yazma her zaman mümkün olmayabilir; başarısızlık ana akışı bozmasın.
-        try {
-            process.env[TARGET_KEY] = rawJid;
-            upsertEnvVariable(TARGET_KEY, rawJid);
-        } catch (envError) {
-            console.warn('WhatsApp hedef grubu .env dosyasına yazılamadı, DB kaydı kullanılacak:', envError);
+        const groups = await listWhatsAppGroups();
+        if (!groups.some((group) => group.id === targetJid)) {
+            res.status(400).json({
+                success: false,
+                message: 'Seçilen WhatsApp hesabı bu grubun üyesi değil. Grup listesini yenileyin.',
+            });
+            return;
         }
+
+        const previousTargetJid = status.targetJid;
+        await persistWhatsAppTargetJid(targetJid);
+        setWhatsAppTargetJid(targetJid);
+        await auditWhatsAppAdminAction(
+            req,
+            'target-group',
+            { targetJid: previousTargetJid },
+            { targetJid }
+        );
 
         res.status(200).json({
             success: true,
             message: 'WhatsApp hedef grubu kaydedildi.',
-            data: { targetJid: rawJid },
+            data: { targetJid },
         });
-    } catch (error) {
-        console.error('Update admin WhatsApp target group error:', error);
-        res.status(500).json({ success: false, message: 'Hedef grup kaydedilemedi.' });
+    } catch {
+        res.status(500).json({ success: false, message: 'Hedef grup güvenli biçimde kaydedilemedi.' });
     }
 };
 
-export const reconnectAdminWhatsApp = async (_req: Request, res: Response): Promise<void> => {
+export const reconnectAdminWhatsApp = async (req: Request, res: Response): Promise<void> => {
+    preventSensitiveResponseCaching(res);
     try {
         const status = getWhatsAppConnectionStatus();
         if (!status.enabled) {
-            res.status(400).json({
-                success: false,
-                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
-            });
+            res.status(400).json({ success: false, message: 'WhatsApp entegrasyonu kapalı.' });
             return;
         }
 
-        restartWhatsAppConnection();
+        await restartWhatsAppConnection();
+        await auditWhatsAppAdminAction(
+            req,
+            'reconnect',
+            { connectionState: status.connectionState },
+            { requested: true }
+        );
         res.status(200).json({
             success: true,
-            message: 'WhatsApp bağlantısı yeniden başlatıldı. Gerekirse QR kodunu tekrar okutun.',
+            message: 'WhatsApp bağlantısı güvenli biçimde yeniden başlatıldı.',
         });
-    } catch (error) {
-        console.error('Reconnect admin WhatsApp error:', error);
-        res.status(500).json({ success: false, message: 'WhatsApp yeniden başlatılamadı.' });
+    } catch {
+        res.status(500).json({ success: false, message: 'WhatsApp bağlantısı yeniden başlatılamadı.' });
     }
 };
 
-export const resetAdminWhatsAppSession = async (_req: Request, res: Response): Promise<void> => {
+export const resetAdminWhatsAppSession = async (req: Request, res: Response): Promise<void> => {
+    preventSensitiveResponseCaching(res);
     try {
         const status = getWhatsAppConnectionStatus();
         if (!status.enabled) {
-            res.status(400).json({
-                success: false,
-                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
-            });
+            res.status(400).json({ success: false, message: 'WhatsApp entegrasyonu kapalı.' });
             return;
         }
 
-        resetWhatsAppSession();
+        await resetWhatsAppSession();
+        await auditWhatsAppAdminAction(
+            req,
+            'reset-session',
+            { connectionState: status.connectionState, hadTarget: Boolean(status.targetJid) },
+            { sessionReset: true }
+        );
         res.status(200).json({
             success: true,
-            message: 'WhatsApp oturumu sıfırlandı. Yeni QR kodu backend terminalinde görünecek.',
+            message: 'WhatsApp oturumu sıfırlandı. Yeni QR kodu yalnızca bu yönetici ekranında gösterilecektir.',
         });
-    } catch (error) {
-        console.error('Reset admin WhatsApp session error:', error);
+    } catch {
         res.status(500).json({ success: false, message: 'WhatsApp oturumu sıfırlanamadı.' });
     }
 };
 
 export const getAdminWhatsAppQr = async (_req: Request, res: Response): Promise<void> => {
+    preventSensitiveResponseCaching(res);
     try {
         const status = getWhatsAppConnectionStatus();
         if (!status.enabled) {
             res.status(400).json({
                 success: false,
-                message: 'WhatsApp entegrasyonu kapalı. Docker ortaminda WHATSAPP_ENABLED=true yapip backend servisini yeniden baslatin.',
-                data: {
-                    connected: false,
-                    qr: null,
-                    lastQrAt: status.lastQrAt,
-                },
+                message: 'WhatsApp entegrasyonu kapalı.',
+                data: { connected: false, qr: null, lastQrAt: status.lastQrAt },
+            });
+            return;
+        }
+        if (status.connected) {
+            res.status(200).json({
+                success: true,
+                data: { connected: true, qr: null, message: 'WhatsApp zaten bağlı.' },
             });
             return;
         }
 
         const qrPayload = getWhatsAppQrPayload();
-
-        if (status.connected) {
-            res.status(200).json({
-                success: true,
-                data: {
-                    connected: true,
-                    qr: null,
-                    message: 'WhatsApp zaten bağlı. QR gerekmiyor.',
-                },
-            });
-            return;
-        }
-
         if (!qrPayload) {
             res.status(404).json({
                 success: false,
-                message: 'Henüz QR hazır değil. Birkaç saniye sonra tekrar deneyin.',
+                message: 'Güncel QR kodu henüz hazır değil. Birkaç saniye sonra tekrar deneyin.',
                 data: {
                     connected: false,
                     qr: null,
+                    connectionState: status.connectionState,
                     lastQrAt: status.lastQrAt,
                 },
             });
@@ -218,17 +212,9 @@ export const getAdminWhatsAppQr = async (_req: Request, res: Response): Promise<
 
         res.status(200).json({
             success: true,
-            data: {
-                connected: false,
-                qr: qrPayload,
-                lastQrAt: status.lastQrAt,
-            },
+            data: { connected: false, qr: qrPayload, lastQrAt: status.lastQrAt },
         });
-    } catch (error) {
-        console.error('Get admin WhatsApp QR error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'WhatsApp QR bilgisi alınamadı.',
-        });
+    } catch {
+        res.status(500).json({ success: false, message: 'WhatsApp QR bilgisi alınamadı.' });
     }
 };

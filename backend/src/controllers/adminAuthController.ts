@@ -417,17 +417,18 @@ export const getAdminNetworkInfo = async (req: Request, res: Response): Promise<
         const requestHostIp = extractHostFromRequest(req);
         // Prefer the actual host used by the admin UI request (LAN-safe and not stale),
         // then fall back to access-info file or container/OS network probing.
-        const localIp = configuredHostIp || requestHostIp || accessInfoHostIp || getLocalPrivateIPv4();
-        const frontendPort = process.env.FRONTEND_PORT || extractFrontendPortFromFrontendEnv() || '5173';
-        const backendPort = process.env.PORT || '5000';
+        const localIp = requestHostIp || configuredHostIp || accessInfoHostIp || getLocalPrivateIPv4();
+        const forwardedProtocol = String(req.header('x-forwarded-proto') || '').split(',')[0]?.trim();
+        const protocol = forwardedProtocol === 'https' || req.secure ? 'https' : 'http';
+        const frontendPort = process.env.FRONTEND_PORT || extractFrontendPortFromFrontendEnv() || (protocol === 'https' ? '443' : '80');
+        const isDefaultPort = (protocol === 'https' && frontendPort === '443') || (protocol === 'http' && frontendPort === '80');
+        const frontendPortSuffix = isDefaultPort ? '' : `:${frontendPort}`;
+        const publicHost = localIp || 'localhost';
+        const frontendBaseUrl = `${protocol}://${publicHost}${frontendPortSuffix}`;
 
-        const frontendBaseUrl = localIp
-            ? `http://${localIp}:${frontendPort}`
-            : `http://localhost:${frontendPort}`;
-
-        const backendBaseUrl = localIp
-            ? `http://${localIp}:${backendPort}`
-            : `http://localhost:${backendPort}`;
+        // Backend yalnızca iç Docker ağındadır; istemciye yayınlanan API adresi
+        // aynı HTTPS ağ geçidi üzerinden verilmelidir.
+        const backendBaseUrl = `${frontendBaseUrl}/api`;
 
         res.status(200).json({
             success: true,

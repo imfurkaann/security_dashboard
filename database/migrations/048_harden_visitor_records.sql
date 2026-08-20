@@ -57,8 +57,6 @@ CREATE INDEX IF NOT EXISTS idx_visitor_records_deleted_at_id
 ON visitor_records(deleted_at DESC, id DESC)
 WHERE deleted_at IS NOT NULL;
 
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
 CREATE INDEX IF NOT EXISTS idx_visitor_records_full_name_trgm
 ON visitor_records
 USING gin (lower(translate(full_name, 'IİĞÜŞÖÇ', 'ıiğüşöç')) gin_trgm_ops);

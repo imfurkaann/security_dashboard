@@ -435,8 +435,23 @@ export default function QrApprovalQueue() {
 
             const response = await api.post(`/visitors/pending-qr/${activeRecord.id}/approve`, payload);
             if (response.data?.success) {
-                message.success('Ziyaretçi girişi onaylandı ve kaydedildi');
                 setQueue(prev => prev.filter(v => v.id !== activeRecord.id));
+
+                const sendToken = response.data?.whatsappSendToken;
+                if (sendToken) {
+                    try {
+                        const sendResponse = await api.post('/visitors/send-whatsapp-message', { token: sendToken }, { timeout: 35_000 });
+                        if (sendResponse.data?.success) {
+                            message.success('Ziyaretçi girişi kaydedildi ve WhatsApp bildirimi gönderildi');
+                        } else {
+                            message.warning('Ziyaretçi girişi kaydedildi; WhatsApp bildirimi gönderilemedi.');
+                        }
+                    } catch {
+                        message.warning('Ziyaretçi girişi kaydedildi; WhatsApp bildirimi gönderilemedi.');
+                    }
+                } else {
+                    message.success('Ziyaretçi girişi onaylandı ve kaydedildi');
+                }
             } else {
                 message.error(response.data?.message || 'İşlem başarısız');
             }

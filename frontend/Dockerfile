@@ -28,6 +28,7 @@ FROM nginx:alpine AS production
 
 # Nginx yapılandırması
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 # Build çıktısını kopyala
 COPY --from=builder /app/dist /usr/share/nginx/html

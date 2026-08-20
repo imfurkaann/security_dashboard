@@ -47,6 +47,7 @@ import { getRealtimeClientId } from './realtime/clientId';
 import { initializeRealtimeClient } from './realtime/socket';
 import { useWebSocketNotifications } from './hooks/useWebSocketNotifications';
 import QrApprovalQueue from './components/QrApprovalQueue';
+import PwaManager from './components/PwaManager';
 
 function AppShell() {
   useWebSocketNotifications();
@@ -56,6 +57,7 @@ function AppShell() {
       <ThemeProvider>
         <NotificationManager />
         <Router>
+          <PwaManager />
           <QrApprovalQueue />
           <Routes>
             {/* Public Routes */}
